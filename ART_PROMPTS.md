@@ -22,25 +22,49 @@ anti-aliasing, no dithering gradients, flat color fills, clean readable
 shapes, orthographic front-facing view, single warm light source from
 above (stage spotlight).
 
+TONE, most important: MUTED and DESATURATED. Grim, sombre, restrained.
+No neon, no glow effects, no shine. Reference the grim washed out palette
+of Darkest Dungeon, not a mobile casino app.
+
 Palette, use only these:
   deep plum black    #1A1024
   dark plum          #2E1B38
   stage floor        #3B2438
-  crimson curtain    #8B1A2B
-  bright crimson     #C1354A
-  gold trim          #E8B84B
-  dark gold          #A8792A
-  cream light        #F5E6C8
-  spotlight glow     #FFD98A
-  teal accent        #2E8F8F
-  danger red         #D94F4F
-  bone white         #EDE4D4
   shadow violet      #1F1430
+  dull crimson       #7A2029
+  faded velvet       #5E1A20
+  tarnished brass    #9C7A3C
+  dark bronze        #6B5426
+  bone              #C9BCA4
+  dim cream          #DCCFB4
+  spotlight cone     #E8CE95
+  cold steel         #6B7A8C
+  dried blood        #A33A34
 
 Mood: an old opera house turned into a travelling circus. Faded velvet,
 tarnished brass, warm lamplight against deep shadow. Slightly sinister
 but not gory. Vintage carnival poster feeling.
 ```
+
+### 1.1 톤 규칙 — 캐주얼해지지 않게 하는 법
+
+3차 결과물은 배치와 정보량은 맞았지만 **캐주얼했다.** 원인과 규칙:
+
+| 캐주얼해지는 원인 | 규칙 |
+|---|---|
+| 큰 발광 SPIN 버튼 | 버튼을 좁고 얇게, 글자는 작은 대문자 자간만 넓게. 발광 없음 |
+| 순수 빨강 HP · 순수 파랑 쉴드 | HP는 **마른 피 색**, 쉴드는 **차가운 강철 회색**. 파랑을 쓰지 않는다 |
+| 반짝이는 새 금색 테두리 | **변색된 황동**. 탁하고 약간 녹회색. 노란 금은 금지 |
+| 글로우 남용 | **빛나는 것은 스포트라이트 원뿔과 페이라인 딱 둘뿐.** 나머지는 발광 없음 |
+| 균일한 금테 + 둥근 모서리 | 프레임은 1px, 각진 모서리 |
+
+**핵심 원칙:**
+
+> **UI는 명도로 분리하고 채도로 분리하지 않는다.**
+
+어두운 배경 위에서 UI가 읽히려면 밝기만 올리면 된다. 채도까지 올리면 배경과 재질이 달라져 스티커처럼 붙어 보인다. UI는 배경보다 **밝지만 똑같이 탁해야** 한다.
+
+프롬프트 `--no` 에 항상 넣을 것: `glow, bloom, neon, shiny gold, saturated colours, pure red, pure blue, large button text, rounded plastic UI, mobile casino`
 
 ---
 
@@ -113,10 +137,17 @@ and tarnished gold opera house. This is a working game interface, NOT an
 illustration.
 
 LIGHTING SPLIT, important: the theatre background is VERY DARK, near
-black silhouettes with thin warm rim light. But every HUD panel, the slot
-window, and the spin button are BRIGHT, saturated and clearly readable,
-visibly floating ABOVE the dark background as a separate layer. Strong
-contrast between the dark scene and the lit interface.
+black silhouettes with thin warm rim light. The HUD panels, the slot
+window and the buttons are LIGHTER than the background and clearly
+readable, visibly floating above it as a separate layer — but they are
+separated by BRIGHTNESS ONLY, never by saturation. The interface is just
+as muted and desaturated as the scene. All metal is tarnished brass, dull
+and slightly green-grey, never shiny yellow gold. Health bar is dull
+dried blood red, not pure red. Shield bar is cold grey steel, not blue.
+Frames are THIN, one pixel, hard cornered, not rounded.
+
+The ONLY glowing things in the entire image are the stage spotlight cone
+and the thin payline across the middle slot row. Nothing else emits light.
 
 FLAT ALIGNMENT: the slot window and all HUD panels are perfectly
 rectangular and aligned to the screen edges, no perspective distortion.
@@ -141,9 +172,12 @@ notched ticket, stack of gold coins. LEFT of the window, a vertical strip
 of five round lamps, one lit. RIGHT of the window, a bright circular
 combo badge.
 
-BELOW the slot: a WIDE BRIGHT CRIMSON SPIN BUTTON with a glowing bevelled
-edge, the single most eye catching element on screen. A small ticket
-counter panel to its left, a circular auto-repeat button to its right.
+BELOW the slot: a NARROW, SHORT, dark crimson SPIN button with a thin
+brass edge, no bevel and no glow, roughly one third of the screen width.
+Its label is SMALL widely spaced capitals occupying very little of the
+button. The button must be visibly QUIETER than the slot window. A small
+ticket counter panel to its left, a circular auto-repeat button to its
+right.
 
 BOTTOM: a row of four compact square action cards in lit gold frames,
 each with a small cost badge in its corner. Below them a slim status bar
@@ -154,8 +188,10 @@ FOREGROUND: the back of the player's head and shoulders in silhouette at
 the very bottom centre, small, rim lit, framed by dark audience
 silhouettes on both sides.
 
---ar 3:4 --no bright background, flat even lighting, daylight, dramatic
-perspective on the interface, photorealism, 3d render, cropped figures
+--ar 3:4 --no glow, bloom, neon, shiny gold, saturated colours, pure red,
+pure blue, large button text, rounded plastic UI, mobile casino, bright
+background, flat even lighting, daylight, dramatic perspective on the
+interface, photorealism, 3d render, cropped figures
 ```
 
 `--no` 에서 **text·numbers 금지를 뺐다.** 이미지 AI가 만드는 글자는 깨지지만, 레퍼런스에서 중요한 건 **UI 덩어리의 위치와 밝기**다. 깨진 글자는 Unity에서 실제 텍스트로 교체한다.
