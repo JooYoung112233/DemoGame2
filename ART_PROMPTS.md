@@ -80,9 +80,91 @@ interface, photorealism, 3d render, blurry
 
 ---
 
-## 2.4 잡몹 3마리 전투 화면 · 로우앵글 어두운 버전 ★ 현재 기준
+## 2.3 전투 화면 · UI 레이어 포함 ★ 현재 기준
 
-1차·2차 피드백을 모두 반영한 버전. **이게 지금의 기준 프롬프트다.**
+§2.4 결과물은 **배경 아트 레퍼런스로는 완성품**이었지만 게임처럼 보이지 않았다. 원인은 프롬프트에서 `--no text, letters, numbers, UI` 로 HUD를 통째로 차단한 것이다.
+
+### 2.3.1 게임처럼 보이게 하는 세 가지
+
+| 원칙 | 이유 |
+|---|---|
+| **UI는 배경 위에 떠 있어야 한다** | 슬롯 프레임이 배경과 같은 톤이면 무대 세트 속 소품으로 읽힌다. 별개 레이어로 보여야 조작 가능해 보인다 |
+| **밝기를 반대로 나눈다** | 배경은 거의 검게, UI와 슬롯은 밝고 선명하게. `VERY DARK`를 전체에 걸면 UI까지 죽는다 |
+| **UI는 원근을 주지 않는다** | 소실점이 강하면 "그림"으로 읽힌다. 배경만 원근, 슬롯과 HUD는 화면에 평행하게 정렬 |
+
+### 2.3.2 UI 레이어 체크리스트
+
+| 위치 | 요소 |
+|---|---|
+| 상단바 | 스테이지 진행, 금화 카운터, 일시정지 |
+| 적 위 | 의도 배지 — **적마다 하나씩** |
+| 적 아래 | HP바 + 숫자 |
+| 슬롯 좌측 | 페이라인 램프 5개 |
+| 슬롯 우측 | 콤보 배수 배지 |
+| 슬롯 하단 | 회전권 카운터 · **큰 스핀 버튼** · 오토 버튼 |
+| 하단 | 행동 카드 4개 + 각 비용 배지 |
+| 최하단 | 캐릭터 초상화 + HP바 + 쉴드바 |
+
+### 2.3.3 프롬프트
+
+```
+Pixel art GAME SCREEN with a full HUD, vertical 3:4 canvas, dark crimson
+and tarnished gold opera house. This is a working game interface, NOT an
+illustration.
+
+LIGHTING SPLIT, important: the theatre background is VERY DARK, near
+black silhouettes with thin warm rim light. But every HUD panel, the slot
+window, and the spin button are BRIGHT, saturated and clearly readable,
+visibly floating ABOVE the dark background as a separate layer. Strong
+contrast between the dark scene and the lit interface.
+
+FLAT ALIGNMENT: the slot window and all HUD panels are perfectly
+rectangular and aligned to the screen edges, no perspective distortion.
+Only the background theatre has perspective.
+
+TOP BAR: a slim lit panel across the top edge holding a small stage
+counter badge on the left, a gold coin counter next to it, and a small
+square pause button on the right.
+
+STAGE, upper 35%: three sinister circus performers standing in a row lit
+by one overhead spotlight - a tall gaunt clown, a short cracked wooden
+puppet, a heavy muzzled bear. ABOVE each figure floats a small bright
+diamond shaped intent badge containing a weapon icon. BELOW each figure
+sits a short bright RED HEALTH BAR in a thin gold frame. These badges and
+bars are the brightest things on the stage.
+
+MIDDLE: a 3 by 3 slot window in a slim bright gold frame. The middle row
+glows strongly with a gold line across it. Top and bottom rows dim. Nine
+different clearly distinct icons in the cells: dagger, open hoop, cotton
+candy cloud, joker card, balloon, three juggling balls, wide cannon,
+notched ticket, stack of gold coins. LEFT of the window, a vertical strip
+of five round lamps, one lit. RIGHT of the window, a bright circular
+combo badge.
+
+BELOW the slot: a WIDE BRIGHT CRIMSON SPIN BUTTON with a glowing bevelled
+edge, the single most eye catching element on screen. A small ticket
+counter panel to its left, a circular auto-repeat button to its right.
+
+BOTTOM: a row of four compact square action cards in lit gold frames,
+each with a small cost badge in its corner. Below them a slim status bar
+with a small character portrait on the left and a red health bar and blue
+shield bar beside it.
+
+FOREGROUND: the back of the player's head and shoulders in silhouette at
+the very bottom centre, small, rim lit, framed by dark audience
+silhouettes on both sides.
+
+--ar 3:4 --no bright background, flat even lighting, daylight, dramatic
+perspective on the interface, photorealism, 3d render, cropped figures
+```
+
+`--no` 에서 **text·numbers 금지를 뺐다.** 이미지 AI가 만드는 글자는 깨지지만, 레퍼런스에서 중요한 건 **UI 덩어리의 위치와 밝기**다. 깨진 글자는 Unity에서 실제 텍스트로 교체한다.
+
+---
+
+## 2.4 배경 아트 레퍼런스 · 로우앵글 어두운 버전 ★ 배경 판으로 확정
+
+UI 없는 순수 배경·분위기 판. **이 결과물은 배경 레이어 레퍼런스로 확정됐다** — 극장 원근, 관객 실루엣, 조명, 팔레트가 모두 기준값이다. UI는 §2.3에서 따로 뽑아 이 위에 얹는다.
 
 ```
 Pixel art, limited palette, crisp 1px dark outlines, flat colour fills,
@@ -423,8 +505,10 @@ photorealism, 3d render
 
 ## 10. 주의사항
 
-- **글자를 넣지 말 것.** 모든 프롬프트의 `--no` 에 text/letters/numbers를 넣어둔 이유다. 이미지 AI가 만드는 글자는 거의 쓸 수 없고, 실제 UI 텍스트는 Unity에서 렌더한다
-- **UI 요소도 넣지 말 것.** 체력바·아이콘·버튼은 코드로 만든다. 레퍼런스에 그려지면 나중에 지워야 한다
+- **배경 판과 UI 판을 따로 뽑을 것.** 이게 가장 중요한 교훈이다. 한 장에 다 담으려 하면 둘 중 하나가 죽는다
+  - **배경 판**(§2.4 계열): 글자·UI 금지. 분위기·원근·조명·팔레트 확인용
+  - **UI 판**(§2.3): 글자·숫자·바·버튼 **허용.** 깨진 글자는 무시하고 UI 덩어리의 위치와 밝기만 본다
+- 최종 UI 텍스트와 바는 Unity에서 렌더한다. 레퍼런스는 배치와 밝기 배분을 정하기 위한 것이다
 - **심볼 칸은 비워둘 것.** §4 슬롯 패널에서 칸에 체리·세븐 같은 게 그려지면 우리 심볼과 충돌한다
 - 레퍼런스는 **분위기·비율·실루엣 확인용**이다. 최종 아트는 코드로 생성하는 픽셀 스프라이트이므로, 이 이미지를 그대로 쓰는 게 아니라 **여기서 팔레트와 형태를 추출**한다
 - 여러 장 뽑아서 §5.1 검증을 통과한 조합을 고른다. 특히 심볼은 **한 번에 끝나지 않는다**
