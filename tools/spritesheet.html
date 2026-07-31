@@ -62,7 +62,13 @@
       </select>
     </label>
     <label>프레임 수 <input type="number" id="n" value="4" min="1" max="32"></label>
-    <label>배경 허용치 <input type="range" id="tol" min="4" max="90" value="30"><span class="val" id="tolv">30</span></label>
+    <label>배경 판정
+      <select id="bgmode">
+        <option value="flood" selected>테두리 연결 (권장)</option>
+        <option value="color">색 전체</option>
+      </select>
+    </label>
+    <label>배경 허용치 <input type="range" id="tol" min="2" max="90" value="14"><span class="val" id="tolv">14</span></label>
     <label>밀도 임계 <input type="range" id="pct" min="1" max="60" value="12"><span class="val" id="pctv">12%</span></label>
     <label>최소 간격 <input type="range" id="gap" min="1" max="60" value="8"><span class="val" id="gapv">8</span></label>
     <label>최소 폭 <input type="range" id="minw" min="2" max="120" value="16"><span class="val" id="minwv">16</span></label>
@@ -123,7 +129,7 @@
 </div>
 
 <div class="panel">
-  <h1>감지 결과 (붉은 선 = 프레임 경계 · 노란 선 = 발바닥)</h1>
+  <h1>감지 결과 (붉은 선 = 프레임 경계 · <span style="color:#5f8fbf">파란 박스 = 검출된 내용</span> · 노란 선 = 발바닥)</h1>
   <canvas id="map" width="10" height="10"></canvas>
 </div>
 
@@ -187,13 +193,45 @@
       var c = raw.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(im, 0, 0);
       rdata = c.getImageData(0, 0, W, H).data;
       el('drop').innerHTML = file.name + ' — ' + W + ' × ' + H;
-      sel = []; off = []; buildKeyed(); analyse();
+      sel = []; off = []; computeBg(); buildKeyed(); analyse();
     };
     im.src = URL.createObjectURL(file);
   }
 
-  function isBg(i, tol) {
+  var bgMask = null;
+
+  function colorBg(i, tol) {
     return Math.abs(rdata[i] - rdata[0]) <= tol && Math.abs(rdata[i + 1] - rdata[1]) <= tol && Math.abs(rdata[i + 2] - rdata[2]) <= tol;
+  }
+
+  // 테두리에서 연결된 영역만 배경으로 본다.
+  // 캐릭터 안쪽의 어두운 픽셀(신발 외곽선 등)이 배경색과 같아도 지워지지 않는다.
+  function computeBg() {
+    if (!rdata) return;
+    if (el('bgmode').value !== 'flood') { bgMask = null; return; }
+    var tol = num('tol', 24);
+    bgMask = new Uint8Array(W * H);
+    var stack = [];
+    function push(x, y) {
+      var p = y * W + x;
+      if (bgMask[p]) return;
+      var i = p * 4;
+      if (rdata[i + 3] < 8 || colorBg(i, tol)) { bgMask[p] = 1; stack.push(p); }
+    }
+    for (var x = 0; x < W; x++) { push(x, 0); push(x, H - 1); }
+    for (var y = 0; y < H; y++) { push(0, y); push(W - 1, y); }
+    while (stack.length) {
+      var p = stack.pop(), px = p % W, py = (p - px) / W;
+      if (px > 0) push(px - 1, py);
+      if (px < W - 1) push(px + 1, py);
+      if (py > 0) push(px, py - 1);
+      if (py < H - 1) push(px, py + 1);
+    }
+  }
+
+  function isBg(i, tol) {
+    if (bgMask) return bgMask[i >> 2] === 1;
+    return rdata[i + 3] < 8 || colorBg(i, tol);
   }
 
   function buildKeyed() {
@@ -386,6 +424,8 @@
       mctx.moveTo(b.x * s + .5, 0); mctx.lineTo(b.x * s + .5, ih);
       mctx.moveTo((b.x + b.w) * s + .5, 0); mctx.lineTo((b.x + b.w) * s + .5, ih);
       mctx.stroke();
+      mctx.strokeStyle = '#5f8fbf';
+      mctx.strokeRect(b.x * s + .5, b.y * s + .5, Math.max(1, b.w * s), Math.max(1, b.h * s));
       mctx.strokeStyle = '#c6bd95';
       mctx.beginPath();
       mctx.moveTo(b.x * s, (b.bottom + 1) * s + .5); mctx.lineTo((b.x + b.w) * s, (b.bottom + 1) * s + .5);
@@ -718,7 +758,8 @@
   el('det').addEventListener('change', analyse);
   el('n').addEventListener('input', analyse);
   ['gap', 'minw', 'pct', 'bleed'].forEach(function (i) { el(i).addEventListener('input', analyse); });
-  el('tol').addEventListener('input', function () { el('tolv').textContent = this.value; buildKeyed(); analyse(); });
+  el('tol').addEventListener('input', function () { el('tolv').textContent = this.value; computeBg(); buildKeyed(); analyse(); });
+  el('bgmode').addEventListener('change', function () { computeBg(); buildKeyed(); analyse(); });
   el('alpha').addEventListener('change', function () { buildKeyed(); analyse(); });
   el('anchor').addEventListener('change', function () { drawFrames(); preview(); });
   el('pad').addEventListener('input', function () { drawFrames(); preview(); });
