@@ -394,6 +394,70 @@ half bodies
 
 ---
 
+## 2.6 캐릭터 스프라이트 (개별)
+
+애니메이션 방침은 [DESIGN.md](DESIGN.md) 15장 참조 — **idle은 1장, 공격은 시트.**
+
+### 2.6.1 배경색을 먼저 정할 것
+
+배경 투명화를 깔끔하게 하려면 **캐릭터에 없는 색**을 배경으로 받아야 한다. 지금 쓰는 어두운 자주(`#2E1B38`)는 광대 옷의 어두운 부분과 가까워서 투명화 시 외곽이 깎인다.
+
+> 스프라이트를 받을 때는 배경을 **마젠타 `#FF00FF`** 단색으로 요청한다. 어떤 캐릭터에도 없는 색이라 완벽하게 빠진다.
+
+### 2.6.2 idle — 단 한 장
+
+```
+[§1 공통 스타일 블록]
+
+A single pixel art character sprite, ONE figure only, centred on a plain
+flat MAGENTA #FF00FF background, full body from head to foot, facing the
+viewer, standing straight in a neutral relaxed pose, arms hanging at the
+sides.
+
+A tall gaunt sinister clown: pointed grey cap, chalk white face with a
+wide red painted grin, sunken dark eyes, frizzy dark red hair at the
+sides, a large layered ruff collar, a vertically striped baggy jumpsuit
+in dull grey and bone, three round buttons down the chest, long thin pale
+hands with sharp fingers, oversized curled red shoes.
+
+Clean readable silhouette. No motion blur, no action pose, no duplicates.
+
+--ar 2:3 --no multiple figures, sprite sheet, animation frames, grid,
+duplicates, text, watermark, motion blur, action pose, photorealism,
+3d render, cropped
+```
+
+`ONE figure only` 와 `--no multiple figures, sprite sheet, animation frames` 가 핵심이다. **idle 시트를 요구하지 마라** — 프레임마다 새로 그려져서 반복 재생 시 픽셀이 끓는다.
+
+### 2.6.3 공격 — 5프레임 시트
+
+```
+[§1 공통 스타일 블록]
+
+Draw the SAME character in 5 evenly spaced cells on one row against a
+plain flat MAGENTA #FF00FF background. Each cell exactly the same width.
+The figure is centred on the SAME PIVOT POINT in every cell - the pivot
+is the character's HIPS, at identical x and y in all cells. Feet may
+leave the pivot but the hips must not drift.
+
+Do NOT draw slash trails, motion arcs, impact flashes, speed lines, or
+any effect. Character only.
+
+[캐릭터 묘사 — 2.6.2와 동일하게]
+
+Attack sequence: 1 wind up with blade pulled back, 2 blade raised high,
+3 full forward lunge with arm extended, 4 the same lunge held, 5
+returning to neutral stance.
+
+--ar 3:1 --no slash trail, motion arc, impact effect, speed lines, text,
+watermark, uneven spacing, drifting figure, photorealism, 3d render,
+cropped
+```
+
+뽑은 시트는 [tools/spritesheet.html](tools/spritesheet.html) 에 넣어 감지 개수·정렬 편차를 확인하고 정규화해서 내보낸다.
+
+---
+
 ## 3. 무대 + 잡몹 3마리 (단독)
 
 세로 영역 상단(무대) 부분만. 적 3마리가 서 있는 배치.

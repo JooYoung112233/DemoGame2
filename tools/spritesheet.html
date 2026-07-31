@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>스프라이트 시트 자동 감지 · 정렬 · 내보내기</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d0d10; color: #b9b4ab; min-height: 100vh;
+    font: 400 13px/1.5 "Malgun Gothic", system-ui, sans-serif;
+    padding: 18px; display: flex; flex-direction: column; gap: 12px;
+  }
+  h1 { font-size: 12px; font-weight: 400; color: #5c5a63; letter-spacing: .08em; margin-bottom: 9px; }
+  .panel { background: #16161a; border: 1px solid #24242a; border-radius: 6px; padding: 13px; }
+  .drop { border: 1px dashed #3a3a45; border-radius: 6px; padding: 16px; text-align: center; color: #6f6c78; cursor: pointer; }
+  .drop.hot { border-color: #8b8467; color: #c6bd95; }
+  .ctrls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #7d7a86; }
+  input[type=range] { width: 104px; }
+  input[type=number] { width: 54px; background: #23232c; color: #b9b4ab; border: 1px solid #3a3a45; border-radius: 3px; padding: 3px 5px; font: inherit; }
+  select { background: #23232c; color: #b9b4ab; border: 1px solid #3a3a45; border-radius: 3px; padding: 3px 5px; font: inherit; font-size: 12px; }
+  .val { color: #a9a4b2; font-variant-numeric: tabular-nums; min-width: 26px; }
+  button { background: #23232c; color: #b9b4ab; border: 1px solid #57545f; border-radius: 4px; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+  button:hover { border-color: #8b8467; color: #c6bd95; }
+  button.act { border-color: #8b8467; background: #26251c; color: #c6bd95; }
+  button.go { border-color: #7f9a72; color: #a8c49a; }
+  .stage { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+  canvas { border: 1px solid #2b2b33; image-rendering: pixelated; display: block; }
+  .checker { background-image: linear-gradient(45deg,#1a1a1f 25%,transparent 25%,transparent 75%,#1a1a1f 75%),linear-gradient(45deg,#1a1a1f 25%,transparent 25%,transparent 75%,#1a1a1f 75%); background-size: 16px 16px; background-position: 0 0, 8px 8px; background-color: #121216; }
+  .frames { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; }
+  .fr { position: relative; flex: none; opacity: .4; cursor: pointer; border: 1px solid transparent; }
+  .fr.on { opacity: 1; }
+  .fr.pick { border-color: #8b8467; }
+  .fr .no { position: absolute; top: 1px; left: 3px; font-size: 10px; color: #c6bd95; }
+  .fr .of { position: absolute; bottom: 1px; left: 3px; font-size: 9px; color: #7f9a72; font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 2px 8px 2px 0; text-align: right; color: #7d7a86; font-weight: 400; }
+  th { color: #5c5a63; border-bottom: 1px solid #24242a; }
+  td:first-child, th:first-child { text-align: left; }
+  td.n { color: #a9a4b2; font-variant-numeric: tabular-nums; }
+  .ok { color: #7f9a72; }
+  .warn { color: #b07a6a; }
+  .note { font-size: 11px; color: #56545e; line-height: 1.7; }
+  pre { background: #101014; border: 1px solid #24242a; border-radius: 4px; padding: 9px; font-size: 11px; color: #8f8b99; overflow-x: auto; }
+  kbd { border: 1px solid #3a3a45; border-radius: 3px; padding: 0 4px; font-size: 10px; }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <div class="drop" id="drop">시트 이미지를 드래그 · 클릭 · <b>Ctrl+V</b></div>
+  <input type="file" id="file" accept="image/*" hidden>
+</div>
+
+<div class="panel">
+  <h1>절단</h1>
+  <div class="ctrls">
+    <label>방식
+      <select id="det">
+        <option value="auto" selected>자동 감지 (캐릭터 기준)</option>
+        <option value="grid">균등 분할</option>
+      </select>
+    </label>
+    <label>프레임 수 <input type="number" id="n" value="4" min="1" max="32"></label>
+    <label>배경 허용치 <input type="range" id="tol" min="4" max="90" value="30"><span class="val" id="tolv">30</span></label>
+    <label>밀도 임계 <input type="range" id="pct" min="1" max="60" value="12"><span class="val" id="pctv">12%</span></label>
+    <label>최소 간격 <input type="range" id="gap" min="1" max="60" value="8"><span class="val" id="gapv">8</span></label>
+    <label>최소 폭 <input type="range" id="minw" min="2" max="120" value="16"><span class="val" id="minwv">16</span></label>
+    <label>여유 <input type="range" id="bleed" min="0" max="32" value="2"><span class="val" id="bleedv">2</span></label>
+    <span class="val" id="found" style="color:#a8c49a">—</span>
+  </div>
+  <p class="note" style="margin-top:8px">
+    <b>밀도 임계</b>가 핵심이다. 열마다 배경 아닌 픽셀 수를 세고, 가장 높은 열의 이 비율을 넘는 구간만
+    <b>몸통(코어)</b>으로 본다. 몸통은 열당 수백 픽셀이지만 뻗은 칼날은 열당 몇 픽셀뿐이라,
+    칼이 옆 프레임까지 닿아도 프레임이 붙지 않는다. 코어로 경계를 나눈 뒤 칼날을 다시 포함시키되
+    <b>이웃 코어와의 중간선을 넘지 않는다.</b><br>
+    프레임이 덜 잡히면 임계를 <b>올리고</b>, 한 캐릭터가 쪼개지면 <b>내리거나</b> 최소 간격을 올린다.
+    이펙트 조각이 프레임으로 잡히면 최소 폭을 올린다. 프레임 수 입력은 균등 분할에서만 쓴다.
+  </p>
+</div>
+
+<div class="panel">
+  <h1>정렬 · 재생</h1>
+  <div class="ctrls">
+    <label>앵커
+      <select id="anchor">
+        <option value="center" selected>하단 중앙</option>
+        <option value="left">하단 좌측 (뒷발 기준)</option>
+        <option value="right">하단 우측</option>
+      </select>
+    </label>
+    <label>FPS <input type="range" id="fps" min="1" max="30" value="12"><span class="val" id="fpsv">12</span></label>
+    <label>배율 <input type="range" id="zoom" min="1" max="6" value="2"><span class="val" id="zoomv">2</span></label>
+    <label>여백 <input type="number" id="pad" value="4" min="0" max="64"></label>
+    <label>타격 유지 <input type="number" id="hold" value="0" min="0" max="8"></label>
+    <button id="ping">왕복 켜기</button>
+    <button id="play" class="act">일시정지</button>
+  </div>
+  <p class="note" style="margin-top:8px">
+    재생 화면은 <b>내보낼 결과 그대로</b>다. 프레임 클릭 후 <kbd>←→↑↓</kbd> 1px, <kbd>Shift</kbd>+방향키 8px 이동.
+    <kbd>Space</kbd> 재생/정지. 공격은 앵커를 <b>하단 좌측</b>으로 두면 돌진이 살아난다.
+  </p>
+</div>
+
+<div class="stage">
+  <div class="panel">
+    <h1>재생 = 내보낼 결과</h1>
+    <canvas id="view" class="checker" width="200" height="280"></canvas>
+    <p class="note" id="playinfo">—</p>
+  </div>
+
+  <div class="panel" style="flex:1; min-width:320px">
+    <h1>감지 · 정렬 실측</h1>
+    <table id="tbl"><tbody></tbody></table>
+    <p class="note" id="verdict" style="margin-top:6px">—</p>
+  </div>
+
+  <div class="panel" style="flex:1; min-width:240px">
+    <h1>인접 프레임 변화율</h1>
+    <table id="difftbl"><tbody></tbody></table>
+    <p class="note" id="diffnote" style="margin-top:6px">—</p>
+  </div>
+</div>
+
+<div class="panel">
+  <h1>감지 결과 (붉은 선 = 프레임 경계 · 노란 선 = 발바닥)</h1>
+  <canvas id="map" width="10" height="10"></canvas>
+</div>
+
+<div class="panel">
+  <h1>프레임 (클릭 = 선택 · 더블클릭 = 제외)</h1>
+  <div class="frames" id="frames"></div>
+</div>
+
+<div class="panel">
+  <h1>내보내기</h1>
+  <div class="ctrls">
+    <label>셀 폭 <input type="number" id="cw" value="0" min="0" max="2048"></label>
+    <label>셀 높이 <input type="number" id="chh" value="0" min="0" max="2048"></label>
+    <label>배수 <select id="ex"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+    <label><input type="checkbox" id="alpha" checked> 배경 투명화</label>
+    <button id="dlsheet" class="go">시트 PNG 저장</button>
+    <button id="dlframes">프레임 낱장 저장</button>
+    <button id="dlgif" class="go">GIF 저장</button>
+    <span class="val" id="gifinfo" style="color:#56545e">—</span>
+  </div>
+  <p class="note" style="margin-top:8px">셀 폭·높이를 0으로 두면 모든 프레임이 들어가는 최소 크기로 자동 계산한다.</p>
+  <div style="margin-top:10px; overflow-x:auto">
+    <canvas id="out" class="checker" width="10" height="10"></canvas>
+  </div>
+  <pre id="meta">—</pre>
+</div>
+
+<script>
+(function () {
+  var W = 0, H = 0, raw = null, rdata = null, keyed = null, name = 'sheet';
+  var boxes = [], sel = [], off = [], pick = 0;
+  var playing = true, ping = false, t = 0, dir = 1, last = 0;
+
+  var el = function (i) { return document.getElementById(i); };
+  var view = el('view'), vctx = view.getContext('2d');
+  var out = el('out'), octx = out.getContext('2d');
+  var map = el('map'), mctx = map.getContext('2d');
+  function num(i, d) { var v = parseFloat(el(i).value); return isNaN(v) ? d : v; }
+  function int(i, d) { var v = parseInt(el(i).value, 10); return isNaN(v) ? d : v; }
+
+  el('drop').addEventListener('click', function () { el('file').click(); });
+  el('file').addEventListener('change', function (e) { if (e.target.files[0]) load(e.target.files[0]); });
+  ['dragenter', 'dragover'].forEach(function (v) {
+    el('drop').addEventListener(v, function (e) { e.preventDefault(); el('drop').classList.add('hot'); });
+  });
+  ['dragleave', 'drop'].forEach(function (v) {
+    el('drop').addEventListener(v, function (e) { e.preventDefault(); el('drop').classList.remove('hot'); });
+  });
+  el('drop').addEventListener('drop', function (e) { var f = e.dataTransfer.files[0]; if (f) load(f); });
+  document.addEventListener('paste', function (e) {
+    var it = e.clipboardData && e.clipboardData.items; if (!it) return;
+    for (var i = 0; i < it.length; i++) if (it[i].type.indexOf('image') === 0) { load(it[i].getAsFile()); break; }
+  });
+
+  function load(file) {
+    var im = new Image();
+    im.onload = function () {
+      W = im.naturalWidth; H = im.naturalHeight;
+      name = (file.name || 'sheet').replace(/\.[^.]+$/, '');
+      raw = document.createElement('canvas'); raw.width = W; raw.height = H;
+      var c = raw.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(im, 0, 0);
+      rdata = c.getImageData(0, 0, W, H).data;
+      el('drop').innerHTML = file.name + ' — ' + W + ' × ' + H;
+      sel = []; off = []; buildKeyed(); analyse();
+    };
+    im.src = URL.createObjectURL(file);
+  }
+
+  function isBg(i, tol) {
+    return Math.abs(rdata[i] - rdata[0]) <= tol && Math.abs(rdata[i + 1] - rdata[1]) <= tol && Math.abs(rdata[i + 2] - rdata[2]) <= tol;
+  }
+
+  function buildKeyed() {
+    if (!rdata) return;
+    var tol = num('tol', 30), on = el('alpha').checked;
+    keyed = document.createElement('canvas'); keyed.width = W; keyed.height = H;
+    var kc = keyed.getContext('2d'); kc.imageSmoothingEnabled = false;
+    var im = kc.createImageData(W, H), d = im.data;
+    for (var q = 0; q < rdata.length; q += 4) {
+      d[q] = rdata[q]; d[q + 1] = rdata[q + 1]; d[q + 2] = rdata[q + 2];
+      d[q + 3] = (on && isBg(q, tol)) ? 0 : rdata[q + 3];
+    }
+    kc.putImageData(im, 0, 0);
+  }
+
+  var profile = { ink: [], thr: 0, cores: [] };
+
+  function detect() {
+    var tol = num('tol', 30), gap = int('gap', 8), minw = int('minw', 16), pct = num('pct', 12);
+    var ink = new Array(W).fill(0);
+    for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+      var i = (y * W + x) * 4;
+      if (rdata[i + 3] >= 8 && !isBg(i, tol)) ink[x]++;
+    }
+    var maxInk = Math.max.apply(null, ink) || 1;
+    var thr = Math.max(1, maxInk * pct / 100);
+
+    var runs = [], s = -1;
+    for (var x2 = 0; x2 < W; x2++) {
+      if (ink[x2] >= thr && s < 0) s = x2;
+      else if (ink[x2] < thr && s >= 0) { runs.push([s, x2 - 1]); s = -1; }
+    }
+    if (s >= 0) runs.push([s, W - 1]);
+
+    var cores = [];
+    runs.forEach(function (r) {
+      if (cores.length && r[0] - cores[cores.length - 1][1] - 1 < gap) cores[cores.length - 1][1] = r[1];
+      else cores.push([r[0], r[1]]);
+    });
+    cores = cores.filter(function (r) { return r[1] - r[0] + 1 >= minw; });
+
+    var bleed = int('bleed', 2);
+
+    function grow(start, dir, hard, mid) {
+      var x = start;
+      while (true) {
+        var nx = x + dir;
+        if (dir < 0 ? nx < hard : nx > hard) return mid;
+        if (ink[nx] === 0) return x;
+        x = nx;
+      }
+    }
+
+    var out = cores.map(function (c, k) {
+      var prev = k > 0 ? cores[k - 1] : null;
+      var next = k < cores.length - 1 ? cores[k + 1] : null;
+      var hard0 = prev ? prev[1] + 1 : 0;
+      var hard1 = next ? next[0] - 1 : W - 1;
+      var mid0 = prev ? Math.floor((prev[1] + c[0]) / 2) : 0;
+      var mid1 = next ? Math.ceil((c[1] + next[0]) / 2) : W - 1;
+      var a = grow(c[0], -1, hard0, mid0);
+      var b = grow(c[1], 1, hard1, mid1);
+      a = Math.max(hard0, a - bleed);
+      b = Math.min(hard1, b + bleed);
+      return [a, b];
+    });
+
+    profile = { ink: ink, thr: thr, max: maxInk, cores: cores };
+    return out;
+  }
+
+  function vbounds(x0, x1, tol) {
+    var a = 1e9, b = -1;
+    for (var y = 0; y < H; y++) for (var x = x0; x <= x1; x++) {
+      var i = (y * W + x) * 4;
+      if (rdata[i + 3] < 8 || isBg(i, tol)) continue;
+      if (y < a) a = y; if (y > b) b = y; break;
+    }
+    for (var y2 = H - 1; y2 >= 0; y2--) {
+      var hit = false;
+      for (var x3 = x0; x3 <= x1; x3++) {
+        var j = (y2 * W + x3) * 4;
+        if (rdata[j + 3] >= 8 && !isBg(j, tol)) { hit = true; break; }
+      }
+      if (hit) { b = Math.max(b, y2); break; }
+    }
+    return { top: a === 1e9 ? 0 : a, bottom: b < 0 ? 0 : b };
+  }
+
+  function analyse() {
+    if (!rdata) return;
+    var tol = num('tol', 30);
+    var ranges;
+    if (el('det').value === 'auto') {
+      ranges = detect();
+      el('found').textContent = ranges.length + '개 감지';
+    } else {
+      var n = int('n', 4), fw = W / n; ranges = [];
+      for (var f = 0; f < n; f++) ranges.push([Math.floor(f * fw), Math.floor((f + 1) * fw) - 1]);
+      el('found').textContent = n + '개 (균등)';
+    }
+    boxes = ranges.map(function (r) {
+      var vb = vbounds(r[0], r[1], tol);
+      return {
+        x: r[0], y: vb.top, w: r[1] - r[0] + 1, h: vb.bottom - vb.top + 1,
+        bottom: vb.bottom, mid: (r[0] + r[1]) / 2, found: vb.bottom > vb.top
+      };
+    });
+    if (sel.length !== boxes.length) sel = boxes.map(function () { return true; });
+    if (off.length !== boxes.length) off = boxes.map(function () { return { dx: 0, dy: 0 }; });
+    if (pick >= boxes.length) pick = 0;
+    t = 0; report(); diffReport(); drawMap(); drawFrames(); preview();
+  }
+
+  function spread(a) { return a.length ? Math.max.apply(null, a) - Math.min.apply(null, a) : 0; }
+
+  function report() {
+    var r = '<tr><th>#</th><th>X 범위</th><th>폭</th><th>높이</th><th>발바닥</th><th>중심 간격</th><th>오프셋</th></tr>';
+    boxes.forEach(function (b, i) {
+      var gapv = i ? Math.round(b.mid - boxes[i - 1].mid) : 0;
+      r += '<tr><td>' + (i + 1) + '</td><td class="n">' + b.x + '–' + (b.x + b.w - 1) +
+        '</td><td class="n">' + b.w + '</td><td class="n">' + b.h + '</td><td class="n">' + b.bottom +
+        '</td><td class="n">' + (i ? gapv : '—') + '</td><td class="n">' + off[i].dx + ',' + off[i].dy + '</td></tr>';
+    });
+    el('tbl').innerHTML = r;
+    var dh = spread(boxes.map(function (b) { return b.h; }));
+    var db = spread(boxes.map(function (b) { return b.bottom; }));
+    var dw = spread(boxes.map(function (b) { return b.w; }));
+    function j(l, v, lim) {
+      return '<span class="' + (v <= lim ? 'ok' : 'warn') + '">' + l + ' 편차 ' + Math.round(v) + 'px ' + (v <= lim ? '통과' : '초과') + '</span>';
+    }
+    el('verdict').innerHTML = j('높이', dh, 3) + ' · ' + j('발바닥', db, 3) + '<br>폭 편차 ' + Math.round(dw) +
+      'px <span class="note">— 공격처럼 자세가 바뀌면 폭 편차는 커도 정상이다. 높이·발바닥 편차만 보라.</span>';
+  }
+
+  function fdiff(a, b) {
+    var A = boxes[a], B = boxes[b];
+    var w = Math.max(A.w, B.w), h = Math.max(A.h, B.h);
+    var ca = document.createElement('canvas'); ca.width = w; ca.height = h;
+    var cb = document.createElement('canvas'); cb.width = w; cb.height = h;
+    var xa = ca.getContext('2d'), xb = cb.getContext('2d');
+    xa.imageSmoothingEnabled = false; xb.imageSmoothingEnabled = false;
+    xa.drawImage(keyed, A.x, A.y, A.w, A.h, Math.round((w - A.w) / 2), h - A.h, A.w, A.h);
+    xb.drawImage(keyed, B.x, B.y, B.w, B.h, Math.round((w - B.w) / 2), h - B.h, B.w, B.h);
+    var da = xa.getImageData(0, 0, w, h).data, db = xb.getImageData(0, 0, w, h).data;
+    var ch = 0, tt = 0;
+    for (var q = 0; q < da.length; q += 4) {
+      var ea = da[q + 3] > 8, eb = db[q + 3] > 8;
+      if (!ea && !eb) continue;
+      tt++;
+      if (ea !== eb) { ch++; continue; }
+      if (Math.abs(da[q] - db[q]) > 24 || Math.abs(da[q + 1] - db[q + 1]) > 24 || Math.abs(da[q + 2] - db[q + 2]) > 24) ch++;
+    }
+    return tt ? ch / tt * 100 : 0;
+  }
+
+  function diffReport() {
+    if (boxes.length < 2 || !keyed) { el('difftbl').innerHTML = ''; el('diffnote').textContent = '—'; return; }
+    var r = '<tr><th>쌍</th><th>변화율</th><th>판정</th></tr>', best = { v: 1e9, s: '' };
+    for (var i = 0; i < boxes.length; i++) {
+      var k = (i + 1) % boxes.length, v = fdiff(i, k);
+      if (v < best.v) { best.v = v; best.s = (i + 1) + '→' + (k + 1); }
+      r += '<tr><td>' + (i + 1) + ' → ' + (k + 1) + '</td><td class="n">' + v.toFixed(1) + '%</td><td class="' +
+        (v <= 12 ? 'ok' : 'warn') + '">' + (v <= 12 ? '부드러움' : v <= 25 ? '거침' : '전혀 다름') + '</td></tr>';
+    }
+    el('difftbl').innerHTML = r;
+    el('diffnote').innerHTML = '최저 <b>' + best.s + '</b> ' + best.v.toFixed(1) + '%<br>' +
+      '<span class="note">반복 재생(idle)은 12% 이하여야 자연스럽다. 공격처럼 1회 재생이면 커도 무관하다.</span>';
+  }
+
+  function drawMap() {
+    if (!raw) return;
+    var s = Math.min(1, 1200 / W), gh = 56;
+    var iw = Math.round(W * s), ih = Math.round(H * s);
+    map.width = iw; map.height = ih + gh;
+    mctx.imageSmoothingEnabled = false;
+    mctx.clearRect(0, 0, map.width, map.height);
+    mctx.drawImage(raw, 0, 0, iw, ih);
+
+    boxes.forEach(function (b) {
+      mctx.strokeStyle = '#b07a6a';
+      mctx.beginPath();
+      mctx.moveTo(b.x * s + .5, 0); mctx.lineTo(b.x * s + .5, ih);
+      mctx.moveTo((b.x + b.w) * s + .5, 0); mctx.lineTo((b.x + b.w) * s + .5, ih);
+      mctx.stroke();
+      mctx.strokeStyle = '#c6bd95';
+      mctx.beginPath();
+      mctx.moveTo(b.x * s, (b.bottom + 1) * s + .5); mctx.lineTo((b.x + b.w) * s, (b.bottom + 1) * s + .5);
+      mctx.stroke();
+    });
+
+    if (!profile.ink.length) return;
+    mctx.fillStyle = '#101014';
+    mctx.fillRect(0, ih, iw, gh);
+    mctx.fillStyle = '#3a3a45';
+    for (var px = 0; px < iw; px++) {
+      var sx = Math.floor(px / s), peak = 0;
+      for (var k = sx; k < sx + Math.ceil(1 / s) && k < W; k++) if (profile.ink[k] > peak) peak = profile.ink[k];
+      var hh = Math.round(peak / profile.max * (gh - 8));
+      mctx.fillRect(px, ih + gh - hh, 1, hh);
+    }
+    var ty = ih + gh - Math.round(profile.thr / profile.max * (gh - 8));
+    mctx.strokeStyle = '#8b8467';
+    mctx.beginPath(); mctx.moveTo(0, ty + .5); mctx.lineTo(iw, ty + .5); mctx.stroke();
+    mctx.fillStyle = '#8b8467';
+    mctx.font = '10px sans-serif';
+    mctx.fillText('밀도 임계 ' + Math.round(profile.thr), 4, ty - 3);
+
+    mctx.strokeStyle = '#7f9a72';
+    profile.cores.forEach(function (c) {
+      mctx.beginPath();
+      mctx.moveTo(c[0] * s + .5, ih); mctx.lineTo(c[0] * s + .5, ih + gh);
+      mctx.moveTo((c[1] + 1) * s + .5, ih); mctx.lineTo((c[1] + 1) * s + .5, ih + gh);
+      mctx.stroke();
+    });
+  }
+
+  function cell() {
+    var pad = int('pad', 4);
+    var cw = int('cw', 0), ch = int('chh', 0);
+    if (!boxes.length) return { cw: 1, ch: 1, pad: pad };
+    if (!cw) cw = Math.max.apply(null, boxes.map(function (b) { return b.w; })) + pad * 2;
+    if (!ch) ch = Math.max.apply(null, boxes.map(function (b) { return b.h; })) + pad * 2;
+    return { cw: cw, ch: ch, pad: pad };
+  }
+
+  function place(i, cs) {
+    var b = boxes[i], a = el('anchor').value, dx;
+    if (a === 'left') dx = cs.pad;
+    else if (a === 'right') dx = cs.cw - cs.pad - b.w;
+    else dx = Math.round((cs.cw - b.w) / 2);
+    return { dx: dx + off[i].dx, dy: cs.ch - cs.pad - b.h + off[i].dy };
+  }
+
+  function drawFrames() {
+    var host = el('frames'); host.innerHTML = '';
+    var z = int('zoom', 2), cs = cell();
+    boxes.forEach(function (b, i) {
+      var wrap = document.createElement('div');
+      wrap.className = 'fr' + (sel[i] ? ' on' : '') + (i === pick ? ' pick' : '');
+      var c = document.createElement('canvas');
+      c.width = cs.cw * z; c.height = cs.ch * z;
+      c.className = 'checker';
+      var cx = c.getContext('2d'); cx.imageSmoothingEnabled = false;
+      var p = place(i, cs);
+      cx.drawImage(keyed, b.x, b.y, b.w, b.h, p.dx * z, p.dy * z, b.w * z, b.h * z);
+      var no = document.createElement('span'); no.className = 'no'; no.textContent = i + 1;
+      var of = document.createElement('span'); of.className = 'of';
+      of.textContent = (off[i].dx || off[i].dy) ? off[i].dx + ',' + off[i].dy : '';
+      wrap.appendChild(c); wrap.appendChild(no); wrap.appendChild(of);
+      wrap.addEventListener('click', function () { pick = i; drawFrames(); });
+      wrap.addEventListener('dblclick', function () {
+        sel[i] = !sel[i];
+        if (!sel.some(function (q) { return q; })) sel[i] = true;
+        t = 0; drawFrames(); preview();
+      });
+      host.appendChild(wrap);
+    });
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (!boxes.length) return;
+    var s = e.shiftKey ? 8 : 1, u = true;
+    if (e.key === 'ArrowLeft') off[pick].dx -= s;
+    else if (e.key === 'ArrowRight') off[pick].dx += s;
+    else if (e.key === 'ArrowUp') off[pick].dy -= s;
+    else if (e.key === 'ArrowDown') off[pick].dy += s;
+    else if (e.key === ' ') { playing = !playing; el('play').textContent = playing ? '일시정지' : '재생'; el('play').classList.toggle('act', playing); }
+    else u = false;
+    if (u) { e.preventDefault(); report(); drawFrames(); preview(); }
+  });
+
+  function order() {
+    var o = []; sel.forEach(function (s, i) { if (s) o.push(i); });
+    if (!o.length) o = [0];
+    var hold = int('hold', 0);
+    if (hold > 0) { var l = o[o.length - 1]; for (var k = 0; k < hold; k++) o.push(l); }
+    return o;
+  }
+
+  function tick(ts) {
+    requestAnimationFrame(tick);
+    if (!keyed || !boxes.length) return;
+    var fps = num('fps', 12), z = int('zoom', 2), cs = cell(), o = order();
+    if (playing && ts - last > 1000 / fps) {
+      if (ping && o.length > 1) {
+        t += dir;
+        if (t >= o.length - 1) { t = o.length - 1; dir = -1; }
+        else if (t <= 0) { t = 0; dir = 1; }
+      } else t = (t + 1) % o.length;
+      last = ts;
+    }
+    if (t >= o.length) t = 0;
+    var i = o[t], b = boxes[i], p = place(i, cs);
+    view.width = cs.cw * z; view.height = cs.ch * z;
+    vctx.imageSmoothingEnabled = false;
+    vctx.drawImage(keyed, b.x, b.y, b.w, b.h, p.dx * z, p.dy * z, b.w * z, b.h * z);
+    el('playinfo').textContent = '프레임 ' + (i + 1) + ' · 셀 ' + cs.cw + '×' + cs.ch +
+      ' · ' + o.length + '틱 · ' + fps + ' fps · ' + (ping ? '왕복' : '순환') + ' · 선택 ' + (pick + 1);
+  }
+  requestAnimationFrame(tick);
+
+  function compose() {
+    if (!boxes.length) return null;
+    var cs = cell(), s = int('ex', 1);
+    var list = []; sel.forEach(function (v, i) { if (v) list.push(i); });
+    if (!list.length) list = [0];
+    var cv = document.createElement('canvas');
+    cv.width = cs.cw * list.length * s; cv.height = cs.ch * s;
+    var cx = cv.getContext('2d'); cx.imageSmoothingEnabled = false;
+    list.forEach(function (i, k) {
+      var b = boxes[i], p = place(i, cs);
+      cx.drawImage(keyed, b.x, b.y, b.w, b.h, (k * cs.cw + p.dx) * s, p.dy * s, b.w * s, b.h * s);
+    });
+    return { canvas: cv, cs: cs, list: list, s: s };
+  }
+
+  function preview() {
+    var r = compose(); if (!r) return;
+    out.width = r.canvas.width; out.height = r.canvas.height;
+    octx.imageSmoothingEnabled = false;
+    octx.clearRect(0, 0, out.width, out.height);
+    octx.drawImage(r.canvas, 0, 0);
+    octx.strokeStyle = 'rgba(139,132,103,.45)';
+    for (var g = 1; g < r.list.length; g++) {
+      octx.beginPath(); octx.moveTo(g * r.cs.cw * r.s + .5, 0); octx.lineTo(g * r.cs.cw * r.s + .5, out.height); octx.stroke();
+    }
+    el('meta').textContent =
+      '셀 크기        ' + (r.cs.cw * r.s) + ' × ' + (r.cs.ch * r.s) + '\n' +
+      '프레임 수      ' + r.list.length + '  (원본 인덱스 ' + r.list.map(function (i) { return i + 1; }).join(', ') + ')\n' +
+      '시트 크기      ' + r.canvas.width + ' × ' + r.canvas.height + '\n' +
+      '내보내기 배수  ' + r.s + 'x\n' +
+      '앵커           ' + el('anchor').options[el('anchor').selectedIndex].text + ' (여백 ' + (r.cs.pad * r.s) + 'px)\n' +
+      '재생 FPS       ' + num('fps', 12) + (int('hold', 0) ? '  · 마지막 프레임 ' + int('hold', 0) + '틱 유지' : '') + '\n\n' +
+      'Unity 임포트 설정\n' +
+      '  Texture Type   Sprite (2D and UI)\n' +
+      '  Sprite Mode    Multiple\n' +
+      '  Slice          Grid By Cell Size  ' + (r.cs.cw * r.s) + ' × ' + (r.cs.ch * r.s) + '\n' +
+      '  Pivot          Bottom Center\n' +
+      '  Filter Mode    Point (no filter)\n' +
+      '  Compression    None\n' +
+      '  Alpha Is Transparency  체크';
+    return r;
+  }
+
+  function save(canvas, fname) {
+    canvas.toBlob(function (blob) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = fname; a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+    }, 'image/png');
+  }
+
+  el('dlsheet').addEventListener('click', function () {
+    var r = preview(); if (r) save(r.canvas, name + '_' + r.list.length + 'f_' + (r.cs.cw * r.s) + 'x' + (r.cs.ch * r.s) + '.png');
+  });
+  el('dlframes').addEventListener('click', function () {
+    var r = preview(); if (!r) return;
+    r.list.forEach(function (i, k) {
+      var c = document.createElement('canvas');
+      c.width = r.cs.cw * r.s; c.height = r.cs.ch * r.s;
+      var cx = c.getContext('2d'); cx.imageSmoothingEnabled = false;
+      cx.drawImage(r.canvas, k * c.width, 0, c.width, c.height, 0, 0, c.width, c.height);
+      setTimeout(function () { save(c, name + '_' + String(k + 1).padStart(2, '0') + '.png'); }, k * 220);
+    });
+  });
+
+  function lzw(indices, minCode) {
+    var clear = 1 << minCode, end = clear + 1;
+    var dict = new Map(), next = end + 1, size = minCode + 1, maxc = (1 << size) - 1;
+    var out = [], acc = 0, bits = 0;
+    function put(code) {
+      acc |= code << bits; bits += size;
+      while (bits >= 8) { out.push(acc & 255); acc >>= 8; bits -= 8; }
+    }
+    put(clear);
+    var prefix = indices[0];
+    for (var i = 1; i < indices.length; i++) {
+      var c = indices[i], key = (prefix << 8) | c;
+      if (dict.has(key)) { prefix = dict.get(key); continue; }
+      put(prefix);
+      if (next < 4096) {
+        dict.set(key, next++);
+        if (next > maxc && size < 12) { size++; maxc = (1 << size) - 1; }
+      } else {
+        put(clear); dict.clear(); next = end + 1; size = minCode + 1; maxc = (1 << size) - 1;
+      }
+      prefix = c;
+    }
+    put(prefix); put(end);
+    if (bits > 0) out.push(acc & 255);
+    return out;
+  }
+
+  function buildPalette(frames) {
+    var counts = new Map();
+    frames.forEach(function (f) {
+      var d = f.data;
+      for (var q = 0; q < d.length; q += 4) {
+        if (d[q + 3] < 128) continue;
+        var k = (d[q] << 16) | (d[q + 1] << 8) | d[q + 2];
+        counts.set(k, (counts.get(k) || 0) + 1);
+      }
+    });
+    var keys = Array.from(counts.keys());
+    if (keys.length > 255) {
+      var buck = new Map();
+      counts.forEach(function (v, k) {
+        var bk = (((k >> 19) & 31) << 10) | (((k >> 11) & 31) << 5) | ((k >> 3) & 31);
+        var e = buck.get(bk);
+        if (!e || v > e.v) buck.set(bk, { v: v, k: k });
+        else e.v += v;
+      });
+      keys = Array.from(buck.values()).sort(function (a, b) { return b.v - a.v; })
+        .slice(0, 255).map(function (e) { return e.k; });
+    }
+    var pal = [[0, 0, 0]];
+    keys.forEach(function (k) { pal.push([(k >> 16) & 255, (k >> 8) & 255, k & 255]); });
+    var bits = Math.max(1, Math.ceil(Math.log2(Math.max(2, pal.length))));
+    var full = 1 << bits;
+    while (pal.length < full) pal.push([0, 0, 0]);
+    return { pal: pal, bits: bits };
+  }
+
+  function encodeGif(frames, w, h, delayCs, loop) {
+    var pi = buildPalette(frames), pal = pi.pal, bits = pi.bits;
+    var lookup = new Map();
+    for (var p = 1; p < pal.length; p++) lookup.set((pal[p][0] << 16) | (pal[p][1] << 8) | pal[p][2], p);
+    function nearest(r, g, b) {
+      var key = (r << 16) | (g << 8) | b;
+      if (lookup.has(key)) return lookup.get(key);
+      var best = 1, bd = 1e9;
+      for (var q = 1; q < pal.length; q++) {
+        var dr = pal[q][0] - r, dg = pal[q][1] - g, db = pal[q][2] - b;
+        var d = dr * dr + dg * dg + db * db;
+        if (d < bd) { bd = d; best = q; }
+      }
+      lookup.set(key, best);
+      return best;
+    }
+
+    var by = [];
+    function u8(v) { by.push(v & 255); }
+    function u16(v) { by.push(v & 255, (v >> 8) & 255); }
+    function str(s) { for (var i = 0; i < s.length; i++) by.push(s.charCodeAt(i)); }
+    function blocks(arr) {
+      for (var i = 0; i < arr.length; i += 255) {
+        var n = Math.min(255, arr.length - i);
+        u8(n);
+        for (var k = 0; k < n; k++) u8(arr[i + k]);
+      }
+      u8(0);
+    }
+
+    str('GIF89a');
+    u16(w); u16(h);
+    u8(0x80 | (bits - 1)); u8(0); u8(0);
+    pal.forEach(function (c) { u8(c[0]); u8(c[1]); u8(c[2]); });
+
+    str('!\xFF\x0B'); str('NETSCAPE2.0'); u8(3); u8(1); u16(loop ? 0 : 1); u8(0);
+
+    var minCode = Math.max(2, bits);
+    frames.forEach(function (f) {
+      var d = f.data, idx = new Array(w * h);
+      for (var q = 0, j = 0; q < d.length; q += 4, j++) {
+        idx[j] = d[q + 3] < 128 ? 0 : nearest(d[q], d[q + 1], d[q + 2]);
+      }
+      str('!\xF9\x04'); u8(0x09); u16(delayCs); u8(0); u8(0);
+      u8(0x2C); u16(0); u16(0); u16(w); u16(h); u8(0);
+      u8(minCode);
+      blocks(lzw(idx, minCode));
+    });
+    u8(0x3B);
+    return new Uint8Array(by);
+  }
+
+  el('dlgif').addEventListener('click', function () {
+    var r = preview(); if (!r) return;
+    var cs = r.cs, s = r.s, cw = cs.cw * s, ch = cs.ch * s;
+    var seq = [];
+    r.list.forEach(function (i, k) { seq.push(k); });
+    var hold = int('hold', 0);
+    for (var q = 0; q < hold; q++) seq.push(r.list.length - 1);
+    if (ping && r.list.length > 2) {
+      for (var b = r.list.length - 2; b >= 1; b--) seq.push(b);
+    }
+
+    var frames = seq.map(function (k) {
+      var c = document.createElement('canvas');
+      c.width = cw; c.height = ch;
+      var cx = c.getContext('2d'); cx.imageSmoothingEnabled = false;
+      cx.drawImage(r.canvas, k * cw, 0, cw, ch, 0, 0, cw, ch);
+      return cx.getImageData(0, 0, cw, ch);
+    });
+
+    var fps = num('fps', 12);
+    var delay = Math.max(2, Math.round(100 / fps));
+    el('gifinfo').textContent = '인코딩 중…';
+    setTimeout(function () {
+      try {
+        var bytes = encodeGif(frames, cw, ch, delay, true);
+        var blob = new Blob([bytes], { type: 'image/gif' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name + '_' + seq.length + 'f_' + fps + 'fps.gif';
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+        el('gifinfo').textContent = seq.length + '프레임 · ' + delay * 10 + 'ms · ' + Math.round(bytes.length / 1024) + 'KB';
+      } catch (e) {
+        el('gifinfo').textContent = '실패: ' + e.message;
+      }
+    }, 10);
+  });
+
+  el('det').addEventListener('change', analyse);
+  el('n').addEventListener('input', analyse);
+  ['gap', 'minw', 'pct', 'bleed'].forEach(function (i) { el(i).addEventListener('input', analyse); });
+  el('tol').addEventListener('input', function () { el('tolv').textContent = this.value; buildKeyed(); analyse(); });
+  el('alpha').addEventListener('change', function () { buildKeyed(); analyse(); });
+  el('anchor').addEventListener('change', function () { drawFrames(); preview(); });
+  el('pad').addEventListener('input', function () { drawFrames(); preview(); });
+  ['cw', 'chh', 'ex'].forEach(function (i) { el(i).addEventListener('input', function () { drawFrames(); preview(); }); });
+  el('zoom').addEventListener('input', function () { el('zoomv').textContent = this.value; drawFrames(); });
+  el('fps').addEventListener('input', function () { el('fpsv').textContent = this.value; });
+  el('gap').addEventListener('input', function () { el('gapv').textContent = this.value; });
+  el('minw').addEventListener('input', function () { el('minwv').textContent = this.value; });
+  el('pct').addEventListener('input', function () { el('pctv').textContent = this.value + '%'; });
+  el('bleed').addEventListener('input', function () { el('bleedv').textContent = this.value; });
+  el('play').addEventListener('click', function () {
+    playing = !playing; this.textContent = playing ? '일시정지' : '재생'; this.classList.toggle('act', playing);
+  });
+  el('ping').addEventListener('click', function () {
+    ping = !ping; dir = 1; t = 0; this.textContent = ping ? '왕복 끄기' : '왕복 켜기'; this.classList.toggle('act', ping);
+  });
+})();
+</script>
+</body>
+</html>
