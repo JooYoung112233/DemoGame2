@@ -237,28 +237,35 @@
 
     var bleed = int('bleed', 2);
 
-    function grow(start, dir, hard, mid) {
-      var x = start;
-      while (true) {
-        var nx = x + dir;
-        if (dir < 0 ? nx < hard : nx > hard) return mid;
-        if (ink[nx] === 0) return x;
-        x = nx;
+    // 코어 사이마다 경계선을 하나만 정한다 — 밀도가 가장 낮은 구간의 중앙.
+    // 시트를 겹치지 않는 칸으로 분할하므로 프레임 범위가 포개질 수 없다.
+    var cuts = [];
+    for (var k = 0; k < cores.length - 1; k++) {
+      var s0 = cores[k][1] + 1, s1 = cores[k + 1][0] - 1;
+      if (s1 < s0) { cuts.push(s0); continue; }
+      var lo = Infinity;
+      for (var x3 = s0; x3 <= s1; x3++) if (ink[x3] < lo) lo = ink[x3];
+      var bestA = s0, bestLen = 0, runA = -1;
+      for (var x4 = s0; x4 <= s1 + 1; x4++) {
+        var at = x4 <= s1 && ink[x4] === lo;
+        if (at && runA < 0) runA = x4;
+        else if (!at && runA >= 0) {
+          var len = x4 - runA;
+          if (len > bestLen) { bestLen = len; bestA = runA; }
+          runA = -1;
+        }
       }
+      cuts.push(bestA + Math.floor(Math.max(0, bestLen - 1) / 2));
     }
 
     var out = cores.map(function (c, k) {
-      var prev = k > 0 ? cores[k - 1] : null;
-      var next = k < cores.length - 1 ? cores[k + 1] : null;
-      var hard0 = prev ? prev[1] + 1 : 0;
-      var hard1 = next ? next[0] - 1 : W - 1;
-      var mid0 = prev ? Math.floor((prev[1] + c[0]) / 2) : 0;
-      var mid1 = next ? Math.ceil((c[1] + next[0]) / 2) : W - 1;
-      var a = grow(c[0], -1, hard0, mid0);
-      var b = grow(c[1], 1, hard1, mid1);
-      a = Math.max(hard0, a - bleed);
-      b = Math.min(hard1, b + bleed);
-      return [a, b];
+      var p0 = k > 0 ? cuts[k - 1] + 1 : 0;
+      var p1 = k < cores.length - 1 ? cuts[k] : W - 1;
+      var a = -1, b = -1;
+      for (var x5 = p0; x5 <= p1; x5++) if (ink[x5] > 0) { a = x5; break; }
+      for (var x6 = p1; x6 >= p0; x6--) if (ink[x6] > 0) { b = x6; break; }
+      if (a < 0) { a = c[0]; b = c[1]; }
+      return [Math.max(p0, a - bleed), Math.min(p1, b + bleed)];
     });
 
     profile = { ink: ink, thr: thr, max: maxInk, cores: cores };
