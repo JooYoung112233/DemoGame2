@@ -156,6 +156,11 @@
     <label>셀 높이 <input type="number" id="chh" value="0" min="0" max="2048"></label>
     <label>배수 <select id="ex"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
     <label><input type="checkbox" id="alpha" checked> 배경 투명화</label>
+    <label>테두리 정리 <input type="number" id="erode" value="1" min="0" max="4"></label>
+    <label>GIF 배경
+      <select id="gifbg"><option value="solid" selected>단색</option><option value="none">투명</option></select>
+      <input type="color" id="gifcol" value="#2e1b38" style="width:34px;height:24px;padding:0;border:1px solid #3a3a45;background:#23232c">
+    </label>
     <button id="dlsheet" class="go">시트 PNG 저장</button>
     <button id="dlframes">프레임 낱장 저장</button>
     <button id="dlgif" class="go">GIF 저장</button>
@@ -254,6 +259,23 @@
     for (var q = 0; q < rdata.length; q += 4) {
       d[q] = rdata[q]; d[q + 1] = rdata[q + 1]; d[q + 2] = rdata[q + 2];
       d[q + 3] = (on && isBg(q, tol)) ? 0 : rdata[q + 3];
+    }
+
+    // 테두리 정리 — 배경과 맞닿은 픽셀을 N겹 깎는다.
+    // AI 이미지의 안티에일리어싱 픽셀은 캐릭터색과 배경색이 섞여 있어
+    // 그냥 두면 외곽에 배경색 띠(할로)가 남는다.
+    var er = int('erode', 1);
+    if (on && er > 0) {
+      var clear = new Uint8Array(W * H);
+      for (var it = 0; it < er; it++) {
+        for (var p = 0; p < W * H; p++) clear[p] = d[p * 4 + 3] === 0 ? 1 : 0;
+        for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
+          var p2 = y * W + x;
+          if (clear[p2]) continue;
+          if ((x > 0 && clear[p2 - 1]) || (x < W - 1 && clear[p2 + 1]) ||
+              (y > 0 && clear[p2 - W]) || (y < H - 1 && clear[p2 + W])) d[p2 * 4 + 3] = 0;
+        }
+      }
     }
     kc.putImageData(im, 0, 0);
   }
@@ -732,7 +754,7 @@
     return { pal: pal, bits: bits };
   }
 
-  function encodeGif(frames, w, h, delayCs, loop) {
+  function encodeGif(frames, w, h, delayCs, loop, transparent) {
     var pi = buildPalette(frames), pal = pi.pal, bits = pi.bits;
     var lookup = new Map();
     for (var p = 1; p < pal.length; p++) lookup.set((pal[p][0] << 16) | (pal[p][1] << 8) | pal[p][2], p);
@@ -775,7 +797,8 @@
       for (var q = 0, j = 0; q < d.length; q += 4, j++) {
         idx[j] = d[q + 3] < 128 ? 0 : nearest(d[q], d[q + 1], d[q + 2]);
       }
-      str('!\xF9\x04'); u8(0x09); u16(delayCs); u8(0); u8(0);
+      // packed: 투명이면 disposal 2 + 투명 플래그, 단색 배경이면 disposal 1
+      str('!\xF9\x04'); u8(transparent === false ? 0x04 : 0x09); u16(delayCs); u8(0); u8(0);
       u8(0x2C); u16(0); u16(0); u16(w); u16(h); u8(0);
       u8(minCode);
       blocks(lzw(idx, minCode));
@@ -795,10 +818,12 @@
       for (var b = r.list.length - 2; b >= 1; b--) seq.push(b);
     }
 
+    var solid = el('gifbg').value === 'solid';
     var frames = seq.map(function (k) {
       var c = document.createElement('canvas');
       c.width = cw; c.height = ch;
       var cx = c.getContext('2d'); cx.imageSmoothingEnabled = false;
+      if (solid) { cx.fillStyle = el('gifcol').value; cx.fillRect(0, 0, cw, ch); }
       cx.drawImage(r.canvas, k * cw, 0, cw, ch, 0, 0, cw, ch);
       return cx.getImageData(0, 0, cw, ch);
     });
@@ -808,7 +833,7 @@
     el('gifinfo').textContent = '인코딩 중…';
     setTimeout(function () {
       try {
-        var bytes = encodeGif(frames, cw, ch, delay, true);
+        var bytes = encodeGif(frames, cw, ch, delay, true, !solid);
         var blob = new Blob([bytes], { type: 'image/gif' });
         var a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -823,7 +848,8 @@
   });
 
   var SET_IDS = ['det', 'n', 'rows', 'bgmode', 'tol', 'pct', 'gap', 'minw', 'bleed',
-                 'anchor', 'fps', 'zoom', 'pad', 'hold', 'cw', 'chh', 'ex', 'alpha'];
+                 'anchor', 'fps', 'zoom', 'pad', 'hold', 'cw', 'chh', 'ex', 'alpha',
+                 'erode', 'gifbg', 'gifcol'];
   var LS_KEY = 'spritesheet.settings.v1';
   var DEFAULTS = null;
 
@@ -927,6 +953,8 @@
   el('tol').addEventListener('input', function () { el('tolv').textContent = this.value; computeBg(); buildKeyed(); analyse(); });
   el('bgmode').addEventListener('change', function () { computeBg(); buildKeyed(); analyse(); });
   el('alpha').addEventListener('change', function () { buildKeyed(); analyse(); });
+  el('erode').addEventListener('input', function () { buildKeyed(); analyse(); });
+  el('gifbg').addEventListener('change', function () { el('gifinfo').textContent = '—'; });
   el('anchor').addEventListener('change', function () { drawFrames(); preview(); });
   el('pad').addEventListener('input', function () { drawFrames(); preview(); });
   ['cw', 'chh', 'ex'].forEach(function (i) { el(i).addEventListener('input', function () { drawFrames(); preview(); }); });
