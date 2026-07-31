@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>전투 화면 그레이박스 — 5밴드 검증</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: #0d0d10; color: #b9b4ab;
+    font: 400 12px/1.4 "Malgun Gothic", system-ui, sans-serif;
+    display: flex; justify-content: center;
+  }
+
+  .theatre {
+    flex: 1; min-width: 0; background: #16161a;
+    border-right: 1px solid #24242a; padding: 14px;
+    display: flex; flex-direction: column; gap: 10px; overflow: hidden;
+  }
+  .theatre.right { border-right: 0; border-left: 1px solid #24242a; }
+  .theatre h1 { font-size: 12px; font-weight: 400; color: #5c5a63; letter-spacing: .08em; }
+
+  .play {
+    height: 100%; aspect-ratio: 3 / 4; flex: none;
+    background: #101014; display: flex; flex-direction: column;
+    position: relative; z-index: 2;
+  }
+
+  .band { position: relative; border-bottom: 1px solid #2b2b33; padding: 6px 8px; min-height: 0; }
+  .band:last-child { border-bottom: 0; }
+  .px { color: #8a8698; }
+
+  .b-top   { flex: 0 0 5%;  display: flex; align-items: center; gap: 6px; }
+  .b-stage { flex: 0 0 45%; display: flex; align-items: flex-end; gap: 10px; }
+  .b-foe   { flex: 0 0 10%; display: flex; gap: 10px; }
+  .b-self  { flex: 0 0 5%;  display: flex; align-items: center; gap: 8px; }
+  .b-deck  { flex: 0 0 35%; display: flex; gap: 10px; }
+
+  .box { border: 1px solid #3a3a45; background: #191920; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 11px; color: #8f8b99; }
+  .box.solid { background: #23232c; }
+  .box.hi { border-color: #6e6a52; background: #26251c; color: #b6ae86; }
+
+  .foe { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .foe .reel { flex: 1; min-height: 0; border-color: #57545f; }
+  .foe .hp { height: 22px; flex: none; }
+
+  .slotcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .slotrow { flex: 1; min-height: 0; display: flex; gap: 8px; }
+  .itembar { height: 56px; flex: none; display: flex; align-items: center; gap: 8px; }
+  .autobtn { width: 72px; height: 40px; flex: none; font-size: 10px; }
+  .items { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; }
+  .islot { width: 44px; height: 44px; flex: none; font-size: 10px; }
+  .islot.empty { border-style: dashed; border-color: #2b2b33; color: #4e4c56; }
+  .itemlbl { font-size: 10px; color: #6f6c78; flex: none; margin-right: 2px; }
+  .rail { width: 30px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
+  .lamp { width: 13px; height: 13px; border-radius: 50%; border: 1px solid #3a3a45; }
+  .lamp.on { background: #6e6a52; border-color: #8b8467; }
+
+  .slotwrap { flex: 1; min-width: 0; height: 100%; }
+  .grid { display: flex; flex-direction: column; gap: 4px; height: 100%; }
+  .row { display: flex; gap: 4px; min-height: 0; }
+  .row.preview { flex: 61; }
+  .row.payline { flex: 88; }
+  .cell { flex: 1; min-width: 0; }
+  .payline .cell { border-color: #6e6a52; background: #1e1d18; }
+
+  .rightcol { flex: 0 0 200px; display: flex; flex-direction: column; gap: 8px; }
+  .leverarea { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-height: 0; }
+  .combo { width: 54px; height: 54px; border-radius: 50%; flex: none; font-size: 11px; }
+  .leverslot { width: 74px; height: 100%; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; }
+  .knob { width: 34px; height: 34px; border-radius: 50%; flex: none; border-color: #6e6a52; background: #26251c; }
+  .shaft { width: 14px; flex: 1; min-height: 0; border-color: #57545f; }
+  .leverlbl { font-size: 10px; color: #6f6c78; flex: none; }
+  .charbox { width: 140px; height: 138px; flex: none; margin-left: auto; }
+
+  .overlay {
+    position: absolute; bottom: 8px; left: 8px;
+    width: 480px; background: #0f0f14; border: 1px solid #57545f;
+    display: none; flex-direction: column; padding: 5px; gap: 4px; z-index: 3;
+  }
+  .overlay.on { display: flex; }
+  .tray { height: 28px; flex: none; display: flex; gap: 4px; align-items: center; }
+  .tray .lbl { font-size: 10px; color: #6f6c78; width: 40px; flex: none; }
+  .tray .t { width: 28px; height: 100%; font-size: 10px; }
+  .skills { flex: none; display: flex; flex-direction: column; gap: 3px; }
+  .skill { height: 30px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 7px; cursor: pointer; font-size: 11px; }
+  .skill:hover { border-color: #8b8467; background: #23221a; color: #c6bd95; }
+  .skill .nm { width: 78px; flex: none; text-align: left; }
+  .skill .rq { width: 64px; flex: none; font-size: 10px; color: #6f6c78; }
+  .skill .ef { flex: 1; text-align: left; font-size: 10px; color: #7d7a86; }
+  .skill .cs { width: 24px; flex: none; }
+  .skill:hover .ef, .skill:hover .rq { color: #b6ae86; }
+
+  .audience {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 15%;
+    display: flex; align-items: flex-end; gap: 4px; padding: 0 12px;
+    z-index: 1; pointer-events: none;
+  }
+  .head { flex: 1; background: #1c1c22; border-radius: 6px 6px 0 0; }
+  .head.up { background: #2a2a33; }
+  .aud-label { position: absolute; left: 14px; bottom: 4px; font-size: 10px; color: #4e4c56; }
+
+  table { border-collapse: collapse; font-size: 11px; width: 100%; }
+  td { padding: 2px 0; color: #7d7a86; }
+  td.v { text-align: right; color: #a9a4b2; font-variant-numeric: tabular-nums; }
+  .warn { color: #b07a6a; }
+  .ok { color: #7f9a72; }
+  .note { font-size: 10px; color: #56545e; line-height: 1.6; }
+  kbd { border: 1px solid #3a3a45; border-radius: 3px; padding: 0 4px; font-size: 10px; }
+  button.tg { background: #23232c; color: #b9b4ab; border: 1px solid #57545f; border-radius: 4px; padding: 5px 9px; font: inherit; font-size: 11px; cursor: pointer; }
+  button.tg:hover { border-color: #8b8467; color: #c6bd95; }
+</style>
+</head>
+<body>
+
+<div class="theatre">
+  <h1>극장 좌측</h1>
+  <table>
+    <tr><td>뷰포트</td><td class="v" id="vp">—</td></tr>
+    <tr><td>플레이 영역</td><td class="v" id="pa">—</td></tr>
+    <tr><td>좌우 극장</td><td class="v" id="side">—</td></tr>
+    <tr><td>화면 점유</td><td class="v" id="occ">—</td></tr>
+  </table>
+  <h1>밴드 실측</h1>
+  <table id="bands"></table>
+  <h1>요소 실측</h1>
+  <table id="elems"></table>
+  <p class="note">전체화면 <kbd>F11</kbd></p>
+</div>
+
+<div class="play" id="play">
+
+  <div class="band b-top">
+    <div class="box" style="width:64px;height:70%">1-3</div>
+    <div class="box" style="width:104px;height:70%">금화 125</div>
+    <div class="box" style="width:84px;height:70%">릴 보기</div>
+    <div class="box" style="width:40px;height:70%;margin-left:auto">II</div>
+  </div>
+
+  <div class="band b-stage">
+    <div class="box" style="flex:1;height:60%" id="ebody">적 1</div>
+    <div class="box" style="flex:1;height:48%">적 2</div>
+    <div class="box" style="flex:1;height:70%">적 3</div>
+  </div>
+
+  <div class="band b-foe">
+    <div class="foe"><div class="box reel" id="foereel">릴 1칸</div><div class="box hp">HP 24/30</div></div>
+    <div class="foe"><div class="box reel">릴 1칸</div><div class="box hp">HP 9/12</div></div>
+    <div class="foe"><div class="box reel">릴 1칸</div><div class="box hp">HP 40/40</div></div>
+  </div>
+
+  <div class="band b-self">
+    <div class="box" style="flex:2;height:82%" id="selfhp">HP 80/80</div>
+    <div class="box" style="flex:1;height:82%">쉴드 30</div>
+    <div class="box" style="width:112px;height:82%">관중 7/10</div>
+    <div class="box" style="width:100px;height:82%">회전권 3</div>
+  </div>
+
+  <div class="band b-deck">
+    <div class="slotcol">
+      <div class="slotrow">
+        <div class="rail">
+          <div class="lamp"></div><div class="lamp"></div>
+          <div class="lamp on"></div>
+          <div class="lamp"></div><div class="lamp"></div>
+        </div>
+        <div class="slotwrap">
+          <div class="grid">
+            <div class="row preview">
+              <div class="box cell"></div><div class="box cell"></div><div class="box cell"></div>
+            </div>
+            <div class="row payline">
+              <div class="box cell" id="cell">칼</div><div class="box cell">방패</div><div class="box cell">방패</div>
+            </div>
+            <div class="row preview">
+              <div class="box cell"></div><div class="box cell"></div><div class="box cell"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="itembar">
+        <div class="box autobtn" id="autobtn">오토</div>
+        <span class="itemlbl">기믹</span>
+        <div class="items">
+          <div class="box islot" id="islot">티켓</div>
+          <div class="box islot">슬로우</div>
+          <div class="box islot">조준</div>
+          <div class="box islot empty"></div>
+          <div class="box islot empty"></div>
+          <div class="box islot empty"></div>
+          <div class="box islot empty"></div>
+          <div class="box islot empty"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rightcol">
+      <div class="leverarea">
+        <div class="box solid combo">x2</div>
+        <div class="leverslot" id="lever">
+          <div class="box knob"></div>
+          <div class="box shaft"></div>
+          <div class="leverlbl" id="leverlbl">스핀</div>
+        </div>
+      </div>
+      <div class="box charbox" id="charbox">캐릭터</div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ov">
+    <div class="tray">
+      <span class="lbl">트레이</span>
+      <div class="box t">칼</div><div class="box t">방패</div><div class="box t">방패</div>
+    </div>
+    <div class="skills">
+      <div class="box skill" id="sk"><span class="nm">기본 처리</span><span class="rq">남은 심볼</span><span class="ef">공격 6 · 블록 8</span><span class="cs">무료</span></div>
+      <div class="box skill"><span class="nm">찌르기</span><span class="rq">칼 1</span><span class="ef">12딜 · 방어 관통</span><span class="cs">1</span></div>
+      <div class="box skill"><span class="nm">거북 자세</span><span class="rq">방패 2</span><span class="ef">블록 20 · 반사</span><span class="cs">1</span></div>
+      <div class="box skill"><span class="nm">히라유 회복</span><span class="rq">솜사탕 1</span><span class="ef">힐 12</span><span class="cs">1</span></div>
+      <div class="box skill"><span class="nm">앙코르</span><span class="rq">—</span><span class="ef">홀드 후 재굴림</span><span class="cs">1</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="theatre right">
+  <h1>상태 전환</h1>
+  <p><button class="tg" id="tg">스킬 오버레이 켜기</button></p>
+  <p class="note">
+    무대를 48%로 키우고 슬롯을 좌측으로 몰았다.<br>
+    우측에 레버(세로 바)와 그 아래 플레이어 캐릭터.<br><br>
+    오버레이는 슬롯 위에만 덮이고 좌측 정렬이라<br>
+    <b>레버는 항상 노출된다</b> — 스킬을 고른 뒤<br>
+    레버를 당겨 확정하는 흐름이 유지된다.<br><br>
+    레버 라벨이 스핀에서 공격으로 바뀐다.
+  </p>
+  <h1>판정</h1>
+  <table id="verdict"></table>
+</div>
+
+<div class="audience" id="aud">
+  <span class="aud-label">객석 — 배경 레이어</span>
+</div>
+
+<script>
+(function () {
+  var aud = document.getElementById('aud');
+  for (var i = 0; i < 26; i++) {
+    var d = document.createElement('div');
+    d.className = 'head' + (i % 3 === 0 ? ' up' : '');
+    d.style.height = (i % 3 === 0 ? 62 : 40) + '%';
+    aud.appendChild(d);
+  }
+
+  var ov = document.getElementById('ov');
+  var tg = document.getElementById('tg');
+  var lbl = document.getElementById('leverlbl');
+  tg.addEventListener('click', function () {
+    var on = ov.classList.toggle('on');
+    tg.textContent = on ? '스킬 오버레이 끄기' : '스킬 오버레이 켜기';
+    lbl.textContent = on ? '공격' : '스핀';
+    measure();
+  });
+
+  var BANDS = [
+    ['상단바', '.b-top'], ['무대', '.b-stage'], ['적 상태', '.b-foe'],
+    ['내 상태', '.b-self'], ['조작 영역', '.b-deck']
+  ];
+
+  function r(n) { return Math.round(n); }
+  function row(t, a, b, cls) {
+    return '<tr><td>' + t + '</td><td class="v ' + (cls || '') + '">' + a + (b ? ' <span class="px">' + b + '</span>' : '') + '</td></tr>';
+  }
+  function rect(id) { return document.getElementById(id).getBoundingClientRect(); }
+
+  function measure() {
+    var pr = document.getElementById('play').getBoundingClientRect();
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var side = (vw - pr.width) / 2;
+
+    document.getElementById('vp').textContent = r(vw) + ' × ' + r(vh);
+    document.getElementById('pa').textContent = r(pr.width) + ' × ' + r(pr.height);
+    document.getElementById('side').textContent = r(side) + ' 씩';
+    document.getElementById('occ').textContent = r(pr.width / vw * 100) + '%';
+
+    var out = '';
+    BANDS.forEach(function (b) {
+      var h = document.querySelector(b[1]).getBoundingClientRect().height;
+      out += row(b[0], r(h) + 'px', r(h / pr.height * 100) + '%');
+    });
+    document.getElementById('bands').innerHTML = out;
+
+    var cell = rect('cell'), body = rect('ebody'), fr = rect('foereel'),
+        sk = rect('sk'), lv = rect('lever'), ch = rect('charbox');
+    var grid = document.querySelector('.slotwrap').getBoundingClientRect();
+    var ovOn = ov.classList.contains('on');
+    var ovR = ov.getBoundingClientRect();
+
+    document.getElementById('elems').innerHTML =
+      row('슬롯 창', r(grid.width) + ' × ' + r(grid.height)) +
+      row('슬롯 칸', r(cell.width) + ' × ' + r(cell.height), (cell.width / cell.height).toFixed(2) + ':1') +
+      row('적 몸통', r(body.width) + ' × ' + r(body.height)) +
+      row('적 릴 칸', r(fr.width) + ' × ' + r(fr.height)) +
+      row('레버', r(lv.width) + ' × ' + r(lv.height)) +
+      row('캐릭터', r(ch.width) + ' × ' + r(ch.height)) +
+      row('오토', r(rect('autobtn').width) + ' × ' + r(rect('autobtn').height)) +
+      row('기믹 슬롯', r(rect('islot').width) + ' × ' + r(rect('islot').height)) +
+      row('스킬 행', r(sk.width) + ' × ' + r(sk.height)) +
+      row('오버레이', ovOn ? r(ovR.width) + ' × ' + r(ovR.height) : '꺼짐');
+
+    var leverClear = !ovOn || (ovR.right <= lv.left);
+
+    var v = '';
+    v += row('슬롯 칸 ≤ 1.50:1', (cell.width / cell.height).toFixed(2), '', (cell.width / cell.height) <= 1.5 ? 'ok' : 'warn');
+    v += row('슬롯 칸 ≥ 80px', r(cell.height), '', cell.height >= 80 ? 'ok' : 'warn');
+    v += row('적 몸통 ≥ 280px', r(body.height), '', body.height >= 280 ? 'ok' : 'warn');
+    v += row('적 릴 칸 ≥ 44px', r(fr.height), '', fr.height >= 44 ? 'ok' : 'warn');
+    v += row('캐릭터 ≤ 150px 폭', r(ch.width), '', ch.width <= 150 ? 'ok' : 'warn');
+    v += row('스킬 행 ≥ 28px', r(sk.height), '', sk.height >= 28 ? 'ok' : 'warn');
+    v += row('레버 안 가림', leverClear ? '통과' : '겹침', '', leverClear ? 'ok' : 'warn');
+    document.getElementById('verdict').innerHTML = v;
+  }
+
+  measure();
+  window.addEventListener('resize', measure);
+})();
+</script>
+</body>
+</html>

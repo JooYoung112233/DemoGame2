@@ -108,7 +108,90 @@ interface, photorealism, 3d render, blurry
 
 ---
 
-## 2.3 전투 화면 · UI 레이어 포함 ★ 현재 기준
+## 2.2 전투 화면 · 레이아웃 확정판 ★★ 최신 기준
+
+[wireframe/combat.html](wireframe/combat.html)에서 1920×1080으로 실측 검증한 5밴드 레이아웃을 그대로 지시한다. **§1 공통 스타일 블록을 앞에 붙일 것.**
+
+```
+[§1 공통 스타일 블록 — 팔레트와 TONE 포함]
+
+A pixel art GAME SCREEN with a full HUD, vertical 3:4 canvas, inside a
+dark crimson and tarnished brass opera house. A working game interface,
+NOT an illustration.
+
+FLAT ALIGNMENT: every HUD panel and the slot window is rectangular and
+aligned to the screen edges, no perspective distortion. Only the theatre
+background behind them has depth.
+
+Compose the canvas as FIVE horizontal bands, top to bottom:
+
+BAND 1, top 5%: a slim bar with a small stage counter badge on the left,
+a gold coin counter beside it, a small reel-view button, and a pause
+button at the far right.
+
+BAND 2, next 45%, THE STAGE: three sinister circus performers standing in
+a row, FULL BODIES from head to foot, BOTTOM ALIGNED so their feet rest on
+the stage floor and empty scenery fills the space above them - a crimson
+curtain valance with a scalloped hem, tiered balconies packed with near
+black audience silhouettes, one overhead spotlight cone. The three
+figures are a tall gaunt clown, a short cracked wooden puppet, and a
+heavy muzzled bear on hind legs, each a clearly different height.
+
+BAND 3, next 10%: three panels side by side, one under each enemy. Each
+holds a SINGLE SQUARE REEL CELL containing one small icon, and directly
+below it a short dull red health bar. These reel cells are the enemies'
+slot - every enemy rolls one cell.
+
+BAND 4, next 5%: one slim horizontal status strip holding the player's
+health bar, a cold steel shield bar, an audience gauge readout, and a
+spin ticket count.
+
+BAND 5, bottom 35%, split into TWO COLUMNS:
+  LEFT COLUMN, about three quarters of the width:
+    - a 3 by 3 SLOT WINDOW in a slim brass frame filling the column. The
+      MIDDLE horizontal row is lit with a thin gold line across it and a
+      small marker at each end; the top and bottom rows are dim. Cells are
+      slightly WIDER than tall. Nine different clearly distinct icons:
+      dagger, open hoop, cotton candy cloud, joker card, balloon, three
+      juggling balls, low wide cannon, notched ticket, stack of gold coins.
+    - immediately LEFT of the window, a narrow vertical strip of FIVE
+      small round lamps, only the middle one lit.
+    - BELOW the window, a slim horizontal bar holding one SMALL auto
+      button and then a row of EIGHT small square item sockets, three
+      filled with trinkets and five empty.
+  RIGHT COLUMN, about one quarter of the width:
+    - a tall vertical SLOT MACHINE LEVER mounted on the cabinet: a brass
+      shaft with a round crimson ball knob on top, running most of the
+      column height. A small round combo badge sits to its left.
+    - BELOW the lever, a SMALL square portrait of the player character,
+      no larger than the item sockets area, tucked into the bottom right
+      corner.
+
+There is NO large spin button anywhere. The lever replaces it.
+
+--ar 3:4 --no glow, bloom, neon, shiny gold, saturated colours, pure red,
+pure blue, large spin button, rounded plastic UI, mobile casino, bright
+background, flat even lighting, daylight, photorealism, 3d render,
+cropped figures, half bodies
+```
+
+### 2.2.1 실측 기준값 (프롬프트가 못 지키면 이걸로 판단)
+
+| 요소 | 1920×1080 실측 |
+|---|---|
+| 플레이 영역 | 810 × 1080 (좌우 극장 555씩) |
+| 무대 / 적 몸통 | 486px / 258 × 284 |
+| 적 릴 칸 | 258 × 68 |
+| 슬롯 창 / 칸 | 546 × 301 / **179 × 123 (1.46:1)** |
+| 레버 | 74 × 219 |
+| 캐릭터 | 140 × 138 |
+| 오토 / 기믹 슬롯 | 72 × 40 / 44 × 44 × 8칸 |
+
+**큰 스핀 버튼을 넣지 말 것.** 3차 결과물에서 큰 발광 SPIN 버튼이 화면을 캐주얼하게 만든 원인이었다. 레버가 그 역할을 대신한다.
+
+---
+
+## 2.3 전투 화면 · UI 레이어 포함 (구버전 · 참고용)
 
 §2.4 결과물은 **배경 아트 레퍼런스로는 완성품**이었지만 게임처럼 보이지 않았다. 원인은 프롬프트에서 `--no text, letters, numbers, UI` 로 HUD를 통째로 차단한 것이다.
 
