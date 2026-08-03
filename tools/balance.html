@@ -1,0 +1,715 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>밸런스 시뮬레이터 — The Last Theater</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0d0d10; color: #b9b4ab; min-height: 100vh;
+    font: 400 13px/1.5 "Malgun Gothic", system-ui, sans-serif;
+    padding: 16px; display: flex; flex-direction: column; gap: 11px;
+  }
+  h1 { font-size: 12px; font-weight: 400; color: #5c5a63; letter-spacing: .08em; margin-bottom: 8px; }
+  .panel { background: #16161a; border: 1px solid #24242a; border-radius: 6px; padding: 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #7d7a86; }
+  input[type=number] { width: 58px; background: #23232c; color: #b9b4ab; border: 1px solid #3a3a45; border-radius: 3px; padding: 3px 5px; font: inherit; }
+  input[type=number].w4 { width: 44px; }
+  textarea { width: 100%; background: #101014; color: #a9a4b2; border: 1px solid #3a3a45; border-radius: 4px; padding: 8px; font: 400 11px/1.5 ui-monospace, Consolas, monospace; resize: vertical; }
+  button { background: #23232c; color: #b9b4ab; border: 1px solid #57545f; border-radius: 4px; padding: 6px 12px; font: inherit; font-size: 12px; cursor: pointer; }
+  button:hover { border-color: #8b8467; color: #c6bd95; }
+  button.go { border-color: #7f9a72; color: #a8c49a; }
+  canvas { border: 1px solid #2b2b33; display: block; background: #101014; max-width: 100%; }
+  table { border-collapse: collapse; font-size: 12px; }
+  th, td { padding: 2px 8px 2px 0; text-align: right; color: #7d7a86; font-weight: 400; white-space: nowrap; }
+  th { color: #5c5a63; border-bottom: 1px solid #24242a; }
+  td:first-child, th:first-child { text-align: left; }
+  td.n { color: #a9a4b2; font-variant-numeric: tabular-nums; }
+  .ok { color: #7f9a72; }
+  .warn { color: #b07a6a; }
+  .note { font-size: 11px; color: #56545e; line-height: 1.7; }
+  .grid { display: flex; gap: 11px; flex-wrap: wrap; align-items: flex-start; }
+  .grid > * { flex: 1; min-width: 290px; }
+  .cols3 { display: flex; gap: 11px; flex-wrap: wrap; }
+  .cols3 > div { flex: 1; min-width: 260px; }
+  pre { background: #101014; border: 1px solid #24242a; border-radius: 4px; padding: 8px; font-size: 11px; color: #8f8b99; overflow-x: auto; max-height: 260px; }
+</style>
+</head>
+<body>
+
+<div class="panel">
+  <h1>데이터 — 나중에 relics.js · symbols.js 수치가 오면 여기 붙여넣는다</h1>
+  <div class="cols3">
+    <div>
+      <div class="note" style="margin-bottom:4px">심볼 (계열 / 효과)</div>
+      <textarea id="dSym" rows="13"></textarea>
+    </div>
+    <div>
+      <div class="note" style="margin-bottom:4px">조합 — <b>목록 순서 = 우선순위</b>, 효과는 고정값</div>
+      <textarea id="dCombo" rows="13"></textarea>
+    </div>
+    <div>
+      <div class="note" style="margin-bottom:4px">적 (막 / HP / 공격 / 쿨타임)</div>
+      <textarea id="dEnemy" rows="13"></textarea>
+    </div>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <button id="validate">데이터 검증</button>
+    <button id="reset">기본값 복원</button>
+    <span class="note" id="dataInfo">—</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h1>릴 · 성장</h1>
+  <div class="row">
+    <label>릴 칸 <input type="number" id="slots" class="w4" value="8"></label>
+    <label>기사 <input type="number" id="cKnight" class="w4" value="3"></label>
+    <label>비극 <input type="number" id="cTragedy" class="w4" value="2"></label>
+    <label>거울 <input type="number" id="cMirror" class="w4" value="1"></label>
+    <label>사제 <input type="number" id="cPriest" class="w4" value="1"></label>
+    <label>냉기 <input type="number" id="cIce" class="w4" value="0"></label>
+    <label>장미 <input type="number" id="cRose" class="w4" value="1"></label>
+    <label>망자 <input type="number" id="cDead" class="w4" value="0"></label>
+    <span class="note" id="stripInfo">—</span>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <label>최대 HP 시작 <input type="number" id="hp0" value="60"></label>
+    <label>막마다 HP +<input type="number" id="hpAct" value="25"></label>
+    <label>큐 시작 <input type="number" id="cue0" value="2"></label>
+    <label>막마다 큐 +<input type="number" id="cueAct" value="1"></label>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <label>발동 라인 <select id="lineMode"><option value="1" selected>1줄 고정</option><option value="grow">1→3→5 성장</option></select></label>
+    <label>방어 상한 % <input type="number" id="blockCapPct" value="50"></label>
+    <label>2막 심볼 배수 <input type="number" id="tier2" value="1.5" step="0.1"></label>
+    <label>3막 배수 <input type="number" id="tier3" value="2.2" step="0.1"></label>
+    <label>2막 기사 +<input type="number" id="dens2" class="w4" value="1"></label>
+    <label>3막 기사 +<input type="number" id="dens3" class="w4" value="2"></label>
+    <label>보유 조합: 1막 <input type="number" id="cb1" class="w4" value="2"></label>
+    <label>2막 <input type="number" id="cb2" class="w4" value="4"></label>
+    <label>3막 <input type="number" id="cb3" class="w4" value="5"></label>
+  </div>
+  <p class="note" style="margin-top:6px">
+    라인은 1막 1줄 · 2막 3줄 · 3막 5줄로 고정한다(설계 3.2). 심볼 배수는 <b>진화</b>로 오른다고 본다.
+  </p>
+</div>
+
+<div class="panel">
+  <h1>유물</h1>
+  <div class="row">
+    <label>재연 부적 <input type="number" id="rRespin" class="w4" value="1"></label>
+    <label>무쇠 장화 <input type="number" id="rBoots" class="w4" value="0"></label>
+    <label>가시 갑옷 <input type="number" id="rThorn" class="w4" value="0"></label>
+    <label><input type="checkbox" id="rResonance"> 공명석 (2개 같으면 3번째 동기화)</label>
+    <label><input type="checkbox" id="rMirrorShield"> 거울 방패 (초과 방어 → 공격)</label>
+    <span class="note" id="respinInfo">—</span>
+  </div>
+</div>
+
+<div class="panel">
+  <h1>실행</h1>
+  <div class="row">
+    <label>막당 전투 노드 <input type="number" id="nodesPerAct" value="6"></label>
+    <label>잡몹 목표 턴 <input type="number" id="tgtTrash" value="3.5" step="0.5"></label>
+    <label>보스 목표 턴 <input type="number" id="tgtBoss" value="9" step="1"></label>
+    <label>조준 성공률 <input type="number" id="aim" value="0.25" step="0.05"></label>
+    <label>판수 <input type="number" id="runs" value="800"></label>
+    <label><input type="checkbox" id="autoHp"> 적 HP 목표 턴수에 자동 맞춤</label>
+    <label><input type="checkbox" id="freeCombo" checked> <b>조합 무료 발동 (옛 방식)</b></label>
+    <button id="run" class="go">시뮬레이션 실행</button>
+    <span class="note" id="status">—</span>
+  </div>
+  <p class="note" style="margin-top:6px">
+    자동 맞춤을 켜면 적 HP를 <code>목표 턴수 × 측정 DPS</code> 로 역산한다. 끄면 데이터의 HP를 그대로 쓴다.
+  </p>
+</div>
+
+<div class="panel">
+  <h1>결과</h1>
+  <canvas id="chart" width="1160" height="260"></canvas>
+  <p class="note" id="legend" style="margin-top:5px">—</p>
+</div>
+
+<div class="grid">
+  <div class="panel"><h1>판정</h1><table id="verdict"><tbody></tbody></table></div>
+  <div class="panel"><h1>막 요약</h1><table id="summary"><tbody></tbody></table></div>
+</div>
+
+<div class="panel">
+  <h1>노드 표</h1>
+  <pre id="table">—</pre>
+</div>
+
+<script>
+(function () {
+  var el = function (i) { return document.getElementById(i); };
+  function n(id, d) { var v = parseFloat(el(id).value); return isNaN(v) ? d : v; }
+  function ii(id, d) { var v = parseInt(el(id).value, 10); return isNaN(v) ? d : v; }
+
+  // ---------- 기본 데이터 — 옛 구현(demo12-slotbattle)에서 그대로 가져왔다 ----------
+  // fam: role(역할) / emo(감정) / stg(무대) / wild
+  var DEF_SYM = {
+    knight:  { name: '기사',  fam: 'role', dmg: 5 },
+    king:    { name: '왕',    fam: 'role', dmg: 7 },
+    jester:  { name: '광대',  fam: 'role', dmg: 3, hits: 2 },
+    priest:  { name: '사제',  fam: 'role', heal: 5 },
+    dagger:  { name: '단검',  fam: 'role', dmg: 4 },
+    dead:    { name: '망자',  fam: 'role', selfDmg: 3 },
+    rage:    { name: '분노',  fam: 'emo',  dmg: 4, burn: 2 },
+    tragedy: { name: '비극',  fam: 'emo',  dmg: 6, poison: 2 },
+    cold:    { name: '냉기',  fam: 'emo',  dmg: 3, slow: 1 },
+    fear:    { name: '공포',  fam: 'emo',  dmg: 4, slow: 1 },
+    festival:{ name: '축제',  fam: 'stg',  gold: 3 },
+    blackout:{ name: '암전',  fam: 'stg',  block: 6 },
+    mirror:  { name: '거울',  fam: 'stg',  block: 4, thorns: 3 },
+    prison:  { name: '감옥',  fam: 'stg',  dmg: 4, slow: 1 },
+    rose:    { name: '장미',  fam: 'stg',  heal: 4, block: 2 },
+    gem:     { name: '보석',  fam: 'wild', wild: true },
+    blank:   { name: '빈칸',  fam: 'stg' }
+  };
+
+  // 원본 형식 그대로: symbols + matchType(없으면 정확히 3개 매치) / effect는 고정값
+  // 목록 순서 = 우선순위 (첫 매치 채택)
+  var DEF_COMBO = [
+    { id: 'knights_oath',    name: '「기사의 맹세」',    symbols: ['knight','knight','knight'],    effect: { damage: 20 } },
+    { id: 'kings_soliloquy', name: '「왕의 독백」',      symbols: ['king','king','king'],          effect: { damage: 28 } },
+    { id: 'jesters_frenzy',  name: '「광대의 난무」',    symbols: ['jester','jester','jester'],    effect: { damage: 6, hits: 4 } },
+    { id: 'burning_stage',   name: '「불타는 무대」',    symbols: ['rage','rage','rage'],          effect: { damage: 10, aoe: true, burn: 3 } },
+    { id: 'frozen_opera',    name: '「얼어붙은 오페라」', symbols: ['cold','cold','cold'],          effect: { damage: 8, aoe: true, slow: 3 } },
+    { id: 'total_blackout',  name: '「완전한 암전」',    symbols: ['blackout','blackout','blackout'], effect: { block: 24 } },
+    { id: 'act_of_blood',    name: '「피의 3막」',       symbols: ['tragedy','tragedy','tragedy'], effect: { damage: 18, poison: 4 } },
+    { id: 'triple_festival', name: '「성대한 축연」',    symbols: ['festival','festival','festival'], effect: { gold: 18 } },
+    { id: 'kings_execution', name: '「왕의 처형」',      symbols: ['king','rage'],      matchType: 'includes', effect: { damage: 22, burn: 3 } },
+    { id: 'bloody_duel',     name: '「피의 결투」',      symbols: ['knight','tragedy'], matchType: 'includes', effect: { damage: 16, poison: 3 } },
+    { id: 'sacred_blessing', name: '「성스러운 축복」',  symbols: ['priest','rose'],    matchType: 'includes', effect: { heal: 14, block: 8 } },
+    { id: 'winters_curtain', name: '「겨울의 장막」',    symbols: ['cold','blackout'],  matchType: 'includes', effect: { block: 14, slow: 2 } },
+    { id: 'horror_puppet',   name: '「공포의 인형극」',  symbols: ['jester','fear'],    matchType: 'includes', effect: { damage: 12, aoe: true } },
+    { id: 'prison_judgment', name: '「감옥의 심판」',    symbols: ['prison','knight'],  matchType: 'includes', effect: { damage: 16, pierce: true } },
+    { id: 'mirror_tragedy',  name: '「거울 속 비극」',   symbols: ['mirror','tragedy'], matchType: 'includes', effect: { damage: 12, block: 6, poison: 2 } },
+    { id: 'grand_finale',    name: '「성대한 피날레」',  symbols: ['festival','king'],  matchType: 'includes', effect: { gold: 8, damage: 8 } },
+    { id: 'improvisation',   name: '「즉흥 연극」',      matchType: 'allDifferent',     effect: { damage: 5, block: 5, heal: 4, gold: 3 } }
+  ];
+
+  // intents: 가중치 무작위. attack / doubleStrike / defend / buff / healAll / attackBleed / attackBurn
+  var DEF_ENEMY = [
+    { act: 1, name: '잊혀진 관객',   hp: 18, atk: 4,  def: 0, cd: 2, intents: [['attack',3]] },
+    { act: 1, name: '가면 없는 배우', hp: 22, atk: 5,  def: 1, cd: 2, intents: [['attack',2],['attackBleed',1,2]] },
+    { act: 1, name: '무대 거미',     hp: 14, atk: 6,  def: 0, cd: 1, intents: [['attack',2],['doubleStrike',1]] },
+    { act: 1, name: '춤추는 그림자', hp: 20, atk: 5,  def: 2, cd: 2, intents: [['attack',2],['defend',1,6]] },
+    { act: 2, name: '미친 왕',       hp: 32, atk: 9,  def: 3, cd: 2, intents: [['attack',2],['buff',1,4]] },
+    { act: 2, name: '웃는 병사',     hp: 28, atk: 10, def: 2, cd: 2, intents: [['attack',2],['attackBleed',1,3]] },
+    { act: 2, name: '노래하는 해골', hp: 24, atk: 7,  def: 1, cd: 3, intents: [['attack',1],['attackBurn',1,3],['healAll',1,8]] },
+    { act: 2, name: '박수치는 관객', hp: 26, atk: 8,  def: 2, cd: 2, intents: [['attack',2],['defend',1,8],['buff',1,3]] },
+    { act: 1, name: '무대감독',      hp: 65,  atk: 8,  def: 3, cd: 2, boss: true,
+      intents: [['attack',2],['attackBleed',1,3],['buff',1,3],['defend',1,10]] },
+    { act: 2, name: '폭군',          hp: 100, atk: 14, def: 5, cd: 3, boss: true,
+      intents: [['attack',2],['attackBurn',1,4],['defend',1,12],['buff',1,5]] },
+    { act: 3, name: '초대 감독',     hp: 180, atk: 20, def: 6, cd: 3, boss: true,
+      intents: [['attack',2],['attackBurn',1,5],['defend',1,15],['buff',1,6]] }
+  ];
+
+  function loadDefaults() {
+    el('dSym').value = JSON.stringify(DEF_SYM, null, 1);
+    el('dCombo').value = JSON.stringify(DEF_COMBO, null, 1);
+    el('dEnemy').value = JSON.stringify(DEF_ENEMY, null, 1);
+  }
+
+  var SYM = DEF_SYM, COMBO = DEF_COMBO, ENEMY = DEF_ENEMY;
+
+  function parseData() {
+    try {
+      SYM = JSON.parse(el('dSym').value);
+      COMBO = JSON.parse(el('dCombo').value);
+      ENEMY = JSON.parse(el('dEnemy').value);
+      el('dataInfo').innerHTML = '<span class="ok">심볼 ' + Object.keys(SYM).length +
+        ' · 조합 ' + COMBO.length + ' · 적 ' + ENEMY.length + '</span>';
+      return true;
+    } catch (e) {
+      el('dataInfo').innerHTML = '<span class="warn">JSON 오류: ' + e.message + '</span>';
+      return false;
+    }
+  }
+
+  // ---------- 릴 ----------
+  function stripCounts(act) {
+    var c = {};
+    c.knight = ii('cKnight', 3) + (act >= 2 ? ii('dens2', 1) : 0) + (act >= 3 ? ii('dens3', 2) - ii('dens2', 1) : 0);
+    c.tragedy = ii('cTragedy', 2);
+    c.mirror = ii('cMirror', 1);
+    c.priest = ii('cPriest', 1);
+    c.cold = ii('cIce', 0);
+    c.rose = ii('cRose', 1);
+    c.dead = ii('cDead', 0);
+    return c;
+  }
+
+  // 칸이 넘치면 장미 → 사제 → 냉기 순으로 밀어낸다 (희석 딜레마)
+  function buildStrip(act) {
+    var slots = ii('slots', 8), c = stripCounts(act);
+    var order = ['rose', 'priest', 'cold', 'mirror'];
+    function total() { return Object.keys(c).reduce(function (a, k) { return a + c[k]; }, 0); }
+    var oi = 0;
+    while (total() > slots && oi < order.length) {
+      if (c[order[oi]] > 0) c[order[oi]]--; else oi++;
+    }
+    var pool = [];
+    Object.keys(c).forEach(function (k) { for (var i = 0; i < c[k]; i++) pool.push(k); });
+    while (pool.length < slots) pool.push('blank');
+    pool.length = slots;
+    // 같은 심볼이 뭉치지 않게 라운드로빈 배치 — 다중 라인 분산을 줄인다
+    var g = {};
+    pool.forEach(function (s) { (g[s] = g[s] || []).push(s); });
+    var keys = Object.keys(g).sort(function (a, b) { return g[b].length - g[a].length; });
+    var out = [], guard = 0;
+    while (out.length < slots && guard++ < slots * 6) {
+      for (var k = 0; k < keys.length && out.length < slots; k++) {
+        if (g[keys[k]].length) out.push(g[keys[k]].pop());
+      }
+    }
+    return out;
+  }
+
+  // ---------- 조합 판정 ----------
+  function famOf(s) { return (SYM[s] && SYM[s].fam) || 'etc'; }
+  function isWild(s) { return !!(SYM[s] && SYM[s].wild); }
+
+  // 원본 SlotMachine.evaluateCombo 와 같은 규칙
+  function matchCombo(cb, line) {
+    if (cb.matchType === 'allDifferent') {
+      if (line.indexOf('gem') >= 0) return false;
+      return new Set(line).size === line.length;
+    }
+    if (cb.matchType === 'includes') {
+      var pool = line.slice(), w = line.filter(isWild).length;
+      for (var i = 0; i < cb.symbols.length; i++) {
+        var idx = pool.indexOf(cb.symbols[i]);
+        if (idx >= 0) pool.splice(idx, 1);
+        else if (w > 0) w--;
+        else return false;
+      }
+      return true;
+    }
+    // 정확히 3개 매치 (와일드 허용)
+    var used = new Array(line.length).fill(false);
+    for (var k = 0; k < cb.symbols.length; k++) {
+      var found = false;
+      for (var j = 0; j < line.length; j++) {
+        if (used[j]) continue;
+        if (line[j] === cb.symbols[k] || isWild(line[j])) { used[j] = true; found = true; break; }
+      }
+      if (!found) return false;
+    }
+    return true;
+  }
+
+  // 목록 순서 = 우선순위. 첫 매치 채택.
+  function firstCombo(line, owned) {
+    for (var i = 0; i < owned.length; i++) if (matchCombo(owned[i], line)) return owned[i];
+    return null;
+  }
+
+  function blank() {
+    return { dmg: 0, aoe: 0, block: 0, heal: 0, slow: 0, slowAll: 0, gold: 0,
+             selfDmg: 0, thorns: 0, burn: 0, poison: 0, pierce: 0 };
+  }
+
+  function individual(line, mul) {
+    var r = blank();
+    line.forEach(function (s) {
+      var d = SYM[s]; if (!d) return;
+      var hits = d.hits || 1;
+      if (d.dmg) r.dmg += d.dmg * hits * mul;
+      if (d.block) r.block += d.block * mul;
+      if (d.heal) r.heal += d.heal * mul;
+      if (d.burn) r.burn += d.burn;
+      if (d.poison) r.poison += d.poison;
+      if (d.thorns) r.thorns += d.thorns;
+      if (d.slow) r.slow += d.slow;
+      if (d.gold) r.gold += d.gold;
+      if (d.selfDmg) r.selfDmg += d.selfDmg;
+    });
+    return r;
+  }
+
+  function comboEffect(cb, mul) {
+    var e = cb.effect || {}, r = blank();
+    var hits = e.hits || 1;
+    if (e.damage) { if (e.aoe) r.aoe += e.damage * hits * mul; else r.dmg += e.damage * hits * mul; }
+    if (e.block) r.block += e.block * mul;
+    if (e.heal) r.heal += e.heal * mul;
+    if (e.burn) r.burn += e.burn;
+    if (e.poison) r.poison += e.poison;
+    if (e.slow) r.slowAll += e.slow;
+    if (e.gold) r.gold += e.gold;
+    if (e.pierce) r.pierce = 1;
+    return r;
+  }
+
+  function addTo(a, b) {
+    Object.keys(b).forEach(function (k) { a[k] = (a[k] || 0) + b[k]; });
+  }
+
+  // ---------- 성장 ----------
+  function nodeParams(act, isBoss) {
+    var grow = el('lineMode').value === 'grow';
+    var lines = grow ? (act >= 3 ? 5 : (act >= 2 ? 3 : 1)) : 1;
+    var mul = act >= 3 ? n('tier3', 2.2) : (act >= 2 ? n('tier2', 1.5) : 1);
+    var maxHp = ii('hp0', 60) + ii('hpAct', 25) * (act - 1);
+    var cue = ii('cue0', 2) + ii('cueAct', 1) * (act - 1);
+    var cbCount = act >= 3 ? ii('cb3', 5) : (act >= 2 ? ii('cb2', 4) : ii('cb1', 2));
+    return { act: act, lines: lines, mul: mul, maxHp: maxHp, cue: cue,
+             owned: COMBO.slice(0, cbCount), isBoss: !!isBoss };
+  }
+
+  function offsets(lines) { return lines >= 3 ? [0, -1, 1] : [0]; }
+  function diagBonus(lines) { return lines >= 5 ? 1.35 : 1; }
+
+  function pickIntent(x, rng) {
+    var total = x.intents.reduce(function (a, t) { return a + (t[1] || 1); }, 0);
+    var r = rng() * total;
+    for (var i = 0; i < x.intents.length; i++) {
+      r -= (x.intents[i][1] || 1);
+      if (r <= 0) return x.intents[i][0];
+    }
+    return 'attack';
+  }
+
+  function rng32(seed) {
+    return function () {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  // ---------- 한 판 ----------
+  function fight(p, foes, rng, stat) {
+    var strips = [buildStrip(p.act), buildStrip(p.act), buildStrip(p.act)];
+    var respinP = 1 - Math.pow(0.9, ii('rRespin', 1));
+    var boots = ii('rBoots', 0) * 2, thornR = ii('rThorn', 0) * 3;
+    var reson = el('rResonance').checked, mirrorSh = el('rMirrorShield').checked;
+    var aim = n('aim', 0.25);
+
+    var freeCombo = el('freeCombo').checked;
+    var hp = p.maxHp, block = ii('rBoots', 0) ? 0 : 0, cue = p.cue, gauge = 0;
+    var es = foes.map(function (f) {
+      return {
+        hp: f.hp, atk: f.atk, def: f.def || 0, cd: f.cd, t: f.cd, block: 0,
+        burn: 0, poison: 0,
+        intents: f.intents || [['attack', 1]],
+        defVal: 8, buffVal: 4, healVal: 8, dotVal: 3
+      };
+    });
+    // 인텐트별 부가 수치를 데이터에서 읽는다 (['defend', 가중치, 값])
+    es.forEach(function (x) {
+      x.intents.forEach(function (t) {
+        if (t[0] === 'defend') x.defVal = t[2] || x.defVal;
+        if (t[0] === 'buff') x.buffVal = t[2] || x.buffVal;
+        if (t[0] === 'healAll') x.healVal = t[2] || x.healVal;
+        if (t[0] === 'attackBleed' || t[0] === 'attackBurn') x.dotVal = t[2] || x.dotVal;
+      });
+    });
+    var turns = 0, comboTurns = 0, respins = 0, maxBlock = 0, dealt = 0;
+
+    while (turns < 60) {
+      turns++;
+      if (boots) block = Math.min(p.maxHp, block + boots);
+
+      var pos = strips.map(function (st) { return Math.floor(rng() * st.length); });
+      if (rng() < aim) {
+        var r = Math.floor(rng() * 3), st = strips[r];
+        for (var q = 0; q < st.length; q++) if (st[q] === 'knight') { pos[r] = q; break; }
+      }
+
+      function lineAt(o) {
+        var L = strips.map(function (st, k) { return st[(pos[k] + o + st.length) % st.length]; });
+        if (reson) {
+          var cnt = {};
+          L.forEach(function (s) { if (s !== 'dead') cnt[s] = (cnt[s] || 0) + 1; });
+          var pair = Object.keys(cnt).filter(function (k) { return cnt[k] === 2; })[0];
+          if (pair) L = L.map(function (s) { return cnt[s] === 2 ? s : pair; });
+        }
+        return L;
+      }
+
+      var lineSets = [offsets(p.lines).map(lineAt)];
+
+      // 유물 자동 리스핀 — 결과를 교체하지 않고 별도 라인처럼 추가 정산
+      if (rng() < respinP) {
+        respins++;
+        pos = strips.map(function (st) { return Math.floor(rng() * st.length); });
+        lineSets.push(offsets(p.lines).map(lineAt));
+      }
+
+      var acc = blank();
+      var usedCombo = false;
+
+      lineSets.forEach(function (set) {
+        set.forEach(function (L) {
+          var cb = firstCombo(L, p.owned);
+          // 정책: 조합이 성립하고 큐가 있으면 발동. 아니면 개별 효과.
+          if (cb && (freeCombo || cue > 0)) {
+            if (!freeCombo) cue--;
+            usedCombo = true; addTo(acc, comboEffect(cb, p.mul));
+          } else addTo(acc, individual(L, p.mul));
+        });
+      });
+
+      var db = diagBonus(p.lines);
+      acc.dmg *= db; acc.aoe *= db; acc.block *= db;
+      if (usedCombo) comboTurns++;
+      gauge += acc.gold;
+
+      // 방어는 영구 유지, 상한 = 최대 HP. 무대 거울은 초과분의 50%를 공격으로.
+      block += acc.block;
+      var cap = p.maxHp * (n('blockCapPct', 50) / 100), over = 0;
+      if (block > cap) { over = block - cap; block = cap; }
+      if (mirrorSh) acc.dmg += over * 0.5;
+      maxBlock = Math.max(maxBlock, block);
+
+      hp = Math.min(p.maxHp, hp + acc.heal) - acc.selfDmg;
+      if (hp <= 0) break;
+
+      // 적에게 피해 — 방어가 있으면 흡수, 없으면 방어력(flat)으로 감소. 관통은 방어력 무시.
+      function hurt(x, amount) {
+        if (amount <= 0) return;
+        if (x.block > 0) {
+          var ab = Math.min(x.block, amount);
+          x.block -= ab; amount -= ab;
+        } else if (!acc.pierce) {
+          amount = Math.max(0, amount - x.def);
+        }
+        x.hp -= amount; dealt += amount;
+      }
+      es.sort(function (a, b) { return a.hp - b.hp; });
+      var single = acc.dmg;
+      for (var e2 = 0; e2 < es.length && single > 0; e2++) {
+        var before = es[e2].hp;
+        hurt(es[e2], single);
+        single -= Math.max(0, before - Math.max(0, es[e2].hp));
+        if (es[e2].hp > 0) break;
+      }
+      if (acc.aoe > 0) es.forEach(function (x) { hurt(x, acc.aoe); });
+      if (acc.burn) es.forEach(function (x) { x.burn = (x.burn || 0) + acc.burn; });
+      if (acc.poison) es.forEach(function (x) { x.poison = (x.poison || 0) + acc.poison; });
+
+      // 지속 피해 정산
+      es.forEach(function (x) {
+        if (x.burn) { x.hp -= x.burn; dealt += x.burn; }
+        if (x.poison) { x.hp -= x.poison; dealt += x.poison; x.poison--; }
+      });
+      es = es.filter(function (x) { return x.hp > 0; });
+      if (!es.length) break;
+
+      // 쿨타임 진행 · 둔화
+      es.forEach(function (x) { x.t -= 1; if (acc.slowAll) x.t += acc.slowAll; });
+
+      es.forEach(function (x) {
+        if (x.t > 0) return;
+        x.t = x.cd;
+        var it = pickIntent(x, rng);
+        if (it === 'defend') { x.block = (x.block || 0) + x.defVal; return; }
+        if (it === 'buff') { x.atk += x.buffVal; return; }
+        if (it === 'healAll') { es.forEach(function (y) { y.hp += x.healVal; }); return; }
+        var incoming = x.atk * (it === 'doubleStrike' ? 2 : 1);
+        if (it === 'attackBleed' || it === 'attackBurn') incoming += x.dotVal;
+        var absorbed = Math.min(block, incoming);
+        block -= absorbed;
+        hp -= (incoming - absorbed);
+        if (thornR) { x.hp -= thornR; dealt += thornR; }
+      });
+      es = es.filter(function (x) { return x.hp > 0; });
+      if (!es.length) break;
+      if (hp <= 0) break;
+    }
+
+    if (stat) {
+      stat.comboTurns += comboTurns; stat.respins += respins;
+      stat.maxBlock += maxBlock; stat.turns += turns; stat.dealt += dealt;
+    }
+    return { turns: turns, win: es.length === 0 && hp > 0, hpLeft: Math.max(0, hp), maxHp: p.maxHp };
+  }
+
+  // DPS 측정 — 적을 사실상 무적으로 두고 고정 턴 평균 출력
+  function measureDps(p, rng) {
+    var foes = [{ hp: 1e9, atk: 0, cd: 99 }];
+    var stat = { comboTurns: 0, respins: 0, maxBlock: 0, turns: 0, dealt: 0 };
+    var reps = 30;
+    for (var i = 0; i < reps; i++) {
+      var pp = Object.assign({}, p, { maxHp: 1e6, cue: 1e6 });
+      fight(pp, foes.map(function (f) { return Object.assign({}, f); }), rng, stat);
+    }
+    return { dps: stat.dealt / Math.max(1, stat.turns), comboRate: stat.comboTurns / Math.max(1, stat.turns) };
+  }
+
+  var results = [];
+
+  function run() {
+    if (!parseData()) return;
+    el('status').textContent = '실행 중…';
+    setTimeout(function () {
+      var perAct = ii('nodesPerAct', 6), runs = ii('runs', 800);
+      var tgtT = n('tgtTrash', 3.5), tgtB = n('tgtBoss', 9);
+      var autoHp = el('autoHp').checked;
+      var rng = rng32(20260803);
+      results = [];
+
+      for (var act = 1; act <= 3; act++) {
+        var pool = ENEMY.filter(function (e) { return e.act === act && !e.boss; });
+        var boss = ENEMY.filter(function (e) { return e.act === act && e.boss; })[0];
+        for (var k = 1; k <= perAct + 1; k++) {
+          var isBoss = k === perAct + 1;
+          var p = nodeParams(act, isBoss);
+          var m = measureDps(p, rng);
+          var count = isBoss ? 1 : (act === 1 ? (k <= 2 ? 1 : 2) : (act === 2 ? 2 : 3));
+          var base = isBoss ? boss : pool[(k - 1) % pool.length];
+          if (!base) continue;
+
+          var hpEach = base.hp;
+          if (autoHp) {
+            var target = isBoss ? tgtB : tgtT;
+            hpEach = Math.max(1, Math.round(m.dps * target / count));
+          }
+          var foes = [];
+          for (var c = 0; c < count; c++) foes.push({ hp: hpEach, atk: base.atk, cd: base.cd });
+
+          var stat = { comboTurns: 0, respins: 0, maxBlock: 0, turns: 0, dealt: 0 };
+          var wins = 0, tsum = 0, hsum = 0;
+          for (var r = 0; r < runs; r++) {
+            var res = fight(p, foes.map(function (f) { return Object.assign({}, f); }), rng, stat);
+            tsum += res.turns; if (res.win) wins++; hsum += res.hpLeft / res.maxHp;
+          }
+          results.push({
+            act: act, node: k, isBoss: isBoss, name: base.name, count: count,
+            lines: p.lines, mul: p.mul, maxHp: p.maxHp, cue: p.cue, owned: p.owned.length,
+            hpEach: hpEach, atk: base.atk, cd: base.cd, dps: m.dps,
+            turns: tsum / runs, winRate: wins / runs, hpLeft: hsum / runs,
+            comboRate: stat.comboTurns / Math.max(1, stat.turns),
+            respinRate: stat.respins / Math.max(1, stat.turns),
+            maxBlock: stat.maxBlock / runs
+          });
+        }
+      }
+      draw(); report(); dump();
+      el('status').textContent = results.length + '노드 × ' + runs + '판 완료';
+    }, 20);
+  }
+
+  function draw() {
+    var c = el('chart'), cx = c.getContext('2d');
+    cx.clearRect(0, 0, c.width, c.height);
+    if (!results.length) return;
+    var pL = 42, pR = 42, pT = 12, pB = 22;
+    var W = c.width - pL - pR, H = c.height - pT - pB, N = results.length;
+    function px(k) { return pL + (N === 1 ? W / 2 : (k / (N - 1)) * W); }
+    cx.strokeStyle = '#24242a';
+    for (var g = 0; g <= 4; g++) { var y = pT + H * g / 4; cx.beginPath(); cx.moveTo(pL, y + .5); cx.lineTo(pL + W, y + .5); cx.stroke(); }
+    cx.strokeStyle = '#3a2a2a';
+    results.forEach(function (r, k) { if (!r.isBoss) return; cx.beginPath(); cx.moveTo(px(k) + .5, pT); cx.lineTo(px(k) + .5, pT + H); cx.stroke(); });
+    var maxT = Math.max(12, Math.max.apply(null, results.map(function (r) { return r.turns; })));
+    function line(get, col, max) {
+      cx.strokeStyle = col; cx.lineWidth = 1.5; cx.beginPath();
+      results.forEach(function (r, k) { var y = pT + H - (get(r) / max) * H; if (!k) cx.moveTo(px(k), y); else cx.lineTo(px(k), y); });
+      cx.stroke(); cx.lineWidth = 1;
+    }
+    line(function (r) { return r.turns; }, '#8bb0d8', maxT);
+    line(function (r) { return r.winRate; }, '#7f9a72', 1);
+    line(function (r) { return r.hpLeft; }, '#b07a6a', 1);
+    line(function (r) { return r.comboRate; }, '#c6bd95', 1);
+    cx.fillStyle = '#5c5a63'; cx.font = '10px sans-serif';
+    for (var t = 0; t <= 4; t++) {
+      cx.fillText(Math.round(maxT * (4 - t) / 4) + '턴', 4, pT + H * t / 4 + 3);
+      cx.fillText(Math.round(100 * (4 - t) / 4) + '%', pL + W + 6, pT + H * t / 4 + 3);
+    }
+    results.forEach(function (r, k) { if (r.node === 1) cx.fillText(r.act + '막', px(k) - 6, c.height - 6); });
+    el('legend').innerHTML =
+      '<span style="color:#8bb0d8">— 턴수(좌)</span> · <span style="color:#7f9a72">— 승률(우)</span> · ' +
+      '<span style="color:#b07a6a">— 남은 HP(우)</span> · <span style="color:#c6bd95">— 조합 발동률(우)</span> · ' +
+      '<span style="color:#3a2a2a">| 보스</span>';
+  }
+
+  function report() {
+    var tgtT = n('tgtTrash', 3.5), tgtB = n('tgtBoss', 9);
+    function row(l, v, good) { return '<tr><td>' + l + '</td><td class="n ' + (good ? 'ok' : 'warn') + '">' + v + '</td></tr>'; }
+    var trash = results.filter(function (r) { return !r.isBoss; });
+    var boss = results.filter(function (r) { return r.isBoss; });
+    var lowWin = results.filter(function (r) { return r.winRate < 0.9; });
+    var offBand = trash.filter(function (r) { return Math.abs(r.turns - tgtT) > 1.2; });
+    var blockCap = results.filter(function (r) { return r.maxBlock >= r.maxHp * 0.95; });
+    var noDmg = results.filter(function (r) { return r.hpLeft > 0.97; });
+    var lowCombo = results.filter(function (r) { return r.comboRate < 0.3; });
+    var v = '';
+    v += row('잡몹 턴수 목표 이탈', offBand.length + '개', offBand.length === 0);
+    v += row('승률 90% 미만', lowWin.length + '개' + (lowWin.length ? ' (' + lowWin.map(function (r) { return r.act + '-' + r.node; }).slice(0, 6).join(' ') + ')' : ''), lowWin.length === 0);
+    v += row('보스 최저 승률', Math.round(Math.min.apply(null, boss.map(function (r) { return r.winRate; })) * 100) + '%', Math.min.apply(null, boss.map(function (r) { return r.winRate; })) >= 0.5);
+    v += row('방어가 상한에 붙는 노드', blockCap.length + '개', blockCap.length === 0);
+    v += row('피해를 거의 안 입는 노드', noDmg.length + '개', noDmg.length <= 2);
+    v += row('조합 발동률 30% 미만', lowCombo.length + '개', lowCombo.length === 0);
+    v += row('총 전투 시간 추정', Math.round(results.reduce(function (a, r) { return a + r.turns * 6; }, 0) / 60) + '분', true);
+    el('verdict').innerHTML = v;
+
+    var s = '<tr><th>막</th><th>턴</th><th>승률</th><th>남은HP</th><th>조합률</th><th>리스핀</th><th>최대방어</th><th>적HP</th></tr>';
+    [1, 2, 3].forEach(function (a) {
+      var seg = results.filter(function (r) { return r.act === a && !r.isBoss; });
+      if (!seg.length) return;
+      function avg(f) { return seg.reduce(function (x, r) { return x + f(r); }, 0) / seg.length; }
+      s += '<tr><td>' + a + '막</td><td class="n">' + avg(function (r) { return r.turns; }).toFixed(1) +
+        '</td><td class="n">' + Math.round(avg(function (r) { return r.winRate; }) * 100) + '%' +
+        '</td><td class="n">' + Math.round(avg(function (r) { return r.hpLeft; }) * 100) + '%' +
+        '</td><td class="n">' + Math.round(avg(function (r) { return r.comboRate; }) * 100) + '%' +
+        '</td><td class="n">' + Math.round(avg(function (r) { return r.respinRate; }) * 100) + '%' +
+        '</td><td class="n">' + Math.round(avg(function (r) { return r.maxBlock; })) +
+        '</td><td class="n">' + Math.round(avg(function (r) { return r.hpEach; })) + '</td></tr>';
+    });
+    el('summary').innerHTML = s;
+  }
+
+  function dump() {
+    var L = ['막-노드  적                  수  라인  배수  적HP  공격  쿨  플HP  큐  조합  턴수   승률  조합률'];
+    results.forEach(function (r) {
+      L.push(
+        (r.act + '-' + r.node + (r.isBoss ? '*' : ' ')).padEnd(8) +
+        r.name.padEnd(18) +
+        String(r.count).padStart(3) +
+        String(r.lines).padStart(6) +
+        r.mul.toFixed(1).padStart(6) +
+        String(r.hpEach).padStart(6) +
+        String(r.atk).padStart(6) +
+        String(r.cd).padStart(4) +
+        String(r.maxHp).padStart(6) +
+        String(r.cue).padStart(4) +
+        String(r.owned).padStart(6) +
+        r.turns.toFixed(1).padStart(7) +
+        (Math.round(r.winRate * 100) + '%').padStart(6) +
+        (Math.round(r.comboRate * 100) + '%').padStart(7));
+    });
+    L.push(''); L.push('* = 보스');
+    el('table').textContent = L.join('\n');
+  }
+
+  function refreshStrip() {
+    var st = buildStrip(1), cnt = {};
+    st.forEach(function (s) { cnt[s] = (cnt[s] || 0) + 1; });
+    var pk = (cnt.knight || 0) / st.length;
+    el('stripInfo').textContent = '1막 스트립: ' +
+      st.map(function (s) { return (SYM[s] && SYM[s].name) || s; }).join('·') +
+      '  (기사 ' + (pk * 100).toFixed(0) + '%)';
+    var rp = 1 - Math.pow(0.9, ii('rRespin', 1));
+    el('respinInfo').textContent = '리스핀 발동 확률 ' + Math.round(rp * 100) + '%';
+  }
+
+  ['slots', 'cKnight', 'cTragedy', 'cMirror', 'cPriest', 'cIce', 'cRose', 'cDead', 'dens2', 'dens3', 'rRespin']
+    .forEach(function (id) { el(id).addEventListener('input', refreshStrip); });
+  el('validate').addEventListener('click', function () { parseData(); refreshStrip(); });
+  el('reset').addEventListener('click', function () { loadDefaults(); parseData(); refreshStrip(); });
+  el('run').addEventListener('click', run);
+
+  loadDefaults(); parseData(); refreshStrip();
+  window.__sim = { run: run, results: function () { return results; } };
+})();
+</script>
+</body>
+</html>
