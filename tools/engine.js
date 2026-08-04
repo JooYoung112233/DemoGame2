@@ -201,7 +201,13 @@
       deck: { mirror: 5, shield: 5, mask: 3, rose: 3, priest: 2 },
       pool: ['mirror', 'shield', 'mask', 'curtain', 'rose', 'priest'],
       openers: [['one', 'shield'], ['one', 'mirror'], ['two', 'shield', 'mirror']] },
-    maestro: { name: '악장', maxCost: 5, note: '최대 코스트 5 — 악상 전문', win: 'status',
+    // 혼자 53% 였다. 원인은 최대 코스트 5 — 매 턴 한 장을 더 쓰는데 상태이상 증폭까지 겹쳤다.
+    // 계열 밖 코스트 +1 을 먼저 붙여 봤지만 덱이 이미 전부 악상이라 대가가 되지 않았다 (52%).
+    // 그래서 템포 우위를 걷어내고 대신 진짜 상태이상 엔진을 줬다 —
+    // 악상 대본의 화상·독·둔화가 각각 +1. 전문가는 깊이로 이긴다.
+    maestro: { name: '악장', maxCost: 4, mainFam: 'score', offFamCost: 1,
+      famStatusPlus: { score: 1 }, win: 'status',
+      note: '악상 대본의 화상·독·둔화 +1 · 악상이 아닌 대본은 코스트 +1',
       deck: { piano: 4, violin: 4, drum: 3, trumpet: 3, joy: 4 },
       pool: ['piano', 'violin', 'drum', 'trumpet', 'cold', 'rage', 'candle'],
       unlock: '한 전투에서 증폭 배율 1.5배 이상을 만든다',
@@ -718,11 +724,11 @@
   function scriptEffect(sc, ch) {
     var e = sc.effect || {}, r = blank(), mul = 1, hits = e.hits || 1;
     ch = ch || {};
+    // 계열 대본이든, 재료가 한 계열로 모인 대본이든 같게 취급한다.
+    // sc.famOf 를 보고 있었는데 그 값은 어디에서도 설정되지 않았다.
     var f = sc.fam || null;
-    if (f && ch.famDmgMul && ch.famDmgMul[f]) mul *= ch.famDmgMul[f];
-    // 배역 대본이 광역이 되는 캐릭터 — 계열 대본이 아니라 그 계열 카드로 만든 대본에 걸린다
-    var cf = sc.famOf || f;
-    if (cf && ch.famDmgMul && ch.famDmgMul[cf] && cf !== f) mul *= ch.famDmgMul[cf];
+    var cf = scriptFam(sc);
+    if (cf && ch.famDmgMul && ch.famDmgMul[cf]) mul *= ch.famDmgMul[cf];
     var aoe = e.aoe || (cf && ch.aoeFams && ch.aoeFams.indexOf(cf) >= 0);
     if (e.damage) { if (aoe) r.aoe += e.damage * hits * mul; else r.dmg += e.damage * hits * mul; }
     if (e.block) r.block += e.block * mul;
@@ -741,9 +747,13 @@
   }
 
   // 대본의 주 계열 — 재료 카드의 계열이 하나로 모이면 그것
+  // 대본의 주 계열 — 재료 카드의 계열이 하나로 모이면 그것.
+  // uses 만 보고 있었는데 보유 대본은 requires 를 쓴다. 그래서 계열 판정이 항상 null 이었고,
+  // 「불씨 상자」는 한 번도 발동하지 않았고 광란의 감독의 광역 전환은 계열 대본 하나에만 걸렸다.
   function scriptFam(sc) {
     if (sc.fam) return sc.fam;
-    var fs = (sc.uses || []).map(function (id) { return (CARDS[id] || {}).fam; })
+    var src = (sc.uses && sc.uses.length) ? sc.uses : (sc.requires || []);
+    var fs = src.map(function (id) { return (CARDS[id] || {}).fam; })
       .filter(function (f) { return f && f !== 'wild'; });
     if (!fs.length) return null;
     return fs.every(function (f) { return f === fs[0]; }) ? fs[0] : null;
@@ -817,10 +827,12 @@
   // ── 증폭 — 상태이상이 피해를 곱한다 ────────────────────────
   // 이 층이 없으면 모든 대본이 독립된 덧셈이라 "조합을 찾았다" 가 없다.
   // 그리고 곱셈이 있으면 순서 결정이 생긴다 — 먼저 둔화를 걸고 큰 것을 쓴다.
+  // 증폭 배율이 상태이상 빌드에만 과하게 몰렸다 — 증폭턴이 악장 69% · 광란 41% ·
+  // 나머지 1~15% 였고, 승률 1·2위가 그 둘이었다. 층 자체를 눌렀다.
   var AMP = {
-    slowPer: 0.12, slowCap: 0.6,   // 둔화 1스택당 받는 피해 +12%, 최대 +60%
-    burnAoe: 2.0,                  // 화상이 걸린 적에게 광역 피해 2배
-    poisonLock: 8,                 // 독이 8 이상이면 감소하지 않는다
+    slowPer: 0.10, slowCap: 0.45,  // 둔화 1스택당 받는 피해 +10%, 최대 +45%
+    burnAoe: 1.75,                 // 화상이 걸린 적에게 광역 피해 1.75배
+    poisonLock: 10,                // 독이 10 이상이면 감소하지 않는다
     thornsToAoe: 0.3,              // 반사 보유 중이면 방어량의 30% 가 광역 피해로
     hitsToDot: 0.6,                // 다타 대본의 화상·독 = 기본값 × ceil(타수 × 0.6)
     // 반사는 방어력의 절반만 적용받는다. 전액 적용이면 철갑(방어력 20) 하나가

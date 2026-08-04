@@ -353,7 +353,8 @@
   function scriptBox(sc, extra) {
     var p = Sim.stageProb(sc, S.deck);
     return '<div class="n">' + sc.name + '</div>'
-      + '<div class="e">' + T.TIER_KO[sc.tier] + ' · 코스트 ' + sc.cost + '<br>'
+      + '<div class="e">' + T.TIER_KO[sc.tier] + ' · 코스트 ' + Sim.costOf(S.ch, sc)
+      + (Sim.costOf(S.ch, sc) > sc.cost ? ' <span style="color:#b07a6a">(계열 밖)</span>' : '') + '<br>'
       + '요구 ' + T.reqText(sc) + '<br>' + T.effText(sc.effect) + '</div>'
       + '<div class="x">상연 확률 ' + Math.round(p * 100) + '%' + (extra ? '<br>' + extra : '') + '</div>';
   }
@@ -623,7 +624,9 @@
       var btn = document.createElement('button');
       btn.className = 'hc' + (can ? '' : ' dis') + (sc.temp ? ' temp' : '')
         + (sealed ? ' seal' : '') + (pend === sc ? ' pend' : '') + (tip === sc ? ' tip' : '');
-      btn.innerHTML = '<div class="c">' + sc.cost + '</div>'
+      var cc = Sim.costOf(S.ch, sc);
+      btn.innerHTML = '<div class="c"' + (cc > sc.cost ? ' style="color:#b07a6a" title="이 캐릭터는 다른 계열에 코스트를 더 낸다"' : '') + '>'
+        + cc + '</div>'
         + '<div class="n">' + sc.name + (sc.temp ? ' <span style="color:#8b7aa8">즉석</span>' : '')
         + (sealed ? ' <span style="color:#b07a6a">압수됨</span>' : '') + '</div>'
         + '<div class="r">' + T.reqText(sc) + (staged ? ' ✓' : ' <span style="color:#7a5a5a">미충족</span>') + '</div>'

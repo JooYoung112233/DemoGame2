@@ -214,11 +214,32 @@
       usedF: Object.assign({}, S.usedF || {}) };
   }
 
+  // ── 코스트 ────────────────────────────────────────────────
+  // 캐릭터가 코스트를 바꿀 수 있으니 한 곳에서만 계산한다.
+  // 「악장」은 악상이 아닌 대본에 +1 을 낸다 — 전문화의 대가다.
+  function costOf(ch, sc) {
+    var c = sc.cost;
+    if (ch && ch.offFamCost && ch.mainFam) {
+      var f = T.scriptFam(sc);
+      if (f !== ch.mainFam) c += ch.offFamCost;
+    }
+    return Math.max(1, c);
+  }
+
   // ── 상연 1회를 상태에 적용 ────────────────────────────────
   // play.html 의 apply() 와 같은 순서다. 계획 탐색과 실제 진행이 같은 코드를 쓴다.
   function applyPlay(C, sc, tgt, ctx) {
     var acc = T.scriptEffect(sc, ctx.ch), ev = [];
     if (ctx.embers && T.scriptFam(sc) === 'score' && acc.burn) acc.burn += 2 * ctx.embers;
+    // 「악장」 — 주 계열 대본의 상태이상이 한 칸 더 깊어진다
+    if (ctx.ch.famStatusPlus) {
+      var sf = T.scriptFam(sc), plus = sf ? (ctx.ch.famStatusPlus[sf] || 0) : 0;
+      if (plus) {
+        if (acc.burn) acc.burn += plus;
+        if (acc.poison) acc.poison += plus;
+        if (acc.slow) acc.slow += plus;
+      }
+    }
     if (ctx.actBurn && acc.burn) acc.burn += ctx.actBurn;   // 사건 「불타는 대본」
     // 연출가 — 무대에 같은 배역이 2장 서 있고 그 배역을 쓰는 대본이면 피해가 늘어난다
     if (ctx.ch.pairBonus && ctx.S && ctx.S.stage && !sc.requiresFam) {
@@ -231,7 +252,7 @@
       }
     }
 
-    C.cost -= sc.cost;
+    C.cost -= costOf(ctx.ch, sc);
     if (sc.tier === 'three' && ctx.encore) C.cost += 1;
 
     // 어둠 유물 — 상태이상 2배 / 회복 절반
@@ -416,7 +437,7 @@
       var next = [];
       beam.forEach(function (nd) {
         hand.forEach(function (sc, hi) {
-          if (sc.cost > nd.C.cost) return;
+          if (costOf(ctx.ch, sc) > nd.C.cost) return;
           if (sc.temp && nd.seq.filter(function (a) { return a.hi === hi; }).length) return;
           if (!T.canStage(sc, S.stage, ctx.relax)) return;
           var eff = T.scriptEffect(sc, ctx.ch);
@@ -854,7 +875,7 @@
       var ampTurn = 0;
       for (var i = 0; i < plan.seq.length; i++) {
         var a = plan.seq[i];
-        if (a.sc.cost > S.cost) continue;
+        if (costOf(S.ch, a.sc) > S.cost) continue;
         if (!T.canStage(a.sc, S.stage, ctx.relax)) continue;
         if (S.sealed[a.sc.id]) continue;
         var aliveBefore = S.foes.filter(function (f) { return f.hp > 0; }).length;
@@ -892,7 +913,7 @@
   }
 
   function spent(plan, S) {
-    var c = 0; plan.seq.forEach(function (a) { c += a.sc.cost; });
+    var c = 0; plan.seq.forEach(function (a) { c += costOf(S.ch, a.sc); });
     return c;
   }
 
@@ -1153,8 +1174,8 @@
 
   function scriptValue(S, w, sc) {
     if (S.scripts.some(function (x) { return x.id === sc.id; })) return -1;
-    if (sc.cost > maxCost(S)) return -1;
-    var raw = scriptRaw(S, w, sc) / Math.max(1, sc.cost);
+    if (costOf(S.ch, sc) > maxCost(S)) return -1;
+    var raw = scriptRaw(S, w, sc) / costOf(S.ch, sc);
     var p = stageProb(sc, S.deck);
     var v = raw * (0.35 + p);                     // 상연 확률이 낮으면 값이 깎인다
     v *= T.scriptWeight(S.ch, sc) >= 4 ? 1.15 : 1;
@@ -1674,7 +1695,7 @@
 
   function canPlay(S, sc) {
     var ctx = ctxOf(S, S.w);
-    return !S.sealed[sc.id] && sc.cost <= S.cost && T.canStage(sc, S.stage, ctx.relax);
+    return !S.sealed[sc.id] && costOf(S.ch, sc) <= S.cost && T.canStage(sc, S.stage, ctx.relax);
   }
 
   // 대본 한 장을 상연한다 — 봇과 사람이 같은 함수를 쓴다
@@ -1739,6 +1760,7 @@
     playScript: playScript, canPlay: canPlay, doReroll: doReroll, finishTurn: finishTurn,
     suggest: suggest, handOf: handOf, applyEvent: applyEvent, doEvent: doEvent,
     takeRelic: takeRelic, reachable: reachable, maxCost: maxCost, scriptCap: scriptCap,
+    costOf: costOf,
     relicN: relicN, deckSize: deckSize, offerCards: offerCards, offerScripts: offerScripts,
     scriptValue: scriptValue, cardValue: cardValue, ctxOf: ctxOf, drift: drift
   };
