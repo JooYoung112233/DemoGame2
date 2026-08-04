@@ -217,6 +217,7 @@
   function applyPlay(C, sc, tgt, ctx) {
     var acc = T.scriptEffect(sc, ctx.ch), ev = [];
     if (ctx.embers && T.scriptFam(sc) === 'score' && acc.burn) acc.burn += 2 * ctx.embers;
+    if (ctx.actBurn && acc.burn) acc.burn += ctx.actBurn;   // 사건 「불타는 대본」
     // 연출가 — 무대에 같은 배역이 2장 서 있고 그 배역을 쓰는 대본이면 피해가 늘어난다
     if (ctx.ch.pairBonus && ctx.S && ctx.S.stage && !sc.requiresFam) {
       var cnt = {};
@@ -231,8 +232,12 @@
     C.cost -= sc.cost;
     if (sc.tier === 'three' && ctx.encore) C.cost += 1;
 
+    // 어둠 유물 — 상태이상 2배 / 회복 절반
+    if (ctx.statusMul > 1) { acc.burn *= ctx.statusMul; acc.poison *= ctx.statusMul; acc.slow *= ctx.statusMul; }
+    if (ctx.healMul != null && ctx.healMul !== 1) acc.heal *= ctx.healMul;
+
     C.block += acc.block;
-    var cap = C.maxHp * (T.CFG.blockCapPct / 100);
+    var cap = C.maxHp * ((ctx.blockCapPct != null ? ctx.blockCapPct : T.CFG.blockCapPct) / 100);
     if (C.block > cap) {
       var over = C.block - cap; C.block = cap;
       var conv = over * (T.CFG.overflowConv / 100) * ctx.overflowMul;
@@ -291,14 +296,14 @@
         acc.slow ? '둔화 +' + acc.slow : ''].filter(Boolean).join(' · '));
     }
     var kills = alive.length - C.foes.filter(function (f) { return f.hp > 0; }).length;
-    cheerFor(C, sc, kills, ev, ctx.cheerMax || T.CHEER.max);
+    cheerFor(C, sc, kills, ev, ctx.cheerMax || T.CHEER.max, ctx.ovation);
     return ev;
   }
 
   // ── 관중 ─────────────────────────────────────────────────
   // 크게 가면 환호가 오르고, 같은 대본을 반복하면 식는다.
   // 계획 탐색과 실제 진행이 같은 함수를 쓴다 — 그래서 봇이 환호를 계산에 넣는다.
-  function cheerFor(C, sc, kills, ev, cap) {
+  function cheerFor(C, sc, kills, ev, cap, ova) {
     var CH = T.CHEER, d = 0;
     cap = cap || CH.max;
     if (sc.tier === 'three' || sc.tier === 'fam') d += CH.onThree;
@@ -309,8 +314,9 @@
     else { C.lastPlay = sc.id; C.repeatN = 0; }
     C.cheer = Math.max(0, Math.min(cap, (C.cheer || 0) + d));
     if (C.cheer >= cap) {
-      C.cheer = 0; C.cost += CH.ovation; C.ovation = 1;
-      if (ev) ev.push('👏 기립 박수 — 코스트 +' + CH.ovation);
+      var gain = ova || CH.ovation;
+      C.cheer = 0; C.cost += gain; C.ovation = 1;
+      if (ev) ev.push('👏 기립 박수 — 코스트 +' + gain);
     }
   }
 
@@ -487,6 +493,7 @@
       if (nd.type === 'shop') { doShop(S, w); drift(S); continue; }
       if (nd.type === 'rest') { doRest(S); continue; }
       if (nd.type === 'forge') { doForge(S, w); continue; }
+      if (nd.type === 'event') { doEvent(S, w); drift(S); continue; }
       var r = fight(S, w, nd);
       if (!r.won) return finish(S, false, r.killedBy);
       if (nd.type === 'boss') return finish(S, true, null);
@@ -561,14 +568,16 @@
         if (f === 11) t = 'boss';
         else if (f === 0) t = 'fight';
         else { var r = rnd();
-          t = r < 0.46 ? 'fight' : r < 0.62 ? 'elite' : r < 0.78 ? 'shop' : r < 0.90 ? 'rest' : 'forge'; }
+          t = r < 0.40 ? 'fight' : r < 0.55 ? 'elite' : r < 0.70 ? 'shop'
+            : r < 0.80 ? 'rest' : r < 0.88 ? 'forge' : 'event'; }
         row.push({ f: f, c: c, type: t });
       }
       floors.push(row);
     }
     return floors;
   }
-  var NK = { fight: '공연', elite: '비극', shop: '소품실', rest: '분장실', forge: '각색실', boss: '주연' };
+  var NK = { fight: '공연', elite: '비극', shop: '소품실', rest: '분장실', forge: '각색실',
+             event: '사건', boss: '주연' };
 
   function reachable(S, f, c) {
     if (!S.at) return f === 0;
@@ -648,12 +657,19 @@
   function relicN(S, k) { return S.relics.filter(function (r) { return r === k; }).length; }
   function ctxOf(S, w) {
     return { ch: S.ch, w: w, rnd: S.rnd, S: S, relax: relicN(S, 'stand_in'), cheerMax: S.asc.cheerMax,
-      embers: relicN(S, 'embers'), encore: relicN(S, 'encore'),
-      thornCap: T.CFG.thornCap * (S.ch.thornsMul || 1) + relicN(S, 'thorns') * 8,
+      embers: relicN(S, 'embers'), encore: relicN(S, 'encore'), actBurn: S.actBurn || 0,
+      thornCap: T.CFG.thornCap * (S.ch.thornsMul || 1) + relicN(S, 'thorns') * 8
+                + relicN(S, 'crackMirror') * 12,
+      blockCapPct: T.CFG.blockCapPct * (relicN(S, 'crackMirror') ? 0.8 : 1),
+      statusMul: relicN(S, 'madBaton') ? 2 : 1,
+      healMul: relicN(S, 'madBaton') ? 0.5 : 1,
+      ovation: T.CHEER.ovation + relicN(S, 'lastActor') * 2,
       overflowMul: (S.ch.overflowMul || 1) * (relicN(S, 'mirrorR') ? 2 : 1) };
   }
-  function maxCost(S) { return S.ch.maxCost + relicN(S, 'drumOpen'); }
-  function scriptCap(S) { return 8 + (S.ch.handBonus || 0) + relicN(S, 'archive') * 3; }
+  function maxCost(S) { return S.ch.maxCost + relicN(S, 'drumOpen') + relicN(S, 'darkScript'); }
+  function scriptCap(S) {
+    return 8 + (S.ch.handBonus || 0) + relicN(S, 'archive') * 3 + relicN(S, 'tornScript') * 4;
+  }
 
   function fight(S, w, nd) {
     S.stats.fights++;
@@ -686,7 +702,9 @@
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
     S.strips = [0, 1, 2, 3].map(function () { return T.buildStrip(S.deck, S.rnd); });
     S.cheer = 0; S.lastPlay = null; S.repeatN = 0;
-    S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0; S.ovations = 0;
+    S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
+    S.ovations = 0;
+    if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
     var ctx = ctxOf(S, w);
     lg(S, 't', '── ' + S.foes[0].name + (S.foes.length > 1 ? ' ×' + S.foes.length : '')
       + (S.foes[0].demands ? ' (요구: ' + S.foes[0].demands + ')' : '') + ' ──');
@@ -700,6 +718,7 @@
       S.turn++; S.stats.turns++;
       S.cost = maxCost(S);
       S.stats.costMax += S.cost;
+      if (relicN(S, 'darkScript')) S.hp -= 2;
       if (S.curser && S.curser.hp > 0) sowCurse(S);
 
       // 난입 — 예고한 턴에 무대로 뛰어든다
@@ -806,6 +825,7 @@
   }
 
   function instantScripts(S, ctx) {
+    if (relicN(S, 'tornScript')) return [];        // 어둠 유물 — 즉석 대본이 나오지 않는다
     var owned = {}; S.scripts.forEach(function (s) { owned[s.id] = 1; });
     var out = [];
     T.SCRIPTS.forEach(function (s) {
@@ -976,6 +996,7 @@
   function winFight(S) {
     var G = T.CFG.gold;
     var g = G.fightBase + Math.floor(S.rnd() * G.fightRand) + (S.at.type === 'elite' ? G.elite : 0);
+    if (relicN(S, 'hungrySeat')) g *= 2;           // 어둠 유물 — 골드 2배
     // 난입자를 이겨내면 대본 한 장과 골드를 더 준다 — 난입은 위험이자 기회다
     if (S.intruderIdx != null) {
       g += G.intruder;
@@ -1082,7 +1103,12 @@
     sellReels(S, w);                    // 먼저 팔아서 자금을 만든 다음 산다
     var cards = offerCards(S).map(function (id) { return { id: id, cost: 8 + Math.floor(S.rnd() * 6) }; });
     var scripts = offerScripts(S, 3).map(function (sc) { return { sc: sc, cost: 16 + sc.cost * 5 }; });
-    var relics = T.pickWeighted(Object.keys(T.RELICS), function () { return 1; }, S.rnd, 2)
+    // 어둠 유물은 승천 단계로 열린다 — 승천이 새 물건을 준다
+    var pool2 = Object.keys(T.RELICS).filter(function (k) {
+      var r = T.RELICS[k];
+      return !r.dark || (S.asc.level || 0) >= r.asc;
+    });
+    var relics = T.pickWeighted(pool2, function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2)
       .map(function (k) { return { k: k, cost: T.RELICS[k].cost }; });
 
     // 유물이 가장 값이 크다 — 규칙을 바꾸니까. 그다음 대본, 배역.
@@ -1103,7 +1129,7 @@
       // 처음 하는 사람은 계획대로 사지 않는다 — 눈에 띄는 것을 산다
       var b = (S.rnd() < S.sk.shopSmart) ? buys[0] : buys[Math.floor(S.rnd() * buys.length)];
       S.gold -= b.it.cost;
-      if (b.kind === 'r') { S.relics.push(b.it.k); relics.splice(b.i, 1); lg(S, 'e', '  🏪 유물 ' + T.RELICS[b.it.k].name); }
+      if (b.kind === 'r') { takeRelic(S, b.it.k); relics.splice(b.i, 1); lg(S, 'e', '  🏪 유물 ' + T.RELICS[b.it.k].name); }
       if (b.kind === 's') { S.scripts.push(b.it.sc); scripts.splice(b.i, 1); lg(S, 'e', '  🏪 대본 「' + b.it.sc.name + '」'); }
       if (b.kind === 'c') { if (deckSize(S) < T.CFG.reelMax) S.deck[b.it.id] = (S.deck[b.it.id] || 0) + 1; cards.splice(b.i, 1); lg(S, 'e', '  🏪 배역 ' + T.CARDS[b.it.id].name); }
     }
@@ -1138,13 +1164,126 @@
 
   function relicValue(S, w, k) {
     var base = { drumOpen: 30, stand_in: 24, archive: 10, respin: 14, glass: 12, embers: 12,
-                 thorns: 8, mirrorR: 10, improv: 14, encore: 16, candleR: 12, phoenix: 26 };
+                 thorns: 8, mirrorR: 10, improv: 14, encore: 16, candleR: 12, phoenix: 26,
+                 // 어둠 유물 — 이득이 크지만 대가가 있다. 봇은 그 대가를 값에 반영한다.
+                 darkScript: 26, crackMirror: 14, hungrySeat: 16, tornScript: 12,
+                 madBaton: 22, lastActor: 14 };
     var v = base[k] || 10;
-    if (k === 'thorns' || k === 'mirrorR') v *= w.thorns;
-    if (k === 'embers') v *= w.status;
-    if (k === 'archive') v *= (S.pol.grab.script || 1);
+    if (k === 'thorns' || k === 'mirrorR' || k === 'crackMirror') v *= w.thorns;
+    if (k === 'embers' || k === 'madBaton') v *= w.status;
+    if (k === 'archive' || k === 'tornScript') v *= (S.pol.grab.script || 1);
+    if (k === 'madBaton') v *= (w.heal > 0.8 ? 0.6 : 1);        // 회복에 의존하면 손해다
+    if (k === 'tornScript') v *= 0.7;                            // 즉석 대본을 잃는다
     if (relicN(S, k)) v *= 0.5;
     return v;
+  }
+
+  // 유물 획득 — 최대 HP 를 깎는 어둠 유물이 있어서 획득 시점 처리가 필요하다
+  function takeRelic(S, k) {
+    S.relics.push(k);
+    if (k === 'lastActor') {
+      var cut = Math.round(S.maxHp * 0.2);
+      S.maxHp -= cut; S.hp = Math.min(S.hp, S.maxHp);
+      lg(S, 'e', '    🕴 마지막 배우 — 최대 HP −' + cut);
+    }
+  }
+
+  // ── 사건 ─────────────────────────────────────────────────
+  // 봇은 「내주는 것」과 「받는 것」을 값으로 비교한다. 숙련도가 낮으면 잘못 고른다.
+  function doEvent(S, w, forceId) {
+    var ev = forceId ? T.EVENTS.filter(function (e) { return e.id === forceId; })[0]
+                     : T.EVENTS[Math.floor(S.rnd() * T.EVENTS.length)];
+    if (!ev) return null;
+    var take = eventValue(S, w, ev.id);
+    // 사건 판단도 숙련도에 흔들린다 — 처음 하는 사람은 대가를 못 읽는다
+    if (noisy(S, take) > 0) { applyEvent(S, w, ev.id); lg(S, 'e', '  ' + ev.icon + ' ' + ev.name + ' — 받아들였다'); }
+    else lg(S, 'e', '  ' + ev.icon + ' ' + ev.name + ' — 지나갔다');
+    return ev;
+  }
+
+  function eventValue(S, w, id) {
+    var hpPart = function (p) { return S.hp * p; };
+    if (id === 'ghost')  return S.scripts.length > 4 ? 14 : -6;          // 대본이 많으면 하나쯤
+    if (id === 'trunk')  return S.pol.thin >= 1 ? -4 : 5;                // 좁혀둔 릴을 흔들면 손해
+    if (id === 'dresser') return S.hp > S.maxHp * 0.6 ? 11 - hpPart(0.12) * 0.35 : -8;
+    if (id === 'beggar') return (S.gold < 25 && S.hp > S.maxHp * 0.65) ? 9 - hpPart(0.18) * 0.4 : -7;
+    if (id === 'merge')  return deckSize(S) > T.CFG.gold.reelMin + 2 ? 8 : -3;
+    if (id === 'burning') return S.scripts.length > 5 ? 7 * w.status : -5;
+    return -1;
+  }
+
+  function applyEvent(S, w, id) {
+    if (id === 'ghost') {
+      // 가장 값이 낮은 대본을 넘기고 유물을 받는다
+      var worst = null, wv = 1e9;
+      S.scripts.forEach(function (sc) { var v = scriptRaw(S, w, sc); if (v < wv) { wv = v; worst = sc; } });
+      if (worst) S.scripts = S.scripts.filter(function (x) { return x !== worst; });
+      var pool = Object.keys(T.RELICS).filter(function (k) {
+        var r = T.RELICS[k]; return !r.dark || (S.asc.level || 0) >= r.asc; });
+      var pick = null, pv = -1e9;
+      pool.forEach(function (k) { var v = relicValue(S, w, k); if (v > pv) { pv = v; pick = k; } });
+      if (pick) { takeRelic(S, pick); lg(S, 'e', '    👻 ' + T.RELICS[pick].name + ' 를 받았다'); }
+      return;
+    }
+    if (id === 'trunk') {
+      var ids = Object.keys(T.CARDS).filter(function (k) { return !T.CARDS[k].hidden; });
+      for (var i = 0; i < 3; i++) {
+        var keys = Object.keys(S.deck);
+        if (!keys.length) break;
+        var from = keys[Math.floor(S.rnd() * keys.length)];
+        var to = ids[Math.floor(S.rnd() * ids.length)];
+        S.deck[from]--; if (!S.deck[from]) delete S.deck[from];
+        S.deck[to] = (S.deck[to] || 0) + 1;
+      }
+      lg(S, 'e', '    🧰 릴 3칸이 바뀌었다');
+      return;
+    }
+    if (id === 'dresser') {
+      var cut = Math.round(S.maxHp * 0.12);
+      S.maxHp -= cut; S.hp = Math.min(S.hp, S.maxHp);
+      // 가장 값이 큰 대본의 코스트를 깎는다
+      var best = null, bv = -1e9;
+      S.scripts.forEach(function (sc) { if (sc.cost <= 1) return;
+        var v = scriptRaw(S, w, sc); if (v > bv) { bv = v; best = sc; } });
+      if (best) {
+        var idx = S.scripts.indexOf(best);
+        S.scripts[idx] = Object.assign({}, best, { cost: best.cost - 1, upgraded: 1 });
+        lg(S, 'e', '    💄 「' + best.name + '」 코스트 ' + best.cost + ' → ' + (best.cost - 1)
+          + ' · 최대 HP −' + cut);
+      }
+      return;
+    }
+    if (id === 'beggar') {
+      var d = Math.round(S.maxHp * 0.18);
+      S.hp -= d; S.gold += 34;
+      lg(S, 'e', '    🍞 HP −' + d + ' · 골드 +34');
+      return;
+    }
+    if (id === 'merge') {
+      var cands = Object.keys(S.deck).filter(function (k) { return S.deck[k] >= 2; });
+      if (!cands.length) return;
+      var worst2 = null, wv2 = 1e9;
+      cands.forEach(function (k) { var v = cardValueDrop(S, w, k); if (v < wv2) { wv2 = v; worst2 = k; } });
+      var best2 = null, bv2 = -1e9;
+      (S.ch.pool || []).forEach(function (k) {
+        if (T.CARDS[k].hidden) return;
+        var v = cardValue(S, w, k); if (v > bv2) { bv2 = v; best2 = k; }
+      });
+      if (worst2 && best2) {
+        S.deck[worst2] -= 2; if (S.deck[worst2] <= 0) delete S.deck[worst2];
+        S.deck[best2] = (S.deck[best2] || 0) + 1;
+        lg(S, 'e', '    🎬 ' + T.CARDS[worst2].name + ' 2장 → ' + T.CARDS[best2].name + ' 1장');
+      }
+      return;
+    }
+    if (id === 'burning') {
+      var w2 = null, wv3 = 1e9;
+      S.scripts.forEach(function (sc) { var v = scriptRaw(S, w, sc); if (v < wv3) { wv3 = v; w2 = sc; } });
+      if (w2) S.scripts = S.scripts.filter(function (x) { return x !== w2; });
+      S.actBurn = (S.actBurn || 0) + 2;             // 이번 막 동안 화상 +2
+      lg(S, 'e', '    🔥 「' + (w2 ? w2.name : '') + '」 을 태웠다 — 이번 막 화상 +2');
+      return;
+    }
   }
 
   function doRest(S) {
@@ -1202,8 +1341,12 @@
     //   persistence — 첫 클리어 뒤에도 계속할 성향
     // 이게 없으면 모두가 관측 창을 끝까지 채워서 「몇 판 만에 떠나는가」를 잴 수 없다.
     var patience = 3 + Math.floor(rnd() * 6), persistence = rnd();
+    // 첫 난이도 선택 — 선택창이 「무엇을 하러 왔는가」를 묻고 스토리를 권한다.
+    // 전원이 보통에서 시작한다고 두면 83% 가 4판째에 내려갔다. 그건 밸런스가 아니라
+    // 기본값 문제였다 — 신규에게 로그라이크 난이도를 기본으로 주고 있었던 것이다.
+    var startsOnStory = rnd() < (opt.storyFirst == null ? 0.6 : opt.storyFirst);
     var e = 0, unlocked = {}, tried = {}, out = [];
-    var asc = 0, diff = 'normal', firstClear = null, clears = 0;
+    var asc = 0, diff = startsOnStory ? 'story' : 'normal', firstClear = null, clears = 0;
     var streak = 0, stopAt = null, stopWhy = null, firstNormal = null, droppedAt = null;
     // 판 사이에 남는 것 — 이게 「다음 판을 할 이유」다
     var meta = { floors: 0, seen: {}, vault: [] };
@@ -1250,8 +1393,10 @@
         if (!firstClear) firstClear = i;
         if (playedDiff === 'story') diff = 'normal';          // 이야기를 봤으니 로그라이크로
         else if (playedDiff === 'normal') {
+          // 보통을 넘기면 곧바로 승천 1단이 열린다. 「어려움을 또 이겨야 승천」이었을 때
+          // 승천 도달이 0.49단에 머물렀다 — 관문이 두 개였다.
           if (!firstNormal) firstNormal = i;
-          diff = 'hard';
+          diff = 'hard'; asc = Math.max(1, asc);
         } else asc = Math.min(T.ASCENSION.length, asc + 1);
       } else if (!firstClear && diff === 'normal' && streak >= 2 && rnd() < 0.45) {
         // 계속 지면 난이도를 내린다. 이 행동이 없으면 스토리 난이도가 아무 역할도 하지 않는다.
@@ -1348,6 +1493,7 @@
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
     S.cheer = 0; S.lastPlay = null; S.repeatN = 0;
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
+    if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
     S.foes = pickFoes(S, nd).map(function (b) {
       if (b.boss && S.asc.bossExtra) {
         var learn = (T.BOSS_LEARN[b.name] || []).slice(0, S.asc.bossExtra);
@@ -1382,6 +1528,7 @@
     S.turn++; S.stats.turns++;
     S.cost = maxCost(S); S.stats.costMax += S.cost;
     S.freeReroll = S.ch.freeReroll || 0;
+    if (relicN(S, 'darkScript')) S.hp -= 2;   // 어둠 유물 — 각본이 피를 먹는다
     var ctx = ctxOf(S, S.w);
     if (S.curser && S.curser.hp > 0) sowCurse(S);
     if (S.intrudeQ.length) {
@@ -1470,7 +1617,7 @@
     // 사람 플레이용
     newRun: newRun, goTo: goTo, openFight: openFight, beginTurn: beginTurn,
     playScript: playScript, canPlay: canPlay, doReroll: doReroll, finishTurn: finishTurn,
-    suggest: suggest, handOf: handOf, reachable: reachable, maxCost: maxCost, scriptCap: scriptCap,
+    suggest: suggest, handOf: handOf, applyEvent: applyEvent, doEvent: doEvent, EVENTS_ID: 1, reachable: reachable, maxCost: maxCost, scriptCap: scriptCap,
     relicN: relicN, deckSize: deckSize, offerCards: offerCards, offerScripts: offerScripts,
     scriptValue: scriptValue, cardValue: cardValue, ctxOf: ctxOf, drift: drift
   };

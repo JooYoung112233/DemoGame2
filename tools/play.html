@@ -178,7 +178,7 @@
 (function () {
   var T = window.Theater, Sim = window.Sim, el = function (i) { return document.getElementById(i); };
   var S = null, pend = null, tip = null;
-  var NI = { fight:'⚔️', elite:'💀', shop:'🏪', rest:'🕯️', forge:'⚒️', boss:'👹' };
+  var NI = { fight:'⚔️', elite:'💀', shop:'🏪', rest:'🕯️', forge:'⚒️', event:'❓', boss:'👹' };
   var NK = Sim.NK;
 
   // 해금은 이 화면 안에서만 기억한다 — 실제 게임에서는 저장된다
@@ -288,6 +288,7 @@
     if (nd.type === 'shop') return showShop();
     if (nd.type === 'rest') return showRest();
     if (nd.type === 'forge') return showForge();
+    if (nd.type === 'event') return showEvent();
     Sim.openFight(S, nd);
     clearOv(); nextTurn();
   }
@@ -477,6 +478,26 @@
       var d = document.createElement('div'); d.className = 'cp';
       d.innerHTML = '<div class="n">' + p[0] + '</div>';
       d.onclick = function () { p[1](); clearOv(); showMap(); };
+      row.appendChild(d);
+    });
+    o.appendChild(row); render();
+  }
+
+  // ── 사건 ──────────────────────────────────────────────────
+  // 전투도 상점도 아닌 칸. 대가를 내고 무언가를 바꾼다.
+  function showEvent() {
+    if (!S.ev) S.ev = T.EVENTS[Math.floor(S.rnd() * T.EVENTS.length)];
+    var ev = S.ev, o = ov();
+    o.innerHTML = '<h3>' + ev.icon + ' ' + ev.name + '</h3>'
+      + '<div class="sub">' + ev.text + '</div>';
+    var row = document.createElement('div'); row.className = 'cardpick';
+    ev.opts.forEach(function (op) {
+      var d = document.createElement('div'); d.className = 'cp'; d.style.width = '224px';
+      d.innerHTML = '<div class="n">' + op[0] + '</div>';
+      d.onclick = function () {
+        if (op[1] !== 'none') Sim.applyEvent(S, S.w, op[1]);
+        S.ev = null; Sim.drift(S); clearOv(); showMap();
+      };
       row.appendChild(d);
     });
     o.appendChild(row); render();

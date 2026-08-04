@@ -335,6 +335,36 @@
               note: '이미 이겨본 사람의 자리', sub: '운과 실력이 함께 있어야 한다. 여기서 승천이 열린다.' }
   };
 
+  // ── 사건 (이벤트 노드) ────────────────────────────────────
+  // 전투도 상점도 아닌 칸. 대가를 내고 무언가를 바꾼다.
+  // 판마다 다른 이야기가 생기게 하는 값싼 방법이고, 「한 번 더」의 이유가 된다.
+  var EVENTS = [
+    { id: 'ghost',  name: '유령 관객',   icon: '👻',
+      text: '텅 빈 좌석 하나가 계속 박수를 친다. 대본 한 권을 원한다.',
+      opts: [['대본 하나를 넘긴다 — 유물을 받는다', 'ghost'],
+             ['무시하고 지나간다', 'none']] },
+    { id: 'trunk',  name: '낡은 트렁크', icon: '🧰',
+      text: '누가 두고 간 트렁크. 열면 무엇이 들었는지는 모른다.',
+      opts: [['연다 — 릴 3칸이 무작위로 바뀐다', 'trunk'],
+             ['그냥 둔다', 'none']] },
+    { id: 'dresser', name: '분장사',     icon: '💄',
+      text: '분장사가 대본 한 편을 손봐 주겠다고 한다. 살을 좀 내달라고 한다.',
+      opts: [['최대 HP 12% 를 내준다 — 대본 하나의 코스트 −1', 'dresser'],
+             ['거절한다', 'none']] },
+    { id: 'beggar', name: '굶주린 관객', icon: '🍞',
+      text: '객석에서 손을 내민다. 대신 주머니를 털어 주겠다고 한다.',
+      opts: [['HP 18% 를 내준다 — 골드 34', 'beggar'],
+             ['돌아선다', 'none']] },
+    { id: 'audition', name: '대역 오디션', icon: '🎬',
+      text: '같은 배역 둘이 서로를 노려본다. 하나로 합칠 수 있다.',
+      opts: [['같은 배역 2장을 1장으로 — 그 배역 1장을 더 강한 것으로', 'merge'],
+             ['둘 다 남긴다', 'none']] },
+    { id: 'burning', name: '불타는 대본', icon: '🔥',
+      text: '대본 한 권이 저절로 타오른다. 그 불을 무대에 옮길 수 있다.',
+      opts: [['대본 하나를 태운다 — 이번 막 동안 화상 +2', 'burning'],
+             ['불을 끈다', 'none']] }
+  ];
+
   // ── 판 사이에 남는 것 ─────────────────────────────────────
   // 화폐를 만들지 않는다. 저번 판의 「흔적」이 다음 판을 조금 낫게 한다.
   // 이게 없으면 다음 판을 할 이유가 해금 하나뿐이고, 그러면 사람이 떠난다.
@@ -623,7 +653,23 @@
     candleR:  { name: '영혼의 촛불',    icon: '🕯️', cost: 20,
                 desc: '적이 퇴장할 때 최대 HP +2 (영구)' },
     phoenix:  { name: '불사조의 깃펜',  icon: '🪶', cost: 30,
-                desc: '쓰러져도 HP 30%로 한 번 부활' }
+                desc: '쓰러져도 HP 30%로 한 번 부활' },
+
+    // ── 어둠 유물 — 이득과 불이득을 함께 준다 ────────────────
+    // 승천 단계로 열린다. 승천이 「더 아픈 같은 게임」이 아니라 「새 물건」을 줘야
+    // 올라갈 이유가 된다. 도달률이 0.49단에 머문 이유의 절반이 이것이었다.
+    darkScript: { name: '검은 각본',    icon: '📕', cost: 22, dark: true, asc: 1,
+                desc: '최대 코스트 +1 · 매 턴 HP −2' },
+    crackMirror:{ name: '깨진 거울',    icon: '🔨', cost: 20, dark: true, asc: 1,
+                desc: '반사 상한 +12 · 방어 상한 −20%' },
+    hungrySeat: { name: '굶주린 관객석', icon: '🪑', cost: 24, dark: true, asc: 2,
+                desc: '골드 2배 · 전투 시작 시 HP −5' },
+    tornScript: { name: '찢어진 대본',   icon: '📄', cost: 26, dark: true, asc: 2,
+                desc: '대본 보유 +4 · 즉석 대본이 나오지 않는다' },
+    madBaton:   { name: '광인의 지휘봉', icon: '🪄', cost: 28, dark: true, asc: 3,
+                desc: '화상·독·둔화 2배 · 회복 효과 절반' },
+    lastActor:  { name: '마지막 배우',   icon: '🕴', cost: 30, dark: true, asc: 4,
+                desc: '기립 박수가 코스트 +4 · 최대 HP −20%' }
   };
 
   // ── 효과 적용 ─────────────────────────────────────────────
@@ -823,6 +869,7 @@
     CHEER: CHEER, CHEER_TEXT: CHEER_TEXT,
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
     PREMIERE: PREMIERE, premiereAt: premiereAt, ARCHIVE_MUL: ARCHIVE_MUL, VAULT_BASE: VAULT_BASE,
+    EVENTS: EVENTS,
     makeOpeners: makeOpeners, scriptOptions: scriptOptions,
     SCRIPTS: SCRIPTS, SCRIPT_BY_ID: SCRIPT_BY_ID, allScripts: allScripts,
     canStage: canStage, reqText: reqText, RELICS: RELICS,
