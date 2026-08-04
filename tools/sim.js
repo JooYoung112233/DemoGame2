@@ -54,6 +54,21 @@
               rewardNoise: 0.06, shopSmart: 1.0, driftRate: 0.1 }
   };
 
+  // 숙련도는 3단이 아니라 연속이다 — 반복 플레이를 재려면 그 사이 값이 필요하다.
+  // t=0 처음 · t=0.5 익숙 · t=1 숙련
+  var SK_KEYS = ['depth', 'width', 'err', 'setup', 'useReroll', 'rewardNoise', 'shopSmart', 'driftRate'];
+  function skillMix(t) {
+    t = Math.max(0, Math.min(1, t));
+    var lo, hi, u;
+    if (t < 0.5) { lo = SKILLS.rookie; hi = SKILLS.mid; u = t / 0.5; }
+    else { lo = SKILLS.mid; hi = SKILLS.expert; u = (t - 0.5) / 0.5; }
+    var o = { name: '숙련 ' + Math.round(t * 100), t: t };
+    SK_KEYS.forEach(function (k) { o[k] = lo[k] + (hi[k] - lo[k]) * u; });
+    o.depth = Math.max(2, Math.round(o.depth));
+    o.width = Math.max(2, Math.round(o.width));
+    return o;
+  }
+
   // 캐릭터 승리 조건이 정책 가중치를 한 번 더 민다 — 같은 성향이라도 캐릭터마다 다르게 큰다
   var WIN_BIAS = {
     burst:   { dmg: 1.15 },
@@ -424,17 +439,17 @@
   // ── 한 판 ─────────────────────────────────────────────────
   function run(opt) {
     var ch = T.CHARS[opt.charKey], pol = POLICIES[opt.policyKey];
-    var sk = SKILLS[opt.skillKey || 'mid'];
+    var sk = opt.skillObj || SKILLS[opt.skillKey || 'mid'];
     var diff = T.DIFFICULTY[opt.diffKey || 'normal'];
     var rnd = T.rng32((opt.seed | 0) || 1);
     var S = {
       ch: ch, pol: pol, sk: sk, diff: diff, rnd: rnd, act: 1, asc: T.ascend(opt.asc || 0),
-      deck: Object.assign({}, ch.deck), gold: 40, relics: [],
+      deck: Object.assign({}, ch.deck), gold: T.CFG.gold.start, relics: [],
       maxHp: T.CFG.hpBase + (ch.hpDelta || 0), at: null, cleared: {},
       scripts: T.makeOpeners(ch).map(function (s) {
         return T.SCRIPTS.filter(function (x) { return x.name === s.name; })[0] || s;
       }),
-      log: [], trace: opt.trace ? [] : null,
+      log: [], trace: opt.trace ? [] : null, feat: {},
       stats: { nodes: 0, turns: 0, ampTurns: 0, playable: 0, playableOf: 0, temp: 0,
                costUsed: 0, costMax: 0, plays: 0, rerolls: 0, byTier: {}, byScript: {}, fights: 0 }
     };
@@ -473,7 +488,7 @@
   function finish(S, won, killedBy) {
     var st = S.stats;
     return { won: won, killedBy: killedBy, char: S.ch.name, charKey: keyOf(T.CHARS, S.ch),
-      policy: S.pol.name, skill: S.sk.name, w: S.w,
+      policy: S.pol.name, skill: S.sk.name, w: S.w, feat: S.feat,
       floor: S.at ? S.at.f + 1 : 0, nodes: st.nodes, turns: st.turns,
       hp: Math.max(0, Math.round(S.hp)), maxHp: S.maxHp, gold: S.gold,
       deck: Object.assign({}, S.deck), scripts: S.scripts.map(function (s) { return s.name; }),
@@ -540,10 +555,22 @@
       var out2 = []; for (var j = 0; j < n2; j++) out2.push(base);
       return out2;
     }
-    var cap = Math.min(base.maxCount || 3, nd.f < 2 ? 1 : (nd.f < 6 ? 2 : 3));
+    var cap = Math.min(base.maxCount || 3, nd.f < 1 ? 1 : (nd.f < 4 ? 2 : 3));
     var n = base.solo ? 1 : Math.min(1 + Math.floor(S.rnd() * cap), cap);
     var out = []; for (var i = 0; i < n; i++) out.push(base);
     return out;
+  }
+
+  // 해금 관찰 — 상연 한 번마다
+  function watchFeats(S, sc, aliveBefore) {
+    if (!S.feat) S.feat = {};
+    var eff = sc.effect || {};
+    var aoe = !!eff.aoe || ((S.ch.aoeFams || []).length && T.scriptFam(sc)
+              && S.ch.aoeFams.indexOf(T.scriptFam(sc)) >= 0);
+    if (eff.damage) { S.fightAnyDmg = 1; if (!aoe) S.fightAoeOnly = 0; }
+    if (sc.temp) { S.fightTempPlays = (S.fightTempPlays || 0) + 1;
+                   if (S.fightTempPlays >= 6) S.feat.harlequin = 1; }
+    if (S.foes.some(function (f) { return f.hp > 0 && T.ampMul(f, {}) >= 1.5; })) S.feat.maestro = 1;
   }
 
   // 난입 예약 — 비극은 반드시 하나, 공연은 확률. 승천이 확률과 인원을 올린다.
@@ -602,7 +629,8 @@
     });
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
     S.strips = [0, 1, 2, 3].map(function () { return T.buildStrip(S.deck, S.rnd); });
-    S.cheer = 0; S.lastPlay = null; S.repeatN = 0; S.ovations = 0;
+    S.cheer = 0; S.lastPlay = null; S.repeatN = 0;
+    S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0; S.ovations = 0;
     var ctx = ctxOf(S, w);
     lg(S, 't', '── ' + S.foes[0].name + (S.foes.length > 1 ? ' ×' + S.foes.length : '')
       + (S.foes[0].demands ? ' (요구: ' + S.foes[0].demands + ')' : '') + ' ──');
@@ -666,6 +694,7 @@
         if (a.sc.cost > S.cost) continue;
         if (!T.canStage(a.sc, S.stage, ctx.relax)) continue;
         if (S.sealed[a.sc.id]) continue;
+        var aliveBefore = S.foes.filter(function (f) { return f.hp > 0; }).length;
         var C = { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost,
                   gold: S.gold, foes: S.foes, dead: false, ampHit: 0,
                   cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay };
@@ -681,6 +710,10 @@
         lg(S, 's', '  상연 「' + a.sc.name + '」 ' + T.effText(a.sc.effect));
         ev.forEach(function (t) { lg(S, 'a', '    ' + t); });
         tr(S, 'play', '상연 「' + a.sc.name + '」');
+        // 해금 조건 관찰 — 「극단」은 판 수가 아니라 플레이 방식으로 열린다.
+        // 조건은 시작 캐릭터로 달성 가능해야 한다. 그 캐릭터의 카드가 필요한 조건은
+        // 자기참조라서 열리지 않았다 (어릿광대 해금률 1%).
+        watchFeats(S, a.sc, aliveBefore);
         if (S.hp <= 0) { if (!revive(S)) return { won: false, killedBy: S.foes[0].name }; }
         if (!S.foes.some(function (f) { return f.hp > 0; })) { winFight(S); return { won: true }; }
       }
@@ -885,17 +918,21 @@
   }
 
   function winFight(S) {
-    var g = 16 + Math.floor(S.rnd() * 12) + (S.at.type === 'elite' ? 15 : 0);
+    var G = T.CFG.gold;
+    var g = G.fightBase + Math.floor(S.rnd() * G.fightRand) + (S.at.type === 'elite' ? G.elite : 0);
     // 난입자를 이겨내면 대본 한 장과 골드를 더 준다 — 난입은 위험이자 기회다
     if (S.intruderIdx != null) {
-      g += 20;
+      g += G.intruder;
       // 비극은 이미 대본을 준다 — 난입 보너스 대본은 일반 공연에서만
       if (S.at.type === 'fight') S.bonusScript = 1;
       S.intruderIdx = null;
       S.stats.intruderWins = (S.stats.intruderWins || 0) + 1;
-      lg(S, 's', '  🎩 난입자를 이겨냈다' + (S.bonusScript ? ' — 대본 한 장 추가' : ' — 골드 +20'));
+      lg(S, 's', '  🎩 난입자를 이겨냈다' + (S.bonusScript ? ' — 대본 한 장 추가' : ' — 골드 +' + G.intruder));
     }
     S.gold += g;
+    if (!S.feat) S.feat = {};
+    if (S.hp <= S.maxHp * 0.25) S.feat.fallen = 1;              // 벼랑에서 이겨낸다
+    if (S.fightAoeOnly && S.fightAnyDmg) S.feat.frenzy = 1;     // 광역만으로 끝낸다
     lg(S, 's', '── 통과 · ' + S.turn + '턴 · HP ' + Math.round(S.hp) + ' · 골드 +' + g + ' ──');
   }
 
@@ -982,6 +1019,7 @@
   }
 
   function doShop(S, w) {
+    sellReels(S, w);                    // 먼저 팔아서 자금을 만든 다음 산다
     var cards = offerCards(S).map(function (id) { return { id: id, cost: 8 + Math.floor(S.rnd() * 6) }; });
     var scripts = offerScripts(S, 3).map(function (sc) { return { sc: sc, cost: 16 + sc.cost * 5 }; });
     var relics = T.pickWeighted(Object.keys(T.RELICS), function () { return 1; }, S.rnd, 2)
@@ -1009,17 +1047,23 @@
       if (b.kind === 's') { S.scripts.push(b.it.sc); scripts.splice(b.i, 1); lg(S, 'e', '  🏪 대본 「' + b.it.sc.name + '」'); }
       if (b.kind === 'c') { if (deckSize(S) < T.CFG.reelMax) S.deck[b.it.id] = (S.deck[b.it.id] || 0) + 1; cards.splice(b.i, 1); lg(S, 'e', '  🏪 배역 ' + T.CARDS[b.it.id].name); }
     }
-    // 릴을 좁히는 성향이면 안 쓰는 배역을 뺀다
-    if (S.pol.thin >= 1 && S.gold >= 5) {
+  }
+
+  // 릴 판매 — 안 쓰는 배역을 팔아 골드를 만든다. 좁히기가 곧 자금이다.
+  // 상점마다 상한이 있어서 릴을 통째로 갈아버리지는 못한다.
+  function sellReels(S, w) {
+    var G = T.CFG.gold, sold = 0;
+    while (sold < G.sellMax && deckSize(S) > G.reelMin) {
       var worst = null, wv = 1e9;
       Object.keys(S.deck).forEach(function (id) {
         var v = cardValueDrop(S, w, id);
         if (v < wv) { wv = v; worst = id; }
       });
-      if (worst && deckSize(S) > 12 && wv < 1.2) {
-        S.gold -= 5; S.deck[worst]--; if (!S.deck[worst]) delete S.deck[worst];
-        lg(S, 'e', '  🏪 ' + T.CARDS[worst].name + ' 를 릴에서 뺐다');
-      }
+      // 값이 낮은 칸만 판다. 좁히려는 성향은 더 과감하게 판다.
+      if (!worst || wv > 1.6 * S.pol.thin) break;
+      S.deck[worst]--; if (!S.deck[worst]) delete S.deck[worst];
+      S.gold += G.sell; sold++;
+      lg(S, 'e', '  🏪 ' + T.CARDS[worst].name + ' 를 팔았다 (+' + G.sell + ' 골드)');
     }
   }
 
@@ -1044,8 +1088,8 @@
   }
 
   function doRest(S) {
-    if (S.hp < S.maxHp * 0.72) { S.hp = Math.min(S.maxHp, S.hp + S.maxHp * 0.35); lg(S, 'e', '  🕯️ 회복'); }
-    else { S.maxHp += 10; S.hp += 10; lg(S, 'e', '  🕯️ 최대 HP +10'); }
+    if (S.hp < S.maxHp * 0.72) { S.hp = Math.min(S.maxHp, S.hp + S.maxHp * 0.25); lg(S, 'e', '  🕯️ 회복'); }
+    else { S.maxHp += 8; S.hp += 8; lg(S, 'e', '  🕯️ 최대 HP +8'); }
   }
 
   function doForge(S, w) {
@@ -1083,6 +1127,51 @@
       } });
   }
 
+  // ── 여정 — 한 사람이 여러 판을 반복한다 ───────────────────
+  // 로그라이크의 진짜 지표는 한 판의 승률이 아니라 「몇 판째에 처음 이겼나」다.
+  // 판 사이에 늘어나는 것: 숙련도 · 해금된 캐릭터 · 승천 단계.
+  function career(opt) {
+    var rnd = T.rng32((opt.seed | 0) || 1);
+    var runsN = opt.runs || 30;
+    // 사람마다 재능 상한과 학습 속도가 다르다 — 모두가 숙련자가 되지는 않는다.
+    // 학습 속도는 실측 근거가 없는 가정이다. 0.65~1.6 으로 뒀을 때 5판 만에
+    // 숙련도가 22% → 65% 로 뛰어서 사람보다 훨씬 빨랐다. 절반으로 낮췄다.
+    var ceiling = 0.55 + rnd() * 0.45, learn = 0.3 + rnd() * 0.55;
+    var e = 0, unlocked = {}, tried = {}, out = [];
+    var asc = 0, diff = 'normal', firstClear = null, clears = 0;
+    Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) unlocked[k] = 1; });
+    var PKs = Object.keys(POLICIES), fav = PKs[Math.floor(rnd() * PKs.length)];
+
+    for (var i = 1; i <= runsN; i++) {
+      var sk = skillMix(Math.min(ceiling, e));
+      var pool = Object.keys(unlocked);
+      var fresh = pool.filter(function (k) { return !tried[k]; });
+      // 새로 열린 캐릭터는 써 보고 싶어진다 — 해금이 다음 판의 이유가 된다
+      var ck = (fresh.length && rnd() < 0.72) ? fresh[Math.floor(rnd() * fresh.length)]
+                                             : pool[Math.floor(rnd() * pool.length)];
+      tried[ck] = 1;
+      var pk = rnd() < 0.28 ? PKs[Math.floor(rnd() * PKs.length)] : fav;
+      var playedDiff = diff, playedAsc = asc;   // 기록은 실제로 플레이한 난이도로 남긴다
+      var r = run({ seed: ((opt.seed | 0) + i * 104729) | 0, charKey: ck, diffKey: diff,
+                    policyKey: pk, skillObj: sk, asc: asc });
+      Object.keys(r.feat || {}).forEach(function (k) { if (T.CHARS[k]) unlocked[k] = 1; });
+      // 깊게 간 판이 더 가르치고, 이긴 판이 가장 많이 가르친다
+      e += learn * (0.045 + (r.floor / 12) * 0.055 + (r.won ? 0.11 : 0));
+      if (r.won) {
+        clears++;
+        if (!firstClear) firstClear = i;
+        if (diff === 'normal') diff = 'hard';
+        else asc = Math.min(T.ASCENSION.length, asc + 1);
+      }
+      out.push({ i: i, char: r.char, charKey: ck, policy: r.policy, skill: sk.t,
+                 diff: playedDiff, asc: playedAsc, won: r.won, floor: r.floor, killedBy: r.killedBy,
+                 unlocked: Object.keys(unlocked).length });
+    }
+    return { firstClear: firstClear, clears: clears, runs: out,
+             ceiling: ceiling, learn: learn, endSkill: Math.min(ceiling, e),
+             unlocked: Object.keys(unlocked), maxAsc: asc };
+  }
+
   // ── 사람이 플레이할 때 쓰는 문 ────────────────────────────
   // play.html 이 이 함수들만 쓴다. 규칙이 한 곳에만 있게 하려는 것이다 —
   // 예전에 play.html 과 balance.html 이 각자 규칙을 들고 있다가 네 번 어긋났다.
@@ -1092,12 +1181,12 @@
     var S = {
       ch: ch, pol: POLICIES[opt.policyKey || 'value'], sk: SKILLS[opt.skillKey || 'expert'],
       diff: T.DIFFICULTY[opt.diffKey || 'normal'], rnd: rnd, act: 1, asc: T.ascend(opt.asc || 0),
-      deck: Object.assign({}, ch.deck), gold: 40, relics: [],
+      deck: Object.assign({}, ch.deck), gold: T.CFG.gold.start, relics: [],
       maxHp: T.CFG.hpBase + (ch.hpDelta || 0), at: null, cleared: {},
       scripts: T.makeOpeners(ch).map(function (s) {
         return T.SCRIPTS.filter(function (x) { return x.name === s.name; })[0] || s;
       }),
-      log: [], trace: null, human: true,
+      log: [], trace: null, human: true, feat: {},
       stats: { nodes: 0, turns: 0, ampTurns: 0, playable: 0, playableOf: 0, temp: 0,
                costUsed: 0, costMax: 0, plays: 0, rerolls: 0, byTier: {}, byScript: {}, fights: 0 }
     };
@@ -1124,6 +1213,7 @@
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false; S.over = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
     S.cheer = 0; S.lastPlay = null; S.repeatN = 0;
+    S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     S.foes = pickFoes(S, nd).map(function (b) {
       if (b.boss && S.asc.bossExtra) {
         var learn = (T.BOSS_LEARN[b.name] || []).slice(0, S.asc.bossExtra);
@@ -1192,6 +1282,7 @@
   function playScript(S, sc, tgt) {
     if (!canPlay(S, sc)) return null;
     var ctx = ctxOf(S, S.w);
+    var aliveBefore = S.foes.filter(function (f) { return f.hp > 0; }).length;
     var C = { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost,
               gold: S.gold, foes: S.foes, dead: false, ampHit: 0,
               cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay };
@@ -1206,6 +1297,7 @@
     if (sc.temp) { var ti = S.temp.indexOf(sc); if (ti >= 0) S.temp.splice(ti, 1); }
     lg(S, 's', '  상연 「' + sc.name + '」 ' + T.effText(sc.effect));
     ev.forEach(function (t) { lg(S, 'a', '    ' + t); });
+    watchFeats(S, sc, aliveBefore);
     if (S.hp <= 0 && !revive(S)) { S.over = 'dead'; return ev; }
     if (!S.foes.some(function (f) { return f.hp > 0; })) { winFight(S); S.over = 'won'; }
     return ev;
@@ -1239,7 +1331,8 @@
   function suggest(S) { return planTurn(S, ctxOf(S, S.w)); }
 
   root.Sim = {
-    run: run, POLICIES: POLICIES, SKILLS: SKILLS, stageProb: stageProb, NK: NK, mergeW: mergeW,
+    run: run, career: career, skillMix: skillMix,
+    POLICIES: POLICIES, SKILLS: SKILLS, stageProb: stageProb, NK: NK, mergeW: mergeW,
     // 사람 플레이용
     newRun: newRun, goTo: goTo, openFight: openFight, beginTurn: beginTurn,
     playScript: playScript, canPlay: canPlay, doReroll: doReroll, finishTurn: finishTurn,

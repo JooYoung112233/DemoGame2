@@ -193,7 +193,7 @@
       // 배역이 광역이 되는 캐릭터인데 소품(칼)이 섞이면 조합이 배역 순수가 안 된다 — 배역으로 채웠다
       deck: { knight: 5, king: 3, jester: 3, rage: 4, candle: 3 },
       pool: ['knight', 'king', 'jester', 'dancer', 'acrobat', 'rage', 'candle'],
-      unlock: '한 턴에 광역 대본으로 적 3명을 동시에 퇴장시킨다',
+      unlock: '한 전투를 광역 대본만으로 끝낸다',
       openers: [['one', 'knight'], ['one', 'rage'], ['two', 'king', 'rage']] },
     // 3막 적 다섯 중 셋이 방어력이 높다. 반사가 방어력에 깎이면 이 캐릭터만 원천 봉인된다.
     mirror: { name: '거울의 배우', maxCost: 4, thornsMul: 1.5, overflowMul: 1.4, thornsIgnoreDef: true, start: true,
@@ -212,13 +212,13 @@
       note: '최대 코스트 5 · 최대 HP +15 · 자해한 만큼 피해 +2.2배', win: 'burst',
       deck: { dead: 4, tragedy: 4, sword: 4, candle: 3, chain: 3 },
       pool: ['dead', 'tragedy', 'sword', 'chain', 'candle', 'violin'],
-      unlock: '자해 대본으로 보스를 끝낸다',
+      unlock: 'HP 25% 이하로 한 전투를 이겨낸다',
       openers: [['one', 'sword'], ['one', 'tragedy'], ['two', 'dead', 'tragedy']] },
     harlequin: { name: '어릿광대', maxCost: 4, handBonus: 2, hpDelta: -8,
       note: '대본 보유 +2 · 최대 HP −8 — 다타로 상태이상을 쌓는다', win: 'hits',
       deck: { jester: 4, acrobat: 4, gem: 3, dancer: 3, curtain: 4 },
       pool: ['jester', 'acrobat', 'dancer', 'gem', 'candle', 'violin'],
-      unlock: '한 턴에 다타 대본으로 8회 이상 타격한다',
+      unlock: '한 전투에서 즉석 대본을 6장 상연한다',
       openers: [['one', 'jester'], ['one', 'acrobat'], ['two', 'jester', 'jester']] }
   };
 
@@ -253,7 +253,12 @@
     // 쿨타임 1 은 다수로 나오면 즉사가 된다 — 3마리면 턴당 36 피해로 2턴에 끝났다
     { act: 1, name: '무대 거미',     hp: 14, atk: 6,  def: 0, cd: 1, maxCount: 2, intents: [['attack', 2], ['doubleStrike', 1]] },
     { act: 1, name: '춤추는 그림자', hp: 20, atk: 5,  def: 2, cd: 2, intents: [['attack', 2], ['defend', 1, 6]] },
-    { act: 2, name: '미친 왕',       hp: 32, atk: 9,  def: 3, cd: 2, intents: [['attack', 2], ['buff', 1, 4]] },
+    // 표적 순서를 2막에서 미리 가르친다. 초보는 수치가 아니라 「답을 안 찾아서」 죽는다 —
+    // 공격 배율을 올려도 초보 승률은 안 움직였고 숙련만 깎였다.
+    { act: 2, name: '미친 왕',       hp: 32, atk: 9,  def: 3, cd: 2, solo: true, guardMul: 0.45,
+      adds: [{ name: '시종', hp: 15, atk: 6, def: 0, cd: 2, role: 'guard',
+               intents: [['attack', 2], ['defend', 1, 5]] }],
+      intents: [['attack', 2], ['buff', 1, 4]], demands: '시종을 먼저' },
     { act: 2, name: '웃는 병사',     hp: 28, atk: 10, def: 2, cd: 2, intents: [['attack', 2], ['attackBleed', 1, 3]] },
     { act: 2, name: '노래하는 해골', hp: 24, atk: 7,  def: 1, cd: 3, intents: [['attack', 1], ['attackBurn', 1, 3], ['healAll', 1, 8]] },
     { act: 2, name: '박수치는 관객', hp: 26, atk: 8,  def: 2, cd: 2, intents: [['attack', 2], ['defend', 1, 8], ['buff', 1, 3]] },
@@ -373,10 +378,20 @@
     hpBase: 60, hpPerAct: 25,
     // 막이 길어지면 관객이 야유한다 — 답이 없는 조합으로 버티는 교착을 끝낸다.
     // 이게 없으면 「죽지도 못하고 60턴」이 전체의 7% 였다. 12턴이면 루즈해지기 전에 조인다.
-    stallTurn: 12, stallAtkPer: 0.10, stallDmg: 3,
+    // 10턴 — 초보의 전투는 길다. 야유가 그걸 실제로 물어야 앞쪽 층이 위협이 된다.
+    // 초보 죽음의 76% 가 10~12층에 몰려 있었다. 1~9층이 무저항이면 로그라이크가 아니다.
+    stallTurn: 10, stallAtkPer: 0.10, stallDmg: 3,
     // 막별 HP 곡선 — 1막 적이 두꺼우면 첫 전투가 벽으로 느껴진다.
     // 같은 배율을 전 막에 물리면 잡몹 하나에 3~4턴이 걸렸다.
-    actHp: [0.68, 0.88, 1.0]
+    actHp: [0.68, 0.88, 1.0],
+    // 골드 — 남으면 결정이 아니다.
+    // 이전 수치(시작 40 · 공연 16~27 · 비극 +15 · 난입 +20)로는 판 끝에 평균 94 가 남고
+    // 61% 가 60 이상을 남겼다. 살 것을 다 사고도 남는다는 뜻이다.
+    // 시작 골드는 없다. 골드는 무대에 선 대가로만 들어온다.
+    // 릴은 「빼는 데 돈을 내는」 게 아니라 「팔아서 돈을 받는」 것이다 —
+    // 릴을 좁히면 확률이 오르고 자금도 생긴다. 대신 대본 요구를 못 채울 위험을 진다.
+    gold: { start: 0, fightBase: 7, fightRand: 7, elite: 10, intruder: 12,
+            sell: 3, sellMax: 2, reelMin: 12 }
   };
 
   // ── 관중 ──────────────────────────────────────────────────

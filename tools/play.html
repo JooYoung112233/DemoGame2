@@ -259,7 +259,6 @@
   function startRun(ck, dk, asc) {
     S = Sim.newRun({ charKey: ck, diffKey: dk, asc: asc,
                      seed: (Date.now() & 0x7fffffff) | 1 });
-    S.feat = {};                       // 이번 판에 달성한 해금 조건
     clearOv(); showMap();
   }
 
@@ -304,7 +303,6 @@
     var r = Sim.finishTurn(S);
     if (r === 'won') return afterWin();
     if (r === 'dead') return endRun(false);
-    checkFeats();
     nextTurn();
   }
 
@@ -318,22 +316,12 @@
     if (!pend || S.foes[i].hp <= 0) return;
     var sc = pend; pend = null; fire(sc, i);
   }
+  // 해금 조건 관찰은 sim.js 가 한다 — 규칙을 두 곳에 두지 않는다
   function fire(sc, tgt) {
-    var before = S.foes.filter(function (f) { return f.hp > 0; }).length;
-    var hits = (sc.effect.hits || 1);
     Sim.playScript(S, sc, tgt);
-    // 해금 조건 관찰
-    var after = S.foes.filter(function (f) { return f.hp > 0; }).length;
-    if (before - after >= 3 && (sc.effect.aoe || S.ch.aoeFams)) S.feat.frenzy = 1;
-    if (hits >= 8) S.feat.harlequin = 1;
-    if (sc.effect.selfDamage && S.foes.some(function (f) { return f.boss && f.hp <= 0; })) S.feat.fallen = 1;
-    S.foes.forEach(function (f) { if (T.ampMul(f, {}) >= 1.5) S.feat.maestro = 1; });
     if (S.over === 'dead') return endRun(false);
     if (S.over === 'won') return afterWin();
     drawFight();
-  }
-  function checkFeats() {
-    S.foes.forEach(function (f) { if (T.ampMul(f, {}) >= 1.5) S.feat.maestro = 1; });
   }
 
   function doReroll(k) {
@@ -348,7 +336,6 @@
 
   // ── 보상 — 배역이냐 대본이냐 ──────────────────────────────
   function afterWin() {
-    checkFeats();
     Object.keys(S.feat).forEach(unlock);
     if (S.at.type === 'boss') return endRun(true);
     if (S.at.type === 'elite') return rewardScript('비극을 넘겼다 — 대본을 하나 고른다');
@@ -456,17 +443,28 @@
         + '<div class="e">' + r.desc + '</div><div class="x">' + it.cost + ' 골드</div>';
     }, function (it) { S.relics.push(it.k); });
 
+    // 릴 판매 — 좁히면 확률이 오르고 자금도 생긴다. 상점마다 상한이 있다.
+    var G = T.CFG.gold;
+    S.sold = S.sold || 0;
+    var sellCap = S.sold >= G.sellMax, floorCap = Sim.deckSize(S) <= G.reelMin;
+    var t3 = document.createElement('div'); t3.className = 'sub';
+    t3.textContent = '릴을 판다 — 장당 +' + G.sell + ' 골드 · 이 상점에서 ' + S.sold + '/' + G.sellMax
+      + (floorCap ? ' · 릴 최소 ' + G.reelMin + '칸' : '');
+    o.appendChild(t3);
     var rem = document.createElement('div'); rem.className = 'cardpick';
-    Object.keys(S.deck).forEach(function (id) {
+    Object.keys(S.deck).sort().forEach(function (id) {
       var b = document.createElement('button');
-      b.textContent = T.CARDS[id].icon + ' ' + T.CARDS[id].name + ' 빼기 (5골드)';
-      b.disabled = S.gold < 5 || Sim.deckSize(S) <= 10;
-      b.onclick = function () { S.gold -= 5; S.deck[id]--; if (!S.deck[id]) delete S.deck[id]; showShop(); };
+      b.textContent = T.CARDS[id].icon + ' ' + T.CARDS[id].name + ' 팔기 (+' + G.sell + ')';
+      b.disabled = sellCap || floorCap;
+      b.onclick = function () {
+        S.deck[id]--; if (!S.deck[id]) delete S.deck[id];
+        S.gold += G.sell; S.sold++; showShop();
+      };
       rem.appendChild(b);
     });
     o.appendChild(rem);
     var go = document.createElement('button'); go.className = 'go'; go.textContent = '나간다';
-    go.onclick = function () { S.stock = null; clearOv(); showMap(); };
+    go.onclick = function () { S.stock = null; S.sold = 0; clearOv(); showMap(); };
     o.appendChild(go); render();
   }
 
