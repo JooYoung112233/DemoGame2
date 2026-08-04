@@ -344,7 +344,11 @@
   // ── 보상 — 배역이냐 대본이냐 ──────────────────────────────
   function afterWin() {
     Object.keys(S.feat).forEach(unlock);
-    if (S.at.type === 'boss') return endRun(true);
+    // 보스가 막마다 있다 — 마지막 막의 보스만 런을 끝낸다
+    if (S.at.type === 'boss') {
+      if (S.at.f >= T.CFG.floors - 1) return endRun(true);
+      return rewardBoss();
+    }
     if (S.at.type === 'elite') return rewardScript('비극을 넘겼다 — 대본을 하나 고른다');
     if (S.bonusScript) { S.bonusScript = 0; return rewardScript('난입자를 이겨냈다 — 대본을 하나 고른다'); }
     rewardBoth();
@@ -395,6 +399,50 @@
     var b = document.createElement('button'); b.textContent = '넘긴다';
     b.onclick = function () { clearOv(); showMap(); };
     o.appendChild(b); render();
+  }
+
+  // 막 보스를 넘기면 대본과 유물을 함께 준다 — 막의 끝이 보상으로 표시되어야 한다
+  function rewardBoss() {
+    var o = ov();
+    o.innerHTML = '<h3>🏆 제' + S.act + '막을 넘겼다</h3>'
+      + '<div class="sub">대본 하나와 유물 하나를 가져간다. 다음 막이 열린다.</div>';
+    var picked = { sc: false, rl: false };
+    var done = function () {
+      if (picked.sc && picked.rl) { Sim.drift(S); clearOv(); showMap(); }
+    };
+    var t1 = document.createElement('div'); t1.className = 'sub'; t1.textContent = '대본';
+    o.appendChild(t1);
+    var r1 = document.createElement('div'); r1.className = 'cardpick';
+    Sim.offerScripts(S, 3).forEach(function (sc) {
+      var d = document.createElement('div'); d.className = 'cp';
+      d.innerHTML = scriptBox(sc);
+      d.onclick = function () {
+        if (picked.sc) return;
+        if (S.scripts.length < Sim.scriptCap(S)) S.scripts.push(sc);
+        picked.sc = true; r1.style.opacity = .4; done();
+      };
+      r1.appendChild(d);
+    });
+    o.appendChild(r1);
+    var t2 = document.createElement('div'); t2.className = 'sub'; t2.textContent = '유물';
+    o.appendChild(t2);
+    var r2 = document.createElement('div'); r2.className = 'cardpick';
+    T.pickWeighted(Object.keys(T.RELICS).filter(function (k) {
+      var r = T.RELICS[k]; return !r.dark || (S.asc.level || 0) >= r.asc;
+    }), function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2).forEach(function (k) {
+      var r = T.RELICS[k];
+      var d = document.createElement('div'); d.className = 'cp';
+      d.innerHTML = '<div class="ic">' + r.icon + '</div><div class="n">' + r.name
+        + (r.dark ? ' <span style="color:#8b7aa8">어둠</span>' : '') + '</div>'
+        + '<div class="e">' + r.desc + '</div>';
+      d.onclick = function () {
+        if (picked.rl) return;
+        Sim.takeRelic(S, k); picked.rl = true; r2.style.opacity = .4; render(); done();
+      };
+      r2.appendChild(d);
+    });
+    o.appendChild(r2);
+    render();
   }
 
   function rewardScript(title) {

@@ -548,7 +548,7 @@
       var nd = chooseNode(S, pol);
       if (!nd) break;
       S.at = nd; S.cleared[nd.f + ',' + nd.c] = 1;
-      var act2 = nd.f < 4 ? 1 : (nd.f < 8 ? 2 : 3);
+      var act2 = Math.min(3, Math.floor(nd.f / T.CFG.actLen) + 1);
       // 막이 오르면 배우가 자란다. CFG.hpPerAct 가 정의만 되고 적용되지 않아
       // 3막에서 HP 60 으로 공격 31 을 받고 있었다.
       while (act2 > S.act) {
@@ -564,7 +564,9 @@
       if (nd.type === 'event') { doEvent(S, w); drift(S); continue; }
       var r = fight(S, w, nd);
       if (!r.won) return finish(S, false, r.killedBy);
-      if (nd.type === 'boss') return finish(S, true, null);
+      // 보스가 막마다 있다. 마지막 막의 보스만 런을 끝낸다 —
+      // 이 구분이 없어서 1막 보스를 잡으면 판이 클리어로 종료됐다.
+      if (nd.type === 'boss' && nd.f >= T.CFG.floors - 1) return finish(S, true, null);
       doReward(S, w, nd);
       drift(S);
     }
@@ -635,31 +637,35 @@
   //   ④ 비극은 4층부터, 분장실은 5층부터
   //   ⑤ 보스 직전 층은 언제나 분장실 — 준비할 자리를 보장한다
   //   ⑥ 한 판에 소품실·비극·사건이 최소 2개씩은 있게 뒤에서 보정한다
-  // 중복 금지가 공연 비중을 눌러서(40% → 33%) 가중치를 올렸다
-  var MAP_W = { fight: 52, elite: 15, shop: 13, rest: 9, forge: 7, event: 11 };
-  var MAP_MIN = { shop: 2, elite: 2, event: 2 };
+  // 24층에서 전투가 13.4개(56%)였다. 판 길이를 늘리는 가장 안전한 축이 전투 수다 —
+  // 적을 두껍게 하지 않고도 총 턴이 늘어난다.
+  var MAP_W = { fight: 66, elite: 16, shop: 11, rest: 7, forge: 5, event: 10 };
+  var MAP_MIN = { shop: 1, elite: 1, event: 1 };   // 막마다 최소 1개씩 (3막이면 판당 3개)
 
+  // 3막 × 8층 — 막마다 마지막 층이 보스, 그 앞 층은 분장실.
+  // 층 게이트는 막 안쪽 위치(inAct)로 판단한다. 절대 층으로 두면 2막·3막에서
+  // 모든 종류가 곧바로 열려 막의 곡선이 사라진다.
   function makeMap(rnd) {
+    var F = T.CFG.floors, L = T.CFG.actLen;
     var floors = [], prev = {};
-    for (var f = 0; f < 12; f++) {
-      var n = (f === 0 || f === 11 || f === 10) ? 1 : (rnd() < 0.45 ? 2 : 3);
+    for (var f = 0; f < F; f++) {
+      var inAct = f % L, isBoss = inAct === L - 1, isPre = inAct === L - 2;
+      var n = (f === 0 || isBoss || isPre) ? 1 : (rnd() < 0.45 ? 2 : 3);
       var row = [], used = {};
       for (var c = 0; c < n; c++) {
         var t;
-        if (f === 11) t = 'boss';
-        else if (f === 10) t = 'rest';                       // ⑤ 보스 직전
-        else if (f === 0) t = 'fight';                       // ③
-        else if (f === 1) {
-          // 2층도 중복 검사를 해야 한다 — 안 하면 「공연 공연 공연」이 나온다
+        if (isBoss) t = 'boss';
+        else if (isPre) t = 'rest';                          // ⑤ 보스 직전
+        else if (inAct === 0) t = 'fight';                   // ③ 막의 첫 층
+        else if (inAct === 1) {
           var k1 = ['fight', 'event', 'forge'].filter(function (k) { return k === 'fight' || !used[k]; });
           t = T.pickWeighted(k1.length ? k1 : ['fight'],
             function (k) { return k === 'fight' ? 70 : k === 'event' ? 20 : 10; }, rnd, 1)[0];
-        }
-        else {
+        } else {
           var keys = Object.keys(MAP_W).filter(function (k) {
-            if (used[k] && k !== 'fight') return false;       // ①
-            if (k === 'elite' && f < 3) return false;        // ④
-            if (k === 'rest' && f < 4) return false;
+            if (used[k] && k !== 'fight') return false;      // ①
+            if (k === 'elite' && inAct < 2) return false;    // ④
+            if (k === 'rest' && inAct < 3) return false;
             return true;
           });
           if (!keys.length) keys = ['fight'];
@@ -673,20 +679,22 @@
       prev = used;
       floors.push(row);
     }
-    // ⑥ 최소 개수 보정 — 공연 칸을 바꿔서 채운다
-    Object.keys(MAP_MIN).forEach(function (k) {
-      var have = 0;
-      floors.forEach(function (row) { row.forEach(function (nd) { if (nd.type === k) have++; }); });
-      var guard = 0;
-      while (have < MAP_MIN[k] && guard++ < 40) {
-        var f2 = 2 + Math.floor(rnd() * 8), row2 = floors[f2];
-        var cand = row2.filter(function (nd) {
-          return nd.type === 'fight' && !row2.some(function (x) { return x.type === k; });
-        });
-        if (!cand.length) continue;
-        cand[Math.floor(rnd() * cand.length)].type = k; have++;
-      }
-    });
+    // ⑥ 최소 개수 보정 — 막마다 소품실·비극·사건을 최소 개수만큼 보장한다
+    for (var a = 0; a < F / L; a++) {
+      var lo = a * L, hi = lo + L - 2;                       // 보스·직전 분장실 제외
+      Object.keys(MAP_MIN).forEach(function (k) {
+        var have = 0;
+        for (var i = lo; i < hi; i++) floors[i].forEach(function (nd) { if (nd.type === k) have++; });
+        var guard = 0;
+        while (have < MAP_MIN[k] && guard++ < 40) {
+          var f2 = lo + 2 + Math.floor(rnd() * (hi - lo - 2)), row2 = floors[f2];
+          if (!row2 || row2.some(function (x) { return x.type === k; })) continue;
+          var cand = row2.filter(function (nd) { return nd.type === 'fight'; });
+          if (!cand.length) continue;
+          cand[Math.floor(rnd() * cand.length)].type = k; have++;
+        }
+      });
+    }
     return floors;
   }
   var NK = { fight: '공연', elite: '비극', shop: '소품실', rest: '분장실', forge: '각색실',
@@ -703,7 +711,7 @@
 
   function chooseNode(S, pol) {
     var f = S.at ? S.at.f + 1 : 0;
-    if (f >= 12) return null;
+    if (f >= T.CFG.floors) return null;
     var opts = S.map[f].filter(function (nd) { return reachable(S, nd.f, nd.c); });
     if (!opts.length) return null;
     var hurt = S.hp / S.maxHp;
@@ -722,7 +730,10 @@
   // ── 전투 ─────────────────────────────────────────────────
   function pickFoes(S, nd) {
     var pool = T.ENEMIES.filter(function (e) { return e.act === S.act && !e.boss; });
-    if (nd.type === 'boss') return [T.ENEMIES.filter(function (e) { return e.act === 3 && e.boss; })[0]];
+    if (nd.type === 'boss') {
+      var bs = T.ENEMIES.filter(function (e) { return e.act === S.act && e.boss; })[0];
+      return [bs || T.ENEMIES.filter(function (e) { return e.boss; })[0]];
+    }
     var base = pool[Math.floor(S.rnd() * pool.length)];
     // 비극(엘리트)은 막 보스를 다시 쓰지 않는다 — 2층에 기믹 보스가 나오면 온보딩이 끊긴다.
     // 대신 「난입이 확정된 공연」이다. 위험의 형태가 보스가 아니라 난입이다.
@@ -731,8 +742,10 @@
       var out2 = []; for (var j = 0; j < n2; j++) out2.push(base);
       return out2;
     }
-    var cap = Math.min(base.maxCount || 3, nd.f < 1 ? 1 : (nd.f < 4 ? 2 : 3));
-    var n = base.solo ? 1 : Math.min(1 + Math.floor(S.rnd() * cap), cap);
+    // 전투가 3턴에 끝나던 이유의 절반은 적이 한둘뿐이었기 때문이다.
+    // 개별 적을 두껍게 하면 「벽처럼」 느껴지니 수를 늘린다 — 광역·다타에 값이 생긴다.
+    var cap = Math.min(base.maxCount || 4, nd.f === 0 ? 1 : (S.act === 1 ? 3 : 4));
+    var n = base.solo ? 1 : Math.max(1, cap - (S.rnd() < 0.3 ? 1 : 0));
     var out = []; for (var i = 0; i < n; i++) out.push(base);
     return out;
   }
@@ -787,11 +800,14 @@
       overflowMul: (S.ch.overflowMul || 1) * (relicN(S, 'mirrorR') ? 2 : 1) };
   }
   function maxCost(S) {
-    return Math.max(1, S.ch.maxCost + relicN(S, 'drumOpen') + relicN(S, 'darkScript')
+    // 막이 오르면 극단이 커진다 — 대본 11.6장을 코스트 4로는 못 쓴다.
+    // 빌드가 자란 것이 실제 출력이 되어야 한다.
+    return Math.max(1, S.ch.maxCost + (S.act - 1) * T.CFG.costPerAct
+                       + relicN(S, 'drumOpen') + relicN(S, 'darkScript')
                        - relicN(S, 'doubleCast'));
   }
   function scriptCap(S) {
-    return 8 + (S.ch.handBonus || 0) + relicN(S, 'archive') * 3 + relicN(S, 'tornScript') * 4;
+    return T.CFG.scriptBase + (S.ch.handBonus || 0) + relicN(S, 'archive') * 3 + relicN(S, 'tornScript') * 4;
   }
 
   function fight(S, w, nd) {
@@ -1223,6 +1239,19 @@
       bss.forEach(function (sc) { var v = noisy(S, scriptValue(S, w, sc)); if (v > bbv) { bbv = v; bb = sc; } });
       if (bb) { S.scripts.push(bb); lg(S, 's', '  🎩 난입 보상 대본 「' + bb.name + '」'); }
     }
+    // 막 보스를 넘기면 대본과 유물을 함께 준다 — 막의 끝이 보상으로 표시되어야 한다
+    if (nd.type === 'boss') {
+      var bss = offerScripts(S, 3), bp = null, bpv = 0;
+      bss.forEach(function (sc) { var v = noisy(S, scriptValue(S, w, sc)); if (v > bpv) { bpv = v; bp = sc; } });
+      if (bp) { S.scripts.push(bp); lg(S, 's', '  🏆 막을 넘겼다 — 대본 「' + bp.name + '」'); }
+      var rpool = T.pickWeighted(Object.keys(T.RELICS).filter(function (k) {
+        var r2 = T.RELICS[k]; return !r2.dark || (S.asc.level || 0) >= r2.asc;
+      }), function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2);
+      var br = null, brv = -1e9;
+      rpool.forEach(function (k) { var v = relicValue(S, w, k); if (v > brv) { brv = v; br = k; } });
+      if (br) { takeRelic(S, br); lg(S, 's', '  🏆 유물 ' + T.RELICS[br].name); }
+      return;
+    }
     if (nd.type === 'elite') {
       // 비극 — 대본 3 중 하나 (여기서만 3종이 잘 나온다)
       var ss = offerScripts(S, 3), bs = null, bv = 0;
@@ -1438,7 +1467,7 @@
   }
 
   function doRest(S) {
-    if (S.hp < S.maxHp * 0.72) { S.hp = Math.min(S.maxHp, S.hp + S.maxHp * 0.25); lg(S, 'e', '  🕯️ 회복'); }
+    if (S.hp < S.maxHp * 0.72) { S.hp = Math.min(S.maxHp, S.hp + S.maxHp * 0.34); lg(S, 'e', '  🕯️ 회복'); }
     else { S.maxHp += 8; S.hp += 8; lg(S, 'e', '  🕯️ 최대 HP +8'); }
   }
 
@@ -1633,7 +1662,7 @@
   // 막이 오르면 배우가 자란다
   function goTo(S, nd) {
     S.at = nd; S.cleared[nd.f + ',' + nd.c] = 1;
-    var a2 = nd.f < 4 ? 1 : (nd.f < 8 ? 2 : 3);
+    var a2 = Math.min(3, Math.floor(nd.f / T.CFG.actLen) + 1);
     while (a2 > S.act) {
       S.act++; S.maxHp += T.CFG.hpPerAct; S.hp += T.CFG.hpPerAct;
       lg(S, 's', '── 제' + S.act + '막 — 최대 HP +' + T.CFG.hpPerAct + ' ──');

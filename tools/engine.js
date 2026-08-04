@@ -205,9 +205,9 @@
     // 계열 밖 코스트 +1 을 먼저 붙여 봤지만 덱이 이미 전부 악상이라 대가가 되지 않았다 (52%).
     // 그래서 템포 우위를 걷어내고 대신 진짜 상태이상 엔진을 줬다 —
     // 악상 대본의 화상·독·둔화가 각각 +1. 전문가는 깊이로 이긴다.
-    maestro: { name: '악장', maxCost: 4, mainFam: 'score', offFamCost: 1,
+    maestro: { name: '악장', maxCost: 5, mainFam: 'score', offFamCost: 1,
       famStatusPlus: { score: 1 }, win: 'status',
-      note: '악상 대본의 화상·독·둔화 +1 · 악상이 아닌 대본은 코스트 +1',
+      note: '최대 코스트 5 · 악상 대본의 화상·독·둔화 +1 · 악상이 아닌 대본은 코스트 +1',
       deck: { piano: 4, violin: 4, drum: 3, trumpet: 3, joy: 4 },
       pool: ['piano', 'violin', 'drum', 'trumpet', 'cold', 'rage', 'candle'],
       // 둔화 상한을 +45% 로 내린 뒤 1.5배는 도달 불가가 됐다 (해금률 0%) — 상한 아래로 내렸다
@@ -283,16 +283,20 @@
     { act: 1, name: '가면 없는 배우', hp: 22, atk: 5,  def: 1, cd: 2, intents: [['attack', 2], ['attackBleed', 1, 2]] },
     // 쿨타임 1 은 다수로 나오면 즉사가 된다 — 3마리면 턴당 36 피해로 2턴에 끝났다
     { act: 1, name: '무대 거미',     hp: 14, atk: 6,  def: 0, cd: 1, maxCount: 2, intents: [['attack', 2], ['doubleStrike', 1]] },
-    { act: 1, name: '춤추는 그림자', hp: 20, atk: 5,  def: 2, cd: 2, intents: [['attack', 2], ['defend', 1, 6]] },
+    // 잡몹도 대응을 요구해야 전투가 「스쳐 지나가지」 않는다 — 수치는 그대로 두고 규칙을 준다
+    { act: 1, name: '춤추는 그림자', hp: 20, atk: 5,  def: 2, cd: 2, evadeSingle: 0.25,
+      intents: [['attack', 2], ['defend', 1, 6]], demands: '광역 · 다타' },
     // 표적 순서를 2막에서 미리 가르친다. 초보는 수치가 아니라 「답을 안 찾아서」 죽는다 —
     // 공격 배율을 올려도 초보 승률은 안 움직였고 숙련만 깎였다.
     { act: 2, name: '미친 왕',       hp: 32, atk: 9,  def: 3, cd: 2, solo: true, guardMul: 0.45,
       adds: [{ name: '시종', hp: 15, atk: 6, def: 0, cd: 2, role: 'guard',
                intents: [['attack', 2], ['defend', 1, 5]] }],
       intents: [['attack', 2], ['buff', 1, 4]], demands: '시종을 먼저' },
-    { act: 2, name: '웃는 병사',     hp: 28, atk: 10, def: 2, cd: 2, intents: [['attack', 2], ['attackBleed', 1, 3]] },
-    { act: 2, name: '노래하는 해골', hp: 24, atk: 7,  def: 1, cd: 3, intents: [['attack', 1], ['attackBurn', 1, 3], ['healAll', 1, 8]] },
-    { act: 2, name: '박수치는 관객', hp: 26, atk: 8,  def: 2, cd: 2, intents: [['attack', 2], ['defend', 1, 8], ['buff', 1, 3]] },
+    { act: 2, name: '웃는 병사',     hp: 28, atk: 10, def: 2, cd: 2, defGrow: 2, defMax: 10,
+      intents: [['attack', 2], ['attackBleed', 1, 3]], demands: '관통 · 빠른 처리' },
+    { act: 2, name: '노래하는 해골', hp: 24, atk: 7,  def: 1, cd: 3, intents: [['attack', 1], ['attackBurn', 1, 3], ['healAll', 1, 8]], demands: '한 번에 눕히기' },
+    { act: 2, name: '박수치는 관객', hp: 26, atk: 8,  def: 2, cd: 2, gimmick: 'mimic', gimCd: 4,
+      intents: [['attack', 2], ['defend', 1, 8], ['buff', 1, 3]], demands: '큰 대본을 아껴 쓰기' },
     // 방어력이 무한히 자라면 방어·반사 빌드가 죽지도 못하고 시간만 끈다 — 상한을 둔다
     { act: 3, name: '철갑 인형', hp: 60,  atk: 14, def: 8, cd: 3, dotImmune: true, defGrow: 4, defMax: 20, solo: true,
       intents: [['attack', 2], ['defend', 1, 12]], demands: '관통 · 빠른 화력' },
@@ -306,7 +310,7 @@
     // 닼던1 의 방식이다 — 하수인을 먼저 죽이게 만들고, 자원을 빼앗고, 시계를 건다.
 
     // 스와인 프린스 계열 — 동반자가 살아 있으면 본체가 거의 안 깎인다. 표적 순서를 강제한다.
-    { act: 1, name: '무대감독',  hp: 65,  atk: 8,  def: 3, cd: 2, boss: true,
+    { act: 1, name: '무대감독',  hp: 110,  atk: 8,  def: 3, cd: 2, boss: true,
       gimmick: 'mimic', gimCd: 3, guardMul: 0.4,
       adds: [{ name: '조명 담당', hp: 16, atk: 5, def: 0, cd: 2, role: 'guard',
                intents: [['attack', 2], ['defend', 1, 5]] }],
@@ -314,7 +318,7 @@
       demands: '조명을 먼저 끈다' },
 
     // 하그 계열 — 내 자원을 빼앗는다. 대본을 압수하고 배역을 검열한다.
-    { act: 2, name: '폭군',      hp: 100, atk: 14, def: 5, cd: 3, boss: true,
+    { act: 2, name: '폭군',      hp: 150, atk: 14, def: 5, cd: 3, boss: true,
       gimmick: 'censor', gimCd: 3, seizeCd: 5, seizeMax: 2,
       intents: [['attack', 2], ['attackBurn', 1, 4], ['defend', 1, 12], ['buff', 1, 5]],
       demands: '대본 한두 장이 봉인돼도 굴러가는 폭' },
@@ -356,16 +360,16 @@
   var DIFFICULTY = {
     // 계획을 안 하는 사람도 넘길 수 있어야 이 난이도가 제 역할을 한다.
     // HP ×1.35 / 공격 ×1.05 로는 무작정형이 24% 였다 — 구제가 아니었다.
-    story:  { name: '스토리', hpMul: 1.0, atkMul: 0.78,
+    story:  { name: '스토리', hpMul: 1.0, atkMul: 0.62,
               note: '이야기를 보러 왔다', sub: '계획 없이 눌러도 막을 넘긴다. 규칙을 익히는 자리다.' },
     // 공격 배율을 2.0 → 2.15 로 올려 봤는데 처음 하는 사람은 26% 에서 그대로였고
     // 익숙·숙련만 6pp·3pp 깎였다. 초보의 죽음은 수치가 아니라 기믹 대응 실패다.
     // 맵 규칙(보스 직전 분장실 보장·소품실 최소 2개)이 승률을 올려서(숙련 44% → 58%)
     // 공격 배율로 되돌렸다. 이 지렛대는 숙련만 깎고 초보는 그대로 둔다 — 27.2 참조.
-    normal: { name: '보통',   hpMul: 2.55, atkMul: 2.12,
+    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.62,
               note: '로그라이크로 한다', sub: '첫 클리어가 사건이다. 죽고 다시 하면서 배운다.' },
     // 승천 1단이 곧 이 난이도다. 3.3 / 2.7 로는 클리어가 15% 라 승천이 거의 올라가지 않았다.
-    hard:   { name: '어려움', hpMul: 3.0,  atkMul: 2.4,
+    hard:   { name: '어려움', hpMul: 3.0,  atkMul: 2.05,
               note: '이미 이겨본 사람의 자리', sub: '운과 실력이 함께 있어야 한다. 여기서 승천이 열린다.' }
   };
 
@@ -406,12 +410,13 @@
   // ① 초연 기록 — 누적 도달 층수로 시작 조건이 자란다
   // 층수 기준은 실측으로 잡았다 — 누적 층수 중위가 82 인데 130·210·320 을 요구하니
   // 후반 단계 도달률이 21% · 9% · 3% 였다. 닿지 않는 목표는 이유가 되지 않는다.
+  // 층수가 12 → 36 으로 늘었다. 판당 19.3층이 실측이라 그 배수로 잡았다.
   var PREMIERE = [
-    { at: 18,  kind: 'swap',   n: 1, name: '연습실',     desc: '시작 릴의 배역 1칸을 원하는 것으로 바꾼다' },
-    { at: 45,  kind: 'script', n: 1, name: '초고',       desc: '시작 대본 +1' },
-    { at: 85,  kind: 'swap',   n: 3, name: '전속 배우',   desc: '시작 릴을 3칸까지 바꾼다' },
-    { at: 140, kind: 'vault',  n: 1, name: '극장 창고',   desc: '계승 유물 슬롯 +1' },
-    { at: 210, kind: 'script', n: 2, name: '개정판',     desc: '시작 대본 +1 (누적 2)' }
+    { at: 40,  kind: 'swap',   n: 1, name: '연습실',     desc: '시작 릴의 배역 1칸을 원하는 것으로 바꾼다' },
+    { at: 110,  kind: 'script', n: 1, name: '초고',       desc: '시작 대본 +1' },
+    { at: 220, kind: 'swap',   n: 3, name: '전속 배우',   desc: '시작 릴을 3칸까지 바꾼다' },
+    { at: 380, kind: 'vault',  n: 1, name: '극장 창고',   desc: '계승 유물 슬롯 +1' },
+    { at: 620, kind: 'script', n: 2, name: '개정판',     desc: '시작 대본 +1 (누적 2)' }
   ];
 
   // ② 유물 계승 — 런이 끝나면 그 판의 유물 하나가 창고에 남는다.
@@ -473,10 +478,16 @@
   }
 
   var CFG = {
+    // 3막 × 12층 + 막마다 보스. 12층일 때 한 판이 30턴(숙련 10분)이라 너무 짧았다 —
+    // 슬더슬이 전투 25개에 150~200턴인데 우리는 전투 6개에 30턴이었다.
+    floors: 36, actLen: 12,
+    // 플레이어 화력 통지 — 1막 적 HP 31 에 턴당 피해 30~40 이면 한 턴에 한 마리가 사라진다.
+    // 적 HP 를 올리면 「벽처럼 느껴진다」로 돌아가니 화력 쪽을 낮춘다.
+    dmgMul: 0.8,
     reelSlots: 18, reelMax: 26,
-    handLimit: 7,
+    handLimit: 7, scriptBase: 10,
     blockCapPct: 50, thornCap: 24, overflowConv: 50,
-    hpBase: 60, hpPerAct: 25,
+    hpBase: 60, hpPerAct: 42, costPerAct: 1,   // 전투가 6개 → 13개로 늘어 소모전이 누적된다
     // 막이 길어지면 관객이 야유한다 — 답이 없는 조합으로 버티는 교착을 끝낸다.
     // 이게 없으면 「죽지도 못하고 60턴」이 전체의 7% 였다. 12턴이면 루즈해지기 전에 조인다.
     // 10턴 — 초보의 전투는 길다. 야유가 그걸 실제로 물어야 앞쪽 층이 위협이 된다.
@@ -734,6 +745,7 @@
     var cf = scriptFam(sc);
     if (cf && ch.famDmgMul && ch.famDmgMul[cf]) mul *= ch.famDmgMul[cf];
     var aoe = e.aoe || (cf && ch.aoeFams && ch.aoeFams.indexOf(cf) >= 0);
+    mul *= CFG.dmgMul;
     if (e.damage) { if (aoe) r.aoe += e.damage * hits * mul; else r.dmg += e.damage * hits * mul; }
     if (e.block) r.block += e.block * mul;
     if (e.heal) r.heal += e.heal * mul;
@@ -837,6 +849,10 @@
     slowPer: 0.10, slowCap: 0.45,  // 둔화 1스택당 받는 피해 +10%, 최대 +45%
     burnAoe: 1.75,                 // 화상이 걸린 적에게 광역 피해 1.75배
     poisonLock: 10,                // 독이 10 이상이면 감소하지 않는다
+    // 방어력이 피해를 0 으로 만들면 그 적은 특정 빌드에 「무적」이 된다.
+    // 철갑 인형(방어력 20 · 도트 면역) 앞에서 악장의 광역 5~11 이 전부 0 이 되어
+    // 60턴 교착으로 죽었다. 방어력이 아무리 높아도 20% 는 들어간다.
+    minPierce: 0.2,
     thornsToAoe: 0.3,              // 반사 보유 중이면 방어량의 30% 가 광역 피해로
     hitsToDot: 0.6,                // 다타 대본의 화상·독 = 기본값 × ceil(타수 × 0.6)
     // 반사는 방어력의 절반만 적용받는다. 전액 적용이면 철갑(방어력 20) 하나가
@@ -864,7 +880,7 @@
     if (amount <= 0) return 0;
     if (opt.single && e.evadeSingle && opt.rnd && opt.rnd() < e.evadeSingle) return 0;
     amount = amount * ampMul(e, opt);
-    if (!opt.pierce) amount = Math.max(0, amount - e.def);
+    if (!opt.pierce) amount = Math.max(amount * AMP.minPierce, amount - e.def);
     if (e.block > 0) { var ab = Math.min(e.block, amount); e.block -= ab; amount -= ab; }
     e.hp -= amount;
     return amount;
