@@ -210,7 +210,8 @@
   function snapCombat(S) {
     return { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost, gold: S.gold,
       foes: S.foes.map(cloneFoe), tempN: S.temp.length, dead: false,
-      cheer: S.cheer || 0, lastPlay: S.lastPlay, repeatN: S.repeatN || 0, maxPlay: S.maxPlay || 0 };
+      cheer: S.cheer || 0, lastPlay: S.lastPlay, repeatN: S.repeatN || 0, maxPlay: S.maxPlay || 0,
+      usedF: Object.assign({}, S.usedF || {}) };
   }
 
   // ── 상연 1회를 상태에 적용 ────────────────────────────────
@@ -269,6 +270,8 @@
     }
     C.thorns = Math.min(ctx.thornCap, C.thorns + acc.thorns * (ctx.ch.thornsMul || 1));
     C.hp = Math.min(C.maxHp, C.hp + acc.heal) - (ctx.ch.ignoreSelfDmg ? 0 : acc.selfDmg);
+    // 「타락한 감독」 — 자해로는 쓰러지지 않는다. 위험은 남는다: 피가 낮으면 적이 끝낸다.
+    if (ctx.ch.selfFloor && acc.selfDmg > 0 && C.hp < 1) C.hp = 1;
     if (acc.gold) C.gold += acc.gold;
     if (C.hp <= 0) { C.dead = true; return ev; }
 
@@ -308,10 +311,16 @@
         acc.slow ? '둔화 +' + acc.slow : ''].filter(Boolean).join(' · '));
     }
     var kills = alive.length - C.foes.filter(function (f) { return f.hp > 0; }).length;
+    // 처형에 성공하면 태운 피가 절반 돌아온다 — 자해를 「죽이는 데」 쓰게 만든다
+    if (kills > 0 && ctx.ch.selfRefund && acc.selfDmg > 0) {
+      var back = Math.round(acc.selfDmg * ctx.ch.selfRefund);
+      C.hp = Math.min(C.maxHp, C.hp + back);
+      ev.push('🩸 처형 — 태운 피 ' + back + ' 회수');
+    }
     if (!ctx.noCheer) {
       var need = ctx.cheerNeed ? Math.min(ctx.cheerNeed, ctx.cheerMax || T.CHEER.max)
                                : (ctx.cheerMax || T.CHEER.max);
-      cheerFor(C, sc, kills, ev, need, ctx.ovation, ctx.repeatMul);
+      cheerFor(C, sc, kills, ev, need, ctx.ovation, ctx.repeatMul, ctx.ch.freshBonus || 0);
     }
     return ev;
   }
@@ -319,9 +328,15 @@
   // ── 관중 ─────────────────────────────────────────────────
   // 크게 가면 환호가 오르고, 같은 대본을 반복하면 식는다.
   // 계획 탐색과 실제 진행이 같은 함수를 쓴다 — 그래서 봇이 환호를 계산에 넣는다.
-  function cheerFor(C, sc, kills, ev, cap, ova, repMul) {
+  function cheerFor(C, sc, kills, ev, cap, ova, repMul, fresh) {
     var CH = T.CHEER, d = 0;
     cap = cap || CH.max;
+    // 「관객의 총아」 — 이번 전투에서 처음 올리는 대본마다 환호가 오른다.
+    // 반복 감점 2배와 짝을 이뤄 「매 턴 다른 것」을 강제한다.
+    if (fresh) {
+      if (!C.usedF) C.usedF = {};
+      if (!C.usedF[sc.id]) { C.usedF[sc.id] = 1; d += fresh; }
+    }
     if (sc.tier === 'three' || sc.tier === 'fam') d += CH.onThree;
     if (C.ampHit) d += CH.onAmp;
     if ((sc.effect.hits || 1) >= 3) d += CH.onHits;
@@ -412,7 +427,7 @@
             var C = { hp: nd.C.hp, maxHp: nd.C.maxHp, block: nd.C.block, thorns: nd.C.thorns,
                       cost: nd.C.cost, gold: nd.C.gold, foes: nd.C.foes.map(cloneFoe), dead: false,
                       cheer: nd.C.cheer, lastPlay: nd.C.lastPlay, repeatN: nd.C.repeatN,
-                      maxPlay: nd.C.maxPlay };
+                      maxPlay: nd.C.maxPlay, usedF: Object.assign({}, nd.C.usedF || {}) };
             applyPlay(C, sc, tg, Object.assign({}, ctx, { rnd: function () { return 0.5; } }));
             var n2 = { C: C, seq: nd.seq.concat([{ hi: hi, sc: sc, tgt: tg }]) };
             n2.sc = evaluate(C, C0, ctx.w, ctx);
@@ -578,21 +593,66 @@
   }
 
   // ── 맵 ───────────────────────────────────────────────────
+  // 칸마다 독립으로 굴리면 같은 층에 「비극 비극 비극」이 나온다. 규칙을 둔다.
+  //   ① 같은 층에 특별 노드(비극·소품실·분장실·각색실·사건)가 두 개 오지 않는다.
+  //      공연은 겹쳐도 된다 — 3칸 전부 다른 종류로 강제하면 공연이 구조적으로 1/3 이 상한이 된다
+  //   ② 앞 층에 있던 종류는 가중치가 내려간다 — 같은 것이 연달아 오지 않는다
+  //   ③ 1층은 공연, 2층은 공연이나 사건 — 시작에 벽을 두지 않는다
+  //   ④ 비극은 4층부터, 분장실은 5층부터
+  //   ⑤ 보스 직전 층은 언제나 분장실 — 준비할 자리를 보장한다
+  //   ⑥ 한 판에 소품실·비극·사건이 최소 2개씩은 있게 뒤에서 보정한다
+  // 중복 금지가 공연 비중을 눌러서(40% → 33%) 가중치를 올렸다
+  var MAP_W = { fight: 52, elite: 15, shop: 13, rest: 9, forge: 7, event: 11 };
+  var MAP_MIN = { shop: 2, elite: 2, event: 2 };
+
   function makeMap(rnd) {
-    var floors = [];
+    var floors = [], prev = {};
     for (var f = 0; f < 12; f++) {
-      var n = (f === 0 || f === 11) ? 1 : (rnd() < 0.45 ? 2 : 3), row = [];
+      var n = (f === 0 || f === 11 || f === 10) ? 1 : (rnd() < 0.45 ? 2 : 3);
+      var row = [], used = {};
       for (var c = 0; c < n; c++) {
         var t;
         if (f === 11) t = 'boss';
-        else if (f === 0) t = 'fight';
-        else { var r = rnd();
-          t = r < 0.40 ? 'fight' : r < 0.55 ? 'elite' : r < 0.70 ? 'shop'
-            : r < 0.80 ? 'rest' : r < 0.88 ? 'forge' : 'event'; }
+        else if (f === 10) t = 'rest';                       // ⑤ 보스 직전
+        else if (f === 0) t = 'fight';                       // ③
+        else if (f === 1) {
+          // 2층도 중복 검사를 해야 한다 — 안 하면 「공연 공연 공연」이 나온다
+          var k1 = ['fight', 'event', 'forge'].filter(function (k) { return k === 'fight' || !used[k]; });
+          t = T.pickWeighted(k1.length ? k1 : ['fight'],
+            function (k) { return k === 'fight' ? 70 : k === 'event' ? 20 : 10; }, rnd, 1)[0];
+        }
+        else {
+          var keys = Object.keys(MAP_W).filter(function (k) {
+            if (used[k] && k !== 'fight') return false;       // ①
+            if (k === 'elite' && f < 3) return false;        // ④
+            if (k === 'rest' && f < 4) return false;
+            return true;
+          });
+          if (!keys.length) keys = ['fight'];
+          t = T.pickWeighted(keys, function (k) {
+            return MAP_W[k] * (prev[k] ? 0.45 : 1);          // ②
+          }, rnd, 1)[0];
+        }
+        used[t] = 1;
         row.push({ f: f, c: c, type: t });
       }
+      prev = used;
       floors.push(row);
     }
+    // ⑥ 최소 개수 보정 — 공연 칸을 바꿔서 채운다
+    Object.keys(MAP_MIN).forEach(function (k) {
+      var have = 0;
+      floors.forEach(function (row) { row.forEach(function (nd) { if (nd.type === k) have++; }); });
+      var guard = 0;
+      while (have < MAP_MIN[k] && guard++ < 40) {
+        var f2 = 2 + Math.floor(rnd() * 8), row2 = floors[f2];
+        var cand = row2.filter(function (nd) {
+          return nd.type === 'fight' && !row2.some(function (x) { return x.type === k; });
+        });
+        if (!cand.length) continue;
+        cand[Math.floor(rnd() * cand.length)].type = k; have++;
+      }
+    });
     return floors;
   }
   var NK = { fight: '공연', elite: '비극', shop: '소품실', rest: '분장실', forge: '각색실',
@@ -729,7 +789,7 @@
     });
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
     S.strips = [0, 1, 2, 3].map(function () { return T.buildStrip(S.deck, S.rnd); });
-    S.cheer = S.ch.cheerStart || 0; S.lastPlay = null; S.repeatN = 0;
+    S.cheer = S.ch.cheerStart || 0; S.lastPlay = null; S.repeatN = 0; S.usedF = {};
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     S.ovations = 0;
     if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
@@ -800,10 +860,12 @@
         var aliveBefore = S.foes.filter(function (f) { return f.hp > 0; }).length;
         var C = { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost,
                   gold: S.gold, foes: S.foes, dead: false, ampHit: 0,
-                  cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay };
+                  cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay,
+                  usedF: S.usedF || (S.usedF = {}) };
         var ev = applyPlay(C, a.sc, a.tgt, ctx);
         S.hp = C.hp; S.block = C.block; S.thorns = C.thorns; S.cost = C.cost; S.gold = C.gold;
         S.cheer = C.cheer; S.lastPlay = C.lastPlay; S.repeatN = C.repeatN; S.maxPlay = C.maxPlay;
+        S.usedF = C.usedF || S.usedF;
         if (C.ovation) S.stats.ovations = (S.stats.ovations || 0) + 1;
         if (C.ampHit) ampTurn = 1;
         S.stats.plays++;
@@ -1547,7 +1609,7 @@
     S.stats.fights++;
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false; S.over = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
-    S.cheer = S.ch.cheerStart || 0; S.lastPlay = null; S.repeatN = 0;
+    S.cheer = S.ch.cheerStart || 0; S.lastPlay = null; S.repeatN = 0; S.usedF = {};
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
     S.foes = pickFoes(S, nd).map(function (b) {
@@ -1622,10 +1684,12 @@
     var aliveBefore = S.foes.filter(function (f) { return f.hp > 0; }).length;
     var C = { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost,
               gold: S.gold, foes: S.foes, dead: false, ampHit: 0,
-              cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay };
+              cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay,
+                  usedF: S.usedF || (S.usedF = {}) };
     var ev = applyPlay(C, sc, tgt == null ? -1 : tgt, ctx);
     S.hp = C.hp; S.block = C.block; S.thorns = C.thorns; S.cost = C.cost; S.gold = C.gold;
     S.cheer = C.cheer; S.lastPlay = C.lastPlay; S.repeatN = C.repeatN; S.maxPlay = C.maxPlay;
+        S.usedF = C.usedF || S.usedF;
     if (C.ovation) S.stats.ovations = (S.stats.ovations || 0) + 1;
     if (C.ampHit) S.ampTurn = 1;
     S.stats.plays++;
