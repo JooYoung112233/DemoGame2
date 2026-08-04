@@ -57,6 +57,7 @@
   <div class="row" style="margin-top:8px">
     <button id="validate">데이터 검증</button>
     <button id="reset">기본값 복원</button>
+    <button id="loadArch">아키타입 조합표 불러오기</button>
     <span class="note" id="dataInfo">—</span>
   </div>
 </div>
@@ -65,6 +66,11 @@
   <h1>릴 · 성장</h1>
   <div class="row">
     <label>릴 칸 <input type="number" id="slots" class="w4" value="8"></label>
+    <label>배치 <select id="stripLayout">
+      <option value="paired" selected>계열 2개씩 (조준 성공률 2/3)</option>
+      <option value="grouped">계열 블록 (2/3 → 3/3, 확정)</option>
+      <option value="spread">흩어 배치 (1/3, 조준 무효)</option>
+    </select></label>
     <label>기사 <input type="number" id="cKnight" class="w4" value="3"></label>
     <label>비극 <input type="number" id="cTragedy" class="w4" value="2"></label>
     <label>거울 <input type="number" id="cMirror" class="w4" value="1"></label>
@@ -83,6 +89,8 @@
   <div class="row" style="margin-top:8px">
     <label>발동 라인 <select id="lineMode"><option value="1" selected>1줄 고정</option><option value="grow">1→3→5 성장</option></select></label>
     <label>방어 상한 % <input type="number" id="blockCapPct" value="50"></label>
+    <label>반사 상한 <input type="number" id="thornCap" class="w4" value="24"></label>
+    <label>초과 방어 전환 % <input type="number" id="overflowConv" class="w4" value="50"></label>
     <label>2막 심볼 배수 <input type="number" id="tier2" value="1.5" step="0.1"></label>
     <label>3막 배수 <input type="number" id="tier3" value="2.2" step="0.1"></label>
     <label>2막 기사 +<input type="number" id="dens2" class="w4" value="1"></label>
@@ -91,8 +99,20 @@
     <label>2막 <input type="number" id="cb2" class="w4" value="4"></label>
     <label>3막 <input type="number" id="cb3" class="w4" value="5"></label>
   </div>
+  <div class="row" style="margin-top:8px">
+    <div style="flex:1;min-width:300px">
+      <div class="note" style="margin-bottom:4px">릴 구성 (막별) — 비우면 위 슬라이더를 쓴다</div>
+      <textarea id="dReel" rows="4"></textarea>
+    </div>
+    <div style="flex:1;min-width:300px">
+      <div class="note" style="margin-bottom:4px">보유 조합 (막별 id) — 비우면 목록 앞에서 N개</div>
+      <textarea id="dOwned" rows="4"></textarea>
+    </div>
+  </div>
   <p class="note" style="margin-top:6px">
-    라인은 1막 1줄 · 2막 3줄 · 3막 5줄로 고정한다(설계 3.2). 심볼 배수는 <b>진화</b>로 오른다고 본다.
+    라인은 1줄 고정(23장). 심볼 배수는 <b>진화</b>로 오른다고 본다.
+    <b>보유 조합을 앞에서 N개 자르면 인물 계열 조합만 들어온다</b>(목록 순서가 기사→왕→광대) —
+    계열 선택을 재려면 축마다 하나씩 명시해야 한다.
   </p>
 </div>
 
@@ -103,9 +123,59 @@
     <label>무쇠 장화 <input type="number" id="rBoots" class="w4" value="0"></label>
     <label>가시 갑옷 <input type="number" id="rThorn" class="w4" value="0"></label>
     <label><input type="checkbox" id="rResonance"> 공명석 (2개 같으면 3번째 동기화)</label>
-    <label><input type="checkbox" id="rMirrorShield"> 거울 방패 (초과 방어 → 공격)</label>
+    <label><input type="checkbox" id="rMirrorShield"> 무대 거울 (초과 방어 전환율 2배)</label>
     <span class="note" id="respinInfo">—</span>
   </div>
+</div>
+
+<div class="panel">
+  <h1>턴 방식 — 순차 정산과 중단 결정</h1>
+  <div class="row">
+    <label>정산 <select id="turnMode">
+      <option value="seq" selected>순차 — 릴마다 즉시 발동, 중단 가능</option>
+      <option value="simul">동시 — 3릴 한 번에 (기존)</option>
+    </select></label>
+    <label>중단 정책 <select id="stopPolicy">
+      <option value="smart" selected>기대값 (2수 예측)</option>
+      <option value="lethal">치명타일 때만</option>
+      <option value="never">항상 완주</option>
+    </select></label>
+    <label>조합 정산 <select id="comboMode">
+      <option value="add" selected>개별 + 조합 (보너스)</option>
+      <option value="diff">조합이 개별을 대체 (승격)</option>
+    </select></label>
+    <label>캐릭터 <select id="character">
+      <option value="director" selected>연출가 — 계열 장면 2배</option>
+      <option value="frenzy">광란의 감독 — 기사를 감정 계열로</option>
+      <option value="mirror">거울의 배우 — 반사 상한 1.5배 · 초과 전환 1.5배</option>
+      <option value="fallen">타락한 감독 — 망자 자해 무시 · HP −10</option>
+      <option value="careful">신중한 감독 — 조준 가중치 5</option>
+      <option value="harlequin">어릿광대 — 보석 1장 추가 · HP −5</option>
+    </select></label>
+    <label>조준 모델 <select id="aimModel">
+      <option value="weight" selected>계열 가중치 (박은 개수 = 성공률)</option>
+      <option value="window">±1칸 창 (같은 카드 2장에서 상한)</option>
+    </select></label>
+    <label>가중치 <input type="number" id="aimWeight" class="w4" value="3" step="0.5"></label>
+    <label><b>조준</b> (릴) <select id="aimMode">
+      <option value="none" selected>없음 — 균등 8칸</option>
+      <option value="random">무작위 계열 선언</option>
+      <option value="role">항상 인물만 선언</option>
+      <option value="once">턴당 1회 선언 (보드 읽음)</option>
+      <option value="perreel">릴마다 재선언 (상한)</option>
+    </select></label>
+    <label>망자를 밟으면 <select id="bustMode">
+      <option value="self" selected>자해만 (현행)</option>
+      <option value="half">누적 절반</option>
+      <option value="void">누적 전부 무효</option>
+    </select></label>
+    <span class="note" id="seqInfo">—</span>
+  </div>
+  <p class="note" style="margin-top:6px">
+    순차 모드는 <b>1줄 전용</b>이다. 릴이 멈출 때마다 그 카드의 개별 효과가 즉시 들어가고,
+    다음 릴을 돌릴지 여기서 끊을지 고른다. 3릴을 채우면 조합 판정을 받는다.
+    <b>중단해도 적은 정상적으로 행동한다</b> — 턴을 넘기는 게 아니라 결과를 확정하는 것이다.
+  </p>
 </div>
 
 <div class="panel">
@@ -116,9 +186,13 @@
     <label>보스 목표 턴 <input type="number" id="tgtBoss" value="9" step="1"></label>
     <label>조준 성공률 <input type="number" id="aim" value="0.25" step="0.05"></label>
     <label>판수 <input type="number" id="runs" value="800"></label>
+    <label><input type="checkbox" id="enemyMix"> <b>적 수 1~3 섞기</b> (총 HP·공격 고정)</label>
+    <label><input type="checkbox" id="mixFull"> 섞을 때 마리당 원본 능력치 (총량이 늘어난다)</label>
+    <label><input type="checkbox" id="noOverflow" checked> <b>단일 피해 넘침 금지</b> (초과분 버림)</label>
     <label><input type="checkbox" id="autoHp"> 적 HP 목표 턴수에 자동 맞춤</label>
     <label><input type="checkbox" id="freeCombo" checked> <b>조합 무료 발동 (옛 방식)</b></label>
     <button id="run" class="go">시뮬레이션 실행</button>
+    <button id="compare">정책 비교 — 완주 vs 중단</button>
     <span class="note" id="status">—</span>
   </div>
   <p class="note" style="margin-top:6px">
@@ -135,6 +209,11 @@
 <div class="grid">
   <div class="panel"><h1>판정</h1><table id="verdict"><tbody></tbody></table></div>
   <div class="panel"><h1>막 요약</h1><table id="summary"><tbody></tbody></table></div>
+</div>
+
+<div class="panel">
+  <h1>정책 비교 — 중단 결정이 실제로 이득인가</h1>
+  <pre id="cmp">아직 실행하지 않았다.</pre>
 </div>
 
 <div class="panel">
@@ -164,14 +243,24 @@
     festival:{ name: '축제',  fam: 'stg',  gold: 3 },
     blackout:{ name: '암전',  fam: 'stg',  block: 6 },
     mirror:  { name: '거울',  fam: 'stg',  block: 4, thorns: 3 },
-    prison:  { name: '감옥',  fam: 'stg',  dmg: 4, slow: 1 },
+    // 감옥은 딜+둔화라 성격이 감정 계열이다. 사물(방어·유틸)에 두면
+    // "사물 선언"의 결과가 예측 불가해져 계열 조준이 성립하지 않는다.
+    prison:  { name: '감옥',  fam: 'emo',  dmg: 4, slow: 1 },
     rose:    { name: '장미',  fam: 'stg',  heal: 4, block: 2 },
     gem:     { name: '보석',  fam: 'wild', wild: true },
-    blank:   { name: '빈칸',  fam: 'stg' }
+    blank:   { name: '빈칸',  fam: 'none' }      // 어느 계열 조합에도 끼지 않는다
   };
 
   // 원본 형식 그대로: symbols + matchType(없으면 정확히 3개 매치) / effect는 고정값
-  // 목록 순서 = 우선순위 (첫 매치 채택)
+  // 목록 순서 = 우선순위 (첫 매치 채택).
+  //
+  // 계층이 셋이다. 위쪽이 더 구체적이므로 먼저 검사된다.
+  //   교차 조합  — 계열 2개가 필요하다. 계열 선언으로는 못 노린다. 상급 보상.
+  //   심볼 조합  — 같은 심볼 3개. 계열 선언 + 상점 순도로 확률을 올린다.
+  //   계열 조합  — 같은 계열 3개. 계열 선언으로 직접 노리는 유일한 형태. 하방을 보장한다.
+  //
+  // 조합 효과는 개별 효과에 더해진다(보너스). 대체 방식이면 인물 3개(개별 18딜)가
+  // 계열 조합(14딜)으로 내려앉는 역전이 생긴다.
   var DEF_COMBO = [
     { id: 'knights_oath',    name: '「기사의 맹세」',    symbols: ['knight','knight','knight'],    effect: { damage: 20 } },
     { id: 'kings_soliloquy', name: '「왕의 독백」',      symbols: ['king','king','king'],          effect: { damage: 28 } },
@@ -189,8 +278,79 @@
     { id: 'prison_judgment', name: '「감옥의 심판」',    symbols: ['prison','knight'],  matchType: 'includes', effect: { damage: 16, pierce: true } },
     { id: 'mirror_tragedy',  name: '「거울 속 비극」',   symbols: ['mirror','tragedy'], matchType: 'includes', effect: { damage: 12, block: 6, poison: 2 } },
     { id: 'grand_finale',    name: '「성대한 피날레」',  symbols: ['festival','king'],  matchType: 'includes', effect: { gold: 8, damage: 8 } },
-    { id: 'improvisation',   name: '「즉흥 연극」',      matchType: 'allDifferent',     effect: { damage: 5, block: 5, heal: 4, gold: 3 } }
+    { id: 'improvisation',   name: '「즉흥 연극」',      matchType: 'allDifferent',     effect: { damage: 5, block: 5, heal: 4, gold: 3 } },
+    { id: 'the_cast',        name: '「배역들」',   matchType: 'family', fam: 'role', effect: { damage: 8 } },
+    { id: 'crescendo',       name: '「고조」',     matchType: 'family', fam: 'emo',  effect: { damage: 3, aoe: true, burn: 2 } },
+    { id: 'stagecraft',      name: '「무대장치」', matchType: 'family', fam: 'stg',  effect: { block: 8, thorns: 5 } }
   ];
+
+  // ── 캐릭터 6종 ─────────────────────────────────────────────
+  // 캐릭터는 "어느 빌드를 가능하게 하는가" 로 갈린다.
+  // 특히 famOverride 는 새 카드 없이 설계 공간을 배로 늘린다 —
+  // 같은 릴이 다른 계열로 읽히므로 같은 덱이 다른 덱이 된다.
+  var CHARS = {
+    director:  { name: '연출가',       famComboMul: 2,
+                 note: '계열 장면 효과 2배 — 혼합 덱' },
+    // 계열 재배치만으로는 안 됐다 — 조합률이 34%→72%로 뛰었는데 성적이 같았다.
+    // 발동한 「고조」(딜3 광역)가 너무 약해서 의미가 없었기 때문이다.
+    // 계열을 바꾸는 게 아니라 그 계열 장면의 성질을 바꿔야 한다.
+    frenzy:    { name: '광란의 감독',  aoeFams: ['role'], famDmgMul: { role: 0.6 },
+                 note: '인물 장면이 광역이 된다 · 대신 인물 장면 피해 60%' },
+    // "방어 상한 없음" 은 폐기했다 — 방어가 넘치지 않으면 초과 전환(10.3)이
+    // 발동하지 않아, 반사 캐릭터가 반사덱에서 최하위가 되는 역전이 일어났다.
+    mirror:    { name: '거울의 배우',  thornsMul: 1.5, overflowMul: 1.5,
+                 note: '반사 상한 1.5배 · 초과 방어 전환율 1.5배 — 반사 덱' },
+    fallen:    { name: '타락한 감독',  ignoreSelfDmg: true, hpDelta: -10,
+                 note: '망자 자해 무시 · 최대 HP −10 — 고위험 덱' },
+    careful:   { name: '신중한 감독',  aimWeight: 5,
+                 note: '조준 가중치 3→5 — 아키타입 집중' },
+    harlequin: { name: '어릿광대',     extraWild: 1, hpDelta: -5,
+                 note: '릴에 보석 1장 추가 · 최대 HP −5 — 모든 장면 성립률 상승' }
+  };
+  var CH = {};      // 현재 캐릭터
+
+  // ── 아키타입 장면 ──────────────────────────────────────────
+  // 카드마다 자기 덱을 갖는다. 같은 카드 2장 = 아키타입 발동, 3장 = 완전 발동.
+  // 계열 가중치 조준에서는 그 카드를 릴에 많이 박을수록 발동률이 오르므로,
+  // "기사만 몰아넣은 덱" 이 실제로 보상받는다.
+  // 목록 순서가 우선순위이므로 완전(3장) → 아키타입(2장) → 계열 순으로 놓는다.
+  // 광역은 마리 수만큼 곱해지므로 단일의 1/3 근처가 균형점이다.
+  // 기사3 = 단일 26.  분노3 = 광역 8 → 1마리 8 / 3마리 24. 이제 상황에 따라 갈린다.
+  // 하향 전에는 분노 몰아주기 덱이 전체 1위(53.5%)로 모든 상황을 혼자 처리했다.
+  var ARCHETYPES = [
+    // 인물 — 단일 표적
+    { card: 'knight',   name: '기사의 맹세',     three: { damage: 26 } },
+    { card: 'king',     name: '왕의 독백',       three: { damage: 32 } },
+    { card: 'jester',   name: '광대의 난무',     three: { damage: 5, hits: 6 } },
+    { card: 'priest',   name: '성무',            three: { heal: 18, block: 10 } },
+    { card: 'dagger',   name: '연속 자돌',       three: { damage: 4, hits: 6 } },
+    { card: 'dead',     name: '망령의 대가',     three: { damage: 34, selfDamage: 10 } },
+    // 감정 — 광역 · 지속
+    { card: 'rage',     name: '불타는 무대',     three: { damage: 8, aoe: true, burn: 5 } },
+    { card: 'tragedy',  name: '피의 3막',        three: { damage: 20, poison: 7 } },
+    { card: 'cold',     name: '얼어붙은 오페라', three: { damage: 7, aoe: true, slow: 4 } },
+    { card: 'fear',     name: '공포의 인형극',   three: { damage: 9, aoe: true, slow: 3 } },
+    { card: 'prison',   name: '감옥의 심판',     three: { damage: 22, pierce: true } },
+    // 사물 — 방어 · 반사. 반사가 이 계열의 공격 수단이다.
+    // 반사는 적 수에 비례해 폭발한다(3마리면 3배). 18 로 올렸더니 거울 반사덱이
+    // 전 캐릭터에서 100% 가 되어 거울의 배우 전용이라는 성격을 잃었다. 12 로 되돌린다.
+    { card: 'blackout', name: '완전한 암전',     three: { block: 24, thorns: 5 } },
+    { card: 'mirror',   name: '거울의 방',       three: { block: 14, thorns: 12 } },
+    { card: 'rose',     name: '장미의 정원',     three: { heal: 14, block: 12 } },
+    { card: 'festival', name: '성대한 축연',     three: { gold: 20, block: 8 } }
+  ];
+
+  // 아키타입 표를 조합 목록으로 펼친다 (같은 카드 3장 → 계열 3장)
+  function expandArchetypes() {
+    // fam 은 캐릭터 효과("인물 장면이 광역이 된다")를 걸기 위한 꼬리표다.
+    // 계열 재배치(famOverride)와 무관하게 카드의 본래 계열을 쓴다.
+    var full = ARCHETYPES.map(function (a) {
+      return { id: a.card + '_3', name: '「' + a.name + '」', fam: (DEF_SYM[a.card] || {}).fam,
+               symbols: [a.card, a.card, a.card], effect: a.three };
+    });
+    var fams = DEF_COMBO.filter(function (c) { return c.matchType === 'family'; });
+    return full.concat(fams);
+  }
 
   // intents: 가중치 무작위. attack / doubleStrike / defend / buff / healAll / attackBleed / attackBurn
   var DEF_ENEMY = [
@@ -210,19 +370,58 @@
       intents: [['attack',2],['attackBurn',1,5],['defend',1,15],['buff',1,6]] }
   ];
 
+  // 계열 3축을 다 노릴 수 있는 릴. 8칸이면 계열마다 창(3칸)에 2개는 들어가야 하므로
+  // 3+3+2 가 한계다 — 사물이 2개뿐이라 「완전한 암전」은 사실상 안 나온다.
+  var DEF_REEL = {
+    "1": { knight: 3, rage: 3, blackout: 2 },
+    "2": { knight: 3, rage: 3, blackout: 2 },
+    "3": { knight: 3, rage: 3, blackout: 2 }
+  };
+  // 비워두면 조합 목록 앞에서 N개(cb1/cb2/cb3). 아키타입 표를 쓸 때는
+  // 장면이 카드에 딸려 있으므로 전부 보유가 기본이다.
+  var DEF_OWNED = {};
+
   function loadDefaults() {
     el('dSym').value = JSON.stringify(DEF_SYM, null, 1);
     el('dCombo').value = JSON.stringify(DEF_COMBO, null, 1);
     el('dEnemy').value = JSON.stringify(DEF_ENEMY, null, 1);
+    el('dReel').value = JSON.stringify(DEF_REEL);
+    el('dOwned').value = Object.keys(DEF_OWNED).length ? JSON.stringify(DEF_OWNED) : '';
   }
 
   var SYM = DEF_SYM, COMBO = DEF_COMBO, ENEMY = DEF_ENEMY;
+
+  // 진화 카드 자동 생성 — 각색실에서 같은 카드 3장을 1장으로 압축한 것.
+  // 한 칸이 3장으로 세므로 그 카드의 장면을 혼자 성립시키고, 릴에 2칸이 빈다.
+  // 그 빈 칸이 몰아주기 덱의 유일한 출구다(기사6 덱이 전 캐릭터에서 0%였다).
+  // 개별 효과는 3배가 아니라 2.2배다. 압축의 보상은 **빈 칸**이어야 하고,
+  // 3배면 장면 판정(3장 카운트)과 개별 효과가 이중으로 붙어 너무 강해진다
+  // (실측: 기사 진화 덱이 86.5%로 이전 최고점 31.7%의 세 배).
+  var EVO_MUL = 2.2;
+
+  // 장면 판정에서는 2장으로만 센다. 3장으로 세면 진화 카드 1장이 혼자 장면을
+  // 성립시켜서(실측 97~99% 완주) 진화가 아키타입을 강화하는 게 아니라 대체해버린다.
+  // 2장이면 「대기사 + 기사」 를 같이 들어야 하므로 아키타입을 버릴 수 없다.
+  var EVO_COUNTS = 2;
+
+  function addEvolutions() {
+    var FX = ['dmg', 'block', 'heal', 'burn', 'poison', 'thorns', 'slow', 'gold', 'selfDmg'];
+    Object.keys(SYM).forEach(function (id) {
+      var d = SYM[id];
+      if (d.as || d.wild || id === 'blank' || /_evo$/.test(id)) return;
+      var e = { name: '대' + d.name, fam: d.fam, as: id, counts: EVO_COUNTS };
+      FX.forEach(function (k) { if (d[k]) e[k] = Math.round(d[k] * EVO_MUL * 10) / 10; });
+      if (d.hits) e.hits = d.hits;
+      SYM[id + '_evo'] = e;
+    });
+  }
 
   function parseData() {
     try {
       SYM = JSON.parse(el('dSym').value);
       COMBO = JSON.parse(el('dCombo').value);
       ENEMY = JSON.parse(el('dEnemy').value);
+      addEvolutions();
       el('dataInfo').innerHTML = '<span class="ok">심볼 ' + Object.keys(SYM).length +
         ' · 조합 ' + COMBO.length + ' · 적 ' + ENEMY.length + '</span>';
       return true;
@@ -233,7 +432,22 @@
   }
 
   // ---------- 릴 ----------
+  function jsonOrNull(id) {
+    var v = el(id).value.trim();
+    if (!v) return null;
+    try { return JSON.parse(v); } catch (e) { return null; }
+  }
+
   function stripCounts(act) {
+    var custom = jsonOrNull('dReel');
+    if (custom) {
+      var r = custom[String(act)] || custom[act];
+      if (r) {
+        var out = {};
+        Object.keys(r).forEach(function (k) { out[k] = r[k]; });
+        return out;
+      }
+    }
     var c = {};
     c.knight = ii('cKnight', 3) + (act >= 2 ? ii('dens2', 1) : 0) + (act >= 3 ? ii('dens3', 2) - ii('dens2', 1) : 0);
     c.tragedy = ii('cTragedy', 2);
@@ -256,8 +470,38 @@
     }
     var pool = [];
     Object.keys(c).forEach(function (k) { for (var i = 0; i < c[k]; i++) pool.push(k); });
+    for (var gw = 0; gw < (CH.extraWild || 0); gw++) pool.push('gem');   // 어릿광대
     while (pool.length < slots) pool.push('blank');
     pool.length = slots;
+
+    // 배치가 조준의 성립 여부를 정한다. 조준 창은 3칸이므로 창 안에 들어오는
+    // 같은 계열 칸 수가 곧 성공률이다.
+    //   흩어(spread) → 창에 1칸 → 성공률 1/3, 균등(3/8)보다 낮아 조준이 해롭다
+    //   블록(grouped) → 창에 3칸 → 성공률 100%, ±1 오차가 무의미해지고 조합이 매 턴 터진다
+    //   쌍(paired)   → 창에 2칸 → 성공률 2/3. 이게 노리는 지점이다
+    var layout = el('stripLayout').value;
+    if (layout === 'grouped' || layout === 'paired') {
+      var byFam = {};
+      pool.forEach(function (s) { (byFam[famOf(s)] = byFam[famOf(s)] || []).push(s); });
+      var fams = Object.keys(byFam).sort();
+      if (layout === 'grouped') {
+        var g2 = [];
+        fams.forEach(function (f) { g2 = g2.concat(byFam[f].sort()); });
+        return g2;
+      }
+      // 쌍 배치 — 계열마다 2개씩 떼어 돌아가며 놓는다
+      var out2 = [], left = true;
+      while (out2.length < slots && left) {
+        left = false;
+        for (var fi = 0; fi < fams.length; fi++) {
+          var arr = byFam[fams[fi]];
+          for (var t2 = 0; t2 < 2 && arr.length && out2.length < slots; t2++) out2.push(arr.pop());
+          if (arr.length) left = true;
+        }
+      }
+      return out2;
+    }
+
     // 같은 심볼이 뭉치지 않게 라운드로빈 배치 — 다중 라인 분산을 줄인다
     var g = {};
     pool.forEach(function (s) { (g[s] = g[s] || []).push(s); });
@@ -272,34 +516,49 @@
   }
 
   // ---------- 조합 판정 ----------
-  function famOf(s) { return (SYM[s] && SYM[s].fam) || 'etc'; }
+  // 캐릭터가 카드의 계열을 재배치할 수 있다 (유희왕의 속성 변경과 같은 자리).
+  function famOf(s) {
+    if (CH.famOverride && CH.famOverride[s]) return CH.famOverride[s];
+    return (SYM[s] && SYM[s].fam) || 'etc';
+  }
   function isWild(s) { return !!(SYM[s] && SYM[s].wild); }
 
   // 원본 SlotMachine.evaluateCombo 와 같은 규칙
+  // 진화 카드는 한 칸이 여러 장으로 센다 (설계 13장, 3→1 압축).
+  // 그래서 매치 판정을 "칸을 짝지을 수 있나" 에서 "필요한 장수를 채울 수 있나" 로 바꾼다.
+  function cardCounts(L) {
+    var c = {}, wild = 0;
+    L.forEach(function (s) {
+      var d = SYM[s] || {};
+      if (d.wild) { wild++; return; }
+      var base = d.as || s;
+      c[base] = (c[base] || 0) + (d.counts || 1);
+    });
+    return { c: c, wild: wild };
+  }
+
   function matchCombo(cb, line) {
+    // 계열 3개 — 계열 선언으로 직접 노릴 수 있는 유일한 형태.
+    // 같은 심볼 3개는 계열을 선언해도 심볼을 특정할 수 없으므로 노릴 수 없다.
+    if (cb.matchType === 'family') {
+      for (var f = 0; f < line.length; f++) {
+        if (isWild(line[f])) continue;
+        if (famOf(line[f]) !== cb.fam) return false;
+      }
+      return true;
+    }
     if (cb.matchType === 'allDifferent') {
       if (line.indexOf('gem') >= 0) return false;
       return new Set(line).size === line.length;
     }
-    if (cb.matchType === 'includes') {
-      var pool = line.slice(), w = line.filter(isWild).length;
-      for (var i = 0; i < cb.symbols.length; i++) {
-        var idx = pool.indexOf(cb.symbols[i]);
-        if (idx >= 0) pool.splice(idx, 1);
-        else if (w > 0) w--;
-        else return false;
-      }
-      return true;
-    }
-    // 정확히 3개 매치 (와일드 허용)
-    var used = new Array(line.length).fill(false);
-    for (var k = 0; k < cb.symbols.length; k++) {
-      var found = false;
-      for (var j = 0; j < line.length; j++) {
-        if (used[j]) continue;
-        if (line[j] === cb.symbols[k] || isWild(line[j])) { used[j] = true; found = true; break; }
-      }
-      if (!found) return false;
+    // includes 와 3개 매치를 하나로 합친다 — 둘 다 "필요한 장수를 채울 수 있나" 다.
+    var info = cardCounts(line), need = {}, wild = info.wild;
+    cb.symbols.forEach(function (s) { need[s] = (need[s] || 0) + 1; });
+    var keys = Object.keys(need);
+    for (var i = 0; i < keys.length; i++) {
+      var have = info.c[keys[i]] || 0, gap = need[keys[i]] - have;
+      if (gap <= 0) continue;
+      if (wild >= gap) wild -= gap; else return false;
     }
     return true;
   }
@@ -315,14 +574,21 @@
              selfDmg: 0, thorns: 0, burn: 0, poison: 0, pierce: 0 };
   }
 
+  // 같은 카드 2장 = 조용한 강화. 이름 붙은 장면은 3장부터다.
+  // 2장에 장면을 주면 카드 15종 전부가 짝을 갖게 되어 조합률이 100%가 되고
+  // "장면이 터졌다" 는 사건이 사건이 아니게 된다.
+  var PAIR_BOOST = 0.5;
+
   function individual(line, mul) {
-    var r = blank();
+    var r = blank(), cnt = {};
+    line.forEach(function (s) { cnt[s] = (cnt[s] || 0) + 1; });
     line.forEach(function (s) {
       var d = SYM[s]; if (!d) return;
       var hits = d.hits || 1;
-      if (d.dmg) r.dmg += d.dmg * hits * mul;
-      if (d.block) r.block += d.block * mul;
-      if (d.heal) r.heal += d.heal * mul;
+      var m = cnt[s] === 2 ? mul * (1 + PAIR_BOOST) : mul;   // 짝일 때만, 그 카드만
+      if (d.dmg) r.dmg += d.dmg * hits * m;
+      if (d.block) r.block += d.block * m;
+      if (d.heal) r.heal += d.heal * m;
       if (d.burn) r.burn += d.burn;
       if (d.poison) r.poison += d.poison;
       if (d.thorns) r.thorns += d.thorns;
@@ -336,13 +602,20 @@
   function comboEffect(cb, mul) {
     var e = cb.effect || {}, r = blank();
     var hits = e.hits || 1;
-    if (e.damage) { if (e.aoe) r.aoe += e.damage * hits * mul; else r.dmg += e.damage * hits * mul; }
+    if (cb.matchType === 'family' && CH.famComboMul) mul = mul * CH.famComboMul;
+    // 캐릭터가 특정 계열 장면의 성질을 바꾼다 (광란의 감독: 인물 장면 → 광역, 피해 60%)
+    var cf = cb.fam;
+    if (cf && CH.famDmgMul && CH.famDmgMul[cf]) mul = mul * CH.famDmgMul[cf];
+    var aoe = e.aoe || (cf && CH.aoeFams && CH.aoeFams.indexOf(cf) >= 0);
+    if (e.damage) { if (aoe) r.aoe += e.damage * hits * mul; else r.dmg += e.damage * hits * mul; }
     if (e.block) r.block += e.block * mul;
     if (e.heal) r.heal += e.heal * mul;
     if (e.burn) r.burn += e.burn;
     if (e.poison) r.poison += e.poison;
     if (e.slow) r.slowAll += e.slow;
     if (e.gold) r.gold += e.gold;
+    if (e.thorns) r.thorns += e.thorns;
+    if (e.selfDamage) r.selfDmg += e.selfDamage;
     if (e.pierce) r.pierce = 1;
     return r;
   }
@@ -352,15 +625,32 @@
   }
 
   // ---------- 성장 ----------
-  function nodeParams(act, isBoss) {
+  function nodeParams(act, isBoss, over) {
+    over = over || {};
+    var seq = (over.turnMode || el('turnMode').value) === 'seq';
     var grow = el('lineMode').value === 'grow';
-    var lines = grow ? (act >= 3 ? 5 : (act >= 2 ? 3 : 1)) : 1;
+    var lines = seq ? 1 : (grow ? (act >= 3 ? 5 : (act >= 2 ? 3 : 1)) : 1);
     var mul = act >= 3 ? n('tier3', 2.2) : (act >= 2 ? n('tier2', 1.5) : 1);
-    var maxHp = ii('hp0', 60) + ii('hpAct', 25) * (act - 1);
+    var maxHp = ii('hp0', 60) + ii('hpAct', 25) * (act - 1) + (CH.hpDelta || 0);
     var cue = ii('cue0', 2) + ii('cueAct', 1) * (act - 1);
     var cbCount = act >= 3 ? ii('cb3', 5) : (act >= 2 ? ii('cb2', 4) : ii('cb1', 2));
+    var ownList = jsonOrNull('dOwned');
+    var owned = null;
+    if (ownList) {
+      var ids = ownList[String(act)] || ownList[act];
+      if (ids) owned = ids.map(function (id) {
+        return COMBO.filter(function (c) { return c.id === id; })[0];
+      }).filter(Boolean);
+    }
+    // 빈 배열도 폴백시킨다 — id 를 잘못 적으면 조합이 하나도 없는 채로 조용히 돌아간다
+    if (!owned || !owned.length) owned = COMBO.slice(0, cbCount);
     return { act: act, lines: lines, mul: mul, maxHp: maxHp, cue: cue,
-             owned: COMBO.slice(0, cbCount), isBoss: !!isBoss };
+             owned: owned, isBoss: !!isBoss,
+             seq: seq, policy: over.policy || el('stopPolicy').value,
+             comboMode: over.comboMode || el('comboMode').value,
+             bustMode: over.bustMode || el('bustMode').value,
+             aimMode: over.aimMode || el('aimMode').value,
+             aimModel: over.aimModel || el('aimModel').value };
   }
 
   function offsets(lines) { return lines >= 3 ? [0, -1, 1] : [0]; }
@@ -385,6 +675,278 @@
     };
   }
 
+  // ---------- 순차 정산 · 중단 결정 ----------
+  // 중단할지 판단하려면 "이 턴 결과가 얼마나 좋은가" 를 하나의 수로 접어야 한다.
+  // 상태 의존이 핵심이다 — 이미 다 죽일 수 있으면 추가 피해는 0점이고,
+  // 방어가 상한에 붙었으면 추가 방어도 0점이다. 그래야 중단이 이길 여지가 생긴다.
+  var KILL_TURNS = 2;   // 적을 죽여서 벌어들이는 턴 수 (남은 전투 길이 근사)
+
+  function stateCtx(es, hp, maxHp, block, cap) {
+    var ehp = 0, incoming = 0;
+    es.forEach(function (x) {
+      ehp += x.hp + (x.block || 0);
+      if (x.t <= 1) incoming += x.atk;     // 다음 턴에 때릴 적만 위협으로 센다
+    });
+    // 표적 정책(HP 낮은 적부터)과 같은 순서로 정렬해 둔다
+    var list = es.map(function (x) {
+      return { ehp: x.hp + (x.block || 0), dps: x.atk / Math.max(1, x.cd) };
+    }).sort(function (a, b) { return a.ehp - b.ehp; });
+    return { ehp: ehp, count: es.length, incoming: incoming, list: list,
+             noOv: el('noOverflow').checked,
+             healRoom: Math.max(0, maxHp - hp), blockRoom: Math.max(0, cap - block) };
+  }
+
+  function score(a, ctx) {
+    var s = 0;
+    s += Math.min(a.dmg, ctx.ehp);                       // 오버킬은 값이 없다
+    s += Math.min(a.aoe * ctx.count, ctx.ehp);
+    s += (a.poison + a.burn) * 2;
+    s += a.thorns * 0.5 + a.slow * 1.5 + a.slowAll * 2;
+    var b = Math.min(a.block, ctx.blockRoom);            // 상한 초과분은 값이 없다
+    s += Math.min(b, ctx.incoming) + Math.max(0, b - ctx.incoming) * 0.4;
+    s += Math.min(a.heal, ctx.healRoom);
+    s += a.gold * 0.3;
+    s -= a.selfDmg * 1.5;                                // HP가 피해보다 귀하다
+
+    // 적을 죽이면 그 적의 남은 공격이 사라진다. 이 항이 없으면 단일 버스트와
+    // 광역 분산을 구분할 수 없다 — 20딜 하나로 한 마리를 죽이는 것과
+    // 10딜씩 세 마리에 나눠 아무도 못 죽이는 것이 같은 점수가 되어버린다.
+    var killed = 0, gone = {}, rem = a.dmg;
+    for (var i = 0; i < ctx.list.length && rem >= ctx.list[i].ehp; i++) {
+      gone[i] = true; killed += ctx.list[i].dps * KILL_TURNS;
+      if (ctx.noOv) break;                 // 넘침 금지면 단일은 한 마리만 죽인다
+      rem -= ctx.list[i].ehp;
+    }
+    if (a.aoe > 0) for (var j = 0; j < ctx.list.length; j++)
+      if (!gone[j] && a.aoe >= ctx.list[j].ehp) killed += ctx.list[j].dps * KILL_TURNS;
+    s += killed;
+    return s;
+  }
+
+  function resonate(L) {
+    var cnt = {};
+    L.forEach(function (s) { if (s !== 'dead') cnt[s] = (cnt[s] || 0) + 1; });
+    var pair = Object.keys(cnt).filter(function (k) { return cnt[k] === 2; })[0];
+    return pair ? L.map(function (s) { return cnt[s] === 2 ? s : pair; }) : L;
+  }
+
+  // 파산(bust) — 나쁜 칸을 밟으면 이번 턴 누적이 무효/절반이 된다.
+  // 위험이 "이미 쌓아둔 값" 에 비례해야 계속/중단이 진짜 저울질이 된다.
+  function isBust(s) {
+    var d = SYM[s];
+    return !!(d && (d.bust || s === 'dead' || d.as === 'dead'));
+  }
+  function bustScale(mode) { return mode === 'void' ? 0 : (mode === 'half' ? 0.5 : null); }
+  function isBustLine(L, mode) { return bustScale(mode) !== null && L.some(isBust); }
+
+  // 릴이 k개 멈춘 시점의 누적 (조합 판정 전)
+  function partialAcc(L, p, bust) {
+    var k = bustScale(bust);
+    if (k !== null && L.some(isBust)) {
+      var a = individual(L.filter(function (s) { return !isBust(s); }), p.mul);
+      Object.keys(a).forEach(function (key) { a[key] *= k; });
+      return a;                                   // 자해도 없다 — 무대가 무너진 것으로 본다
+    }
+    return individual(L, p.mul);
+  }
+
+  // 줄 정산 결과 캐시. 릴별 재선언은 같은 줄을 수천 번 다시 계산하므로 필수다.
+  // acc 는 ctx 와 무관하니 안전하게 캐시할 수 있다 (score 만 ctx 에 의존).
+  var lineCache = {};
+  function clearLineCache() { lineCache = {}; }
+
+  // 3심볼이 확정된 줄의 최종 정산
+  function resolveLine(L, p, comboAdd, reson, bust) {
+    // 막마다 보유 조합이 다를 수 있으니 act 를 키에 넣는다. 캐시는 simulate() 시작에 비운다.
+    var key = p.act + '@' + L.join('|') + '#' + p.mul + '#' +
+              (comboAdd ? 1 : 0) + (reson ? 1 : 0) + bust;
+    var hit = lineCache[key];
+    if (!hit) {
+      if (reson) L = resonate(L);
+      var k = bustScale(bust);
+      if (k !== null && L.some(isBust)) {
+        hit = { acc: partialAcc(L, p, bust), combo: null };
+      } else {
+        var a = individual(L, p.mul);
+        var cb = firstCombo(L, p.owned);
+        if (cb) {
+          if (comboAdd) addTo(a, comboEffect(cb, p.mul));
+          else a = comboEffect(cb, p.mul);
+        }
+        hit = { acc: a, combo: cb };
+      }
+      lineCache[key] = hit;
+    }
+    // 호출자가 acc 를 그 자리에서 수정하므로(방어 상한, 거울 방패) 반드시 복사해서 준다.
+    return { acc: Object.assign({}, hit.acc), combo: hit.combo };
+  }
+
+  // 계속했을 때의 기대 점수. 남은 릴을 균등 분포로 전개하고,
+  // 2릴 남았으면 중간에 다시 판단할 수 있다는 것까지 반영한다 (2수 예측).
+  function evContinue(strips, p, chosen, ctx, o) {
+    var k = chosen.length;
+    if (k >= 3) return score(resolveLine(chosen, p, o.comboAdd, o.reson, o.bust).acc, ctx);
+    if (k === 2) {
+      var st = strips[2], sum = 0;
+      for (var i = 0; i < st.length; i++)
+        sum += score(resolveLine(chosen.concat([st[i]]), p, o.comboAdd, o.reson, o.bust).acc, ctx);
+      return sum / st.length;
+    }
+    var s2 = strips[1], s3 = strips[2], out = 0;
+    for (var a = 0; a < s2.length; a++) {
+      var mid = chosen.concat([s2[a]]);
+      var stopHere = score(partialAcc(mid, p, o.bust), ctx);
+      var go = 0;
+      for (var b = 0; b < s3.length; b++)
+        go += score(resolveLine(mid.concat([s3[b]]), p, o.comboAdd, o.reson, o.bust).acc, ctx);
+      out += Math.max(stopHere, go / s3.length);
+    }
+    return out / s2.length;
+  }
+
+  // ---------- 조준 (릴) ----------
+  // 설계 4장: 조준하면 ±1칸 오차로 멈춘다. 즉 어디 설지 3칸까지 좁혀 알 수 있다.
+  // 도박이 아니라 읽기가 된다 — 답이 매번 달라지므로 판단이 성립한다.
+  function win3(st, t) {
+    var L = st.length;
+    return [st[(t - 1 + L) % L], st[t % L], st[(t + 1) % L]];
+  }
+
+  // 설계 4.1: 회전 중에는 계열(인물/문양/사물)만 구분된다. 세부 심볼은 멈춘 뒤에 읽는다.
+  // 그래서 조준은 "심볼 겨냥"이 아니라 "계열 선언"이다 —
+  // 인물을 노리면 기사(딜20 조합)도 망자(자해)도 같은 계열이라 같이 딸려온다.
+  var FAMS = ['role', 'emo', 'stg'];
+  var FAM_KO = { role: '인물', emo: '감정', stg: '사물' };
+
+  // 조준 모델 2 — 계열 가중치.
+  // 선언한 계열 칸에 가중치 w 를 주고 릴 전체에서 뽑는다. 확정이 아니다.
+  //   P(계열) = w·k / (w·k + (n−k))     k = 그 계열 칸 수
+  // 창(window) 방식은 창이 3칸이라 같은 카드를 2장 넘게 넣어도 발동률이 오르지 않는다.
+  // 즉 아키타입 덱("기사만 몰아넣기")이 보상받지 못한다. 가중치 방식은
+  // 4.1의 "릴에 박은 개수 = 조준 성공률" 을 문자 그대로 성립시킨다.
+  function famProbs(st, fam, w) {
+    var p = [], tot = 0, i;
+    for (i = 0; i < st.length; i++) { var v = (famOf(st[i]) === fam ? w : 1); p.push(v); tot += v; }
+    for (i = 0; i < p.length; i++) p[i] /= tot;
+    return p;
+  }
+
+  function drawWeighted(st, p, rng) {
+    var r = rng();
+    for (var i = 0; i < st.length; i++) { r -= p[i]; if (r <= 0) return st[i]; }
+    return st[st.length - 1];
+  }
+
+  // 선언한 계열이 가장 많은 3칸 창을 노린다. 착지는 창 안에서 균등 = ±1칸 오차.
+  function famWindow(st, fam) {
+    var bt = 0, bc = -1;
+    for (var t = 0; t < st.length; t++) {
+      var w = win3(st, t), c = 0;
+      for (var i = 0; i < 3; i++) if (famOf(w[i]) === fam) c++;
+      if (c > bc) { bc = c; bt = t; }
+    }
+    return win3(st, bt);
+  }
+
+  // 계열 fam 을 선언했을 때 이 턴의 기대 점수.
+  // perReel 이면 다음 릴에서 다시 최적 계열을 고를 수 있다고 보고 계산한다.
+  function evDecl(strips, chosen, fam, p, ctx, o, perReel) {
+    var k = chosen.length;
+    if (k >= 3) return score(resolveLine(chosen, p, o.comboAdd, o.reson, o.bust).acc, ctx);
+
+    // 착지 후보와 그 확률. 창 방식은 3칸 균등, 가중치 방식은 릴 전체에 가중치.
+    var cells, prob;
+    if (o.aimModel === 'weight') {
+      cells = strips[k];
+      prob = o.wts[k][fam];
+    } else {
+      cells = o.wins[k][fam];
+      prob = [1 / 3, 1 / 3, 1 / 3];
+    }
+
+    var sum = 0;
+    for (var i = 0; i < cells.length; i++) {
+      if (prob[i] <= 0) continue;
+      var next = chosen.concat([cells[i]]), v;
+      if (k === 2) {
+        v = score(resolveLine(next, p, o.comboAdd, o.reson, o.bust).acc, ctx);
+      } else if (perReel) {
+        v = -Infinity;
+        for (var f = 0; f < FAMS.length; f++)
+          v = Math.max(v, evDecl(strips, next, FAMS[f], p, ctx, o, true));
+      } else {
+        v = evDecl(strips, next, fam, p, ctx, o, false);
+      }
+      sum += v * prob[i];
+    }
+    return sum;
+  }
+
+  function declare(strips, chosen, p, ctx, o, perReel) {
+    var bf = FAMS[0], bv = -Infinity;
+    for (var f = 0; f < FAMS.length; f++) {
+      var v = evDecl(strips, chosen, FAMS[f], p, ctx, o, perReel);
+      if (v > bv) { bv = v; bf = FAMS[f]; }
+    }
+    return bf;
+  }
+
+  function seqTurn(strips, p, rng, ctx, opt) {
+    var mode = opt.aimMode;
+    var chosen = [], decls = [];
+    // 턴당 1회 선언은 스핀 전에 한 번만 정한다.
+    var once = mode === 'once' ? declare(strips, [], p, ctx, opt, false) : null;
+
+    for (var k = 0; k < 3; k++) {
+      var fam = null;
+      if (mode === 'random') fam = FAMS[Math.floor(rng() * FAMS.length)];
+      else if (mode.slice(0, 4) === 'fix:') fam = mode.slice(4);   // 계열 하나로 고정
+      else if (mode === 'role') fam = 'role';
+      else if (mode === 'once') fam = once;
+      else if (mode === 'perreel') fam = declare(strips, chosen, p, ctx, opt, true);
+
+      if (k > 0 && opt.policy !== 'never') {
+        var stopVal = score(partialAcc(chosen, p, opt.bust), ctx);
+        var contVal = fam
+          ? evDecl(strips, chosen, fam, p, ctx, opt, mode === 'perreel')
+          : evContinue(strips, p, chosen, ctx, opt);
+        if (opt.policy === 'lethal') {
+          if (stopVal >= ctx.ehp) break;                       // 오버킬만 피한다
+        } else if (opt.policy === 'random') {
+          if (rng() < 0.35) break;                             // 아무 생각 없이 끊는다
+        } else if (opt.policy === 'early') {
+          if (k === 2) break;                                  // 항상 2릴에서 끊는다
+        } else if (opt.policy === 'invert') {
+          if (contVal > stopVal + 1e-9) break;                 // 일부러 반대로
+        } else if (contVal <= stopVal + 1e-9) break;
+      }
+
+      var st = strips[k], sym;
+      if (fam) {
+        decls.push(fam);
+        sym = opt.aimModel === 'weight'
+          ? drawWeighted(st, opt.wts[k][fam], rng)              // 계열 가중치
+          : opt.wins[k][fam][Math.floor(rng() * 3)];            // 창 안에서 ±1칸 오차
+      } else {
+        sym = st[Math.floor(rng() * st.length)];
+      }
+      chosen.push(sym);
+    }
+    if (chosen.length < 3)
+      return { acc: partialAcc(chosen, p, opt.bust), reels: chosen.length, combo: null };
+
+    var res = resolveLine(chosen, p, opt.comboAdd, opt.reson, opt.bust);
+    // 재연 부적 — 완주했을 때만 3번째 릴을 다시 굴려 더 좋은 쪽을 취한다
+    if (rng() < opt.respinP) {
+      var st3 = strips[2], alt = chosen.slice(0, 2).concat([st3[Math.floor(rng() * st3.length)]]);
+      var res2 = resolveLine(alt, p, opt.comboAdd, opt.reson, opt.bust);
+      if (score(res2.acc, ctx) > score(res.acc, ctx)) res = res2;
+      res.respun = true;
+    }
+    return { acc: res.acc, reels: 3, combo: res.combo, respun: !!res.respun,
+             busted: isBustLine(chosen, opt.bust), decls: decls };
+  }
+
   // ---------- 한 판 ----------
   function fight(p, foes, rng, stat) {
     var strips = [buildStrip(p.act), buildStrip(p.act), buildStrip(p.act)];
@@ -394,7 +956,9 @@
     var aim = n('aim', 0.25);
 
     var freeCombo = el('freeCombo').checked;
-    var hp = p.maxHp, block = ii('rBoots', 0) ? 0 : 0, cue = p.cue, gauge = 0;
+    // 반사는 방어와 같은 문법으로 전투 동안 유지된다(10장 영구 방어).
+    // 원본에서는 심볼의 반사가 로그만 남기고 아무 일도 하지 않았다 — 여기서 채운다.
+    var hp = p.maxHp, block = 0, thorns = 0, cue = p.cue, gauge = 0;
     var es = foes.map(function (f) {
       return {
         hp: f.hp, atk: f.atk, def: f.def || 0, cd: f.cd, t: f.cd, block: 0,
@@ -413,64 +977,103 @@
       });
     });
     var turns = 0, comboTurns = 0, respins = 0, maxBlock = 0, dealt = 0;
+    var stops = 0, reelSum = 0, busts = 0, decl = {};
+    var cap0 = p.maxHp * (n('blockCapPct', 50) / 100);
+    var seqOpt = {
+      policy: p.policy || el('stopPolicy').value,
+      comboAdd: (p.comboMode || el('comboMode').value) === 'add',
+      bust: p.bustMode || el('bustMode').value,
+      aimMode: p.aimMode || el('aimMode').value,
+      aimModel: p.aimModel || el('aimModel').value,
+      // 계열 창·가중치는 릴 구성에만 의존하므로 전투 시작에 한 번만 구한다
+      wins: strips.map(function (st) {
+        var m = {};
+        FAMS.forEach(function (f) { m[f] = famWindow(st, f); });
+        return m;
+      }),
+      wts: strips.map(function (st) {
+        var m = {}, w = CH.aimWeight || n('aimWeight', 3);
+        FAMS.forEach(function (f) { m[f] = famProbs(st, f, w); });
+        return m;
+      }),
+      reson: reson, aim: aim, respinP: respinP
+    };
 
     while (turns < 60) {
       turns++;
       if (boots) block = Math.min(p.maxHp, block + boots);
 
-      var pos = strips.map(function (st) { return Math.floor(rng() * st.length); });
-      if (rng() < aim) {
-        var r = Math.floor(rng() * 3), st = strips[r];
-        for (var q = 0; q < st.length; q++) if (st[q] === 'knight') { pos[r] = q; break; }
-      }
+      var acc, usedCombo = false;
 
-      function lineAt(o) {
-        var L = strips.map(function (st, k) { return st[(pos[k] + o + st.length) % st.length]; });
-        if (reson) {
-          var cnt = {};
-          L.forEach(function (s) { if (s !== 'dead') cnt[s] = (cnt[s] || 0) + 1; });
-          var pair = Object.keys(cnt).filter(function (k) { return cnt[k] === 2; })[0];
-          if (pair) L = L.map(function (s) { return cnt[s] === 2 ? s : pair; });
+      if (p.seq) {
+        var t = seqTurn(strips, p, rng, stateCtx(es, hp, p.maxHp, block, cap0), seqOpt);
+        acc = t.acc;
+        usedCombo = !!t.combo;
+        reelSum += t.reels;
+        if (t.reels < 3) stops++;
+        if (t.respun) respins++;
+        if (t.busted) busts++;
+        if (t.decls) t.decls.forEach(function (f) { decl[f] = (decl[f] || 0) + 1; });
+      } else {
+        var pos = strips.map(function (st) { return Math.floor(rng() * st.length); });
+        if (rng() < aim) {
+          var r = Math.floor(rng() * 3), st = strips[r];
+          for (var q = 0; q < st.length; q++) if (st[q] === 'knight') { pos[r] = q; break; }
         }
-        return L;
-      }
 
-      var lineSets = [offsets(p.lines).map(lineAt)];
+        var lineAt = function (o) {
+          var L = strips.map(function (sp, k) { return sp[(pos[k] + o + sp.length) % sp.length]; });
+          return reson ? resonate(L) : L;
+        };
 
-      // 유물 자동 리스핀 — 결과를 교체하지 않고 별도 라인처럼 추가 정산
-      if (rng() < respinP) {
-        respins++;
-        pos = strips.map(function (st) { return Math.floor(rng() * st.length); });
-        lineSets.push(offsets(p.lines).map(lineAt));
-      }
+        var lineSets = [offsets(p.lines).map(lineAt)];
 
-      var acc = blank();
-      var usedCombo = false;
+        // 유물 자동 리스핀 — 결과를 교체하지 않고 별도 라인처럼 추가 정산
+        if (rng() < respinP) {
+          respins++;
+          pos = strips.map(function (sp) { return Math.floor(rng() * sp.length); });
+          lineSets.push(offsets(p.lines).map(lineAt));
+        }
 
-      lineSets.forEach(function (set) {
-        set.forEach(function (L) {
-          var cb = firstCombo(L, p.owned);
-          // 정책: 조합이 성립하고 큐가 있으면 발동. 아니면 개별 효과.
-          if (cb && (freeCombo || cue > 0)) {
-            if (!freeCombo) cue--;
-            usedCombo = true; addTo(acc, comboEffect(cb, p.mul));
-          } else addTo(acc, individual(L, p.mul));
+        acc = blank();
+        lineSets.forEach(function (set) {
+          set.forEach(function (L) {
+            var cb = firstCombo(L, p.owned);
+            // 정책: 조합이 성립하고 큐가 있으면 발동. 아니면 개별 효과.
+            if (cb && (freeCombo || cue > 0)) {
+              if (!freeCombo) cue--;
+              usedCombo = true; addTo(acc, comboEffect(cb, p.mul));
+            } else addTo(acc, individual(L, p.mul));
+          });
         });
-      });
 
-      var db = diagBonus(p.lines);
-      acc.dmg *= db; acc.aoe *= db; acc.block *= db;
+        var db = diagBonus(p.lines);
+        acc.dmg *= db; acc.aoe *= db; acc.block *= db;
+        reelSum += 3;
+      }
+
       if (usedCombo) comboTurns++;
       gauge += acc.gold;
 
       // 방어는 영구 유지, 상한 = 최대 HP. 무대 거울은 초과분의 50%를 공격으로.
       block += acc.block;
+      // 반사는 방어와 똑같이 "누적되지만 상한이 있다".
+      //   누적만  → 무한 증가, 반사덱이 전 난이도 100%
+      //   최댓값만 → 12 로 고정, 유일한 피해원이라 적을 못 죽여 전 난이도 0%
+      // 상한은 캐릭터가 올린다(거울의 배우 1.5배).
+      thorns = Math.min(n('thornCap', 24) * (CH.thornsMul || 1),
+                        thorns + acc.thorns * (CH.thornsMul || 1));
       var cap = p.maxHp * (n('blockCapPct', 50) / 100), over = 0;
       if (block > cap) { over = block - cap; block = cap; }
-      if (mirrorSh) acc.dmg += over * 0.5;
+      // 초과 방어 → 피해 전환. 사물 계열의 두 번째 피해원이다.
+      // 반사만으로는 보스전이 성립하지 않는다 — 단일 보스는 쿨타임 3이라
+      // 턴당 0.33회만 때리므로 반사가 발동할 기회가 없다(실측 0%).
+      // 방어는 늘 상한에 붙으니 초과분이 곧 보스전 피해원이 된다.
+      if (over > 0) acc.dmg += over * (n('overflowConv', 50) / 100)
+                                   * (CH.overflowMul || 1) * (mirrorSh ? 2 : 1);
       maxBlock = Math.max(maxBlock, block);
 
-      hp = Math.min(p.maxHp, hp + acc.heal) - acc.selfDmg;
+      hp = Math.min(p.maxHp, hp + acc.heal) - (CH.ignoreSelfDmg ? 0 : acc.selfDmg);
       if (hp <= 0) break;
 
       // 적에게 피해 — 방어가 있으면 흡수, 없으면 방어력(flat)으로 감소. 관통은 방어력 무시.
@@ -484,21 +1087,28 @@
         }
         x.hp -= amount; dealt += amount;
       }
+      // 표적: HP 낮은 적부터. 넘침을 허용하면 단일 고화력이 저HP 다수를 쓸어버려
+      // 광역 조합이 존재 의미를 잃는다 — 그래서 옵션으로 갈라 둔다.
       es.sort(function (a, b) { return a.hp - b.hp; });
       var single = acc.dmg;
-      for (var e2 = 0; e2 < es.length && single > 0; e2++) {
-        var before = es[e2].hp;
-        hurt(es[e2], single);
-        single -= Math.max(0, before - Math.max(0, es[e2].hp));
-        if (es[e2].hp > 0) break;
+      if (el('noOverflow').checked) {
+        if (single > 0) hurt(es[0], single);
+      } else {
+        for (var e2 = 0; e2 < es.length && single > 0; e2++) {
+          var before = es[e2].hp;
+          hurt(es[e2], single);
+          single -= Math.max(0, before - Math.max(0, es[e2].hp));
+          if (es[e2].hp > 0) break;
+        }
       }
       if (acc.aoe > 0) es.forEach(function (x) { hurt(x, acc.aoe); });
       if (acc.burn) es.forEach(function (x) { x.burn = (x.burn || 0) + acc.burn; });
       if (acc.poison) es.forEach(function (x) { x.poison = (x.poison || 0) + acc.poison; });
 
-      // 지속 피해 정산
+      // 지속 피해 정산 — 화상·독 둘 다 매 턴 1씩 감소한다 (원본 CombatResolver 와 동일).
+      // 감소를 빼먹으면 화상이 영구 누적되어 감정 계열이 과대평가된다.
       es.forEach(function (x) {
-        if (x.burn) { x.hp -= x.burn; dealt += x.burn; }
+        if (x.burn) { x.hp -= x.burn; dealt += x.burn; x.burn--; }
         if (x.poison) { x.hp -= x.poison; dealt += x.poison; x.poison--; }
       });
       es = es.filter(function (x) { return x.hp > 0; });
@@ -519,7 +1129,8 @@
         var absorbed = Math.min(block, incoming);
         block -= absorbed;
         hp -= (incoming - absorbed);
-        if (thornR) { x.hp -= thornR; dealt += thornR; }
+        var refl = thorns + thornR;      // 반사는 유지되며, 때린 적에게만 돌아간다
+        if (refl) { x.hp -= refl; dealt += refl; }
       });
       es = es.filter(function (x) { return x.hp > 0; });
       if (!es.length) break;
@@ -529,6 +1140,8 @@
     if (stat) {
       stat.comboTurns += comboTurns; stat.respins += respins;
       stat.maxBlock += maxBlock; stat.turns += turns; stat.dealt += dealt;
+      stat.stops += stops; stat.reels += reelSum; stat.busts += busts;
+      FAMS.forEach(function (f) { stat.decl[f] = (stat.decl[f] || 0) + (decl[f] || 0); });
     }
     return { turns: turns, win: es.length === 0 && hp > 0, hpLeft: Math.max(0, hp), maxHp: p.maxHp };
   }
@@ -536,7 +1149,7 @@
   // DPS 측정 — 적을 사실상 무적으로 두고 고정 턴 평균 출력
   function measureDps(p, rng) {
     var foes = [{ hp: 1e9, atk: 0, cd: 99 }];
-    var stat = { comboTurns: 0, respins: 0, maxBlock: 0, turns: 0, dealt: 0 };
+    var stat = { comboTurns: 0, respins: 0, maxBlock: 0, turns: 0, dealt: 0, stops: 0, reels: 0, busts: 0, decl: {} };
     var reps = 30;
     for (var i = 0; i < reps; i++) {
       var pp = Object.assign({}, p, { maxHp: 1e6, cue: 1e6 });
@@ -547,54 +1160,133 @@
 
   var results = [];
 
-  function run() {
-    if (!parseData()) return;
-    el('status').textContent = '실행 중…';
-    setTimeout(function () {
-      var perAct = ii('nodesPerAct', 6), runs = ii('runs', 800);
-      var tgtT = n('tgtTrash', 3.5), tgtB = n('tgtBoss', 9);
-      var autoHp = el('autoHp').checked;
-      var rng = rng32(20260803);
-      results = [];
+  // 같은 시드로 두 정책을 돌려야 비교가 의미 있다. over 로 UI 값을 덮어쓴다.
+  function simulate(over) {
+    var perAct = ii('nodesPerAct', 6), runs = ii('runs', 800);
+    var tgtT = n('tgtTrash', 3.5), tgtB = n('tgtBoss', 9);
+    var autoHp = el('autoHp').checked;
+    var rng = rng32(20260803);
+    var out = [];
+    // 캐릭터는 famOf 를 바꾸므로 줄 캐시를 반드시 비운다
+    CH = CHARS[over.character || el('character').value] || {};
+    clearLineCache();
 
       for (var act = 1; act <= 3; act++) {
         var pool = ENEMY.filter(function (e) { return e.act === act && !e.boss; });
         var boss = ENEMY.filter(function (e) { return e.act === act && e.boss; })[0];
         for (var k = 1; k <= perAct + 1; k++) {
           var isBoss = k === perAct + 1;
-          var p = nodeParams(act, isBoss);
-          var m = measureDps(p, rng);
-          var count = isBoss ? 1 : (act === 1 ? (k <= 2 ? 1 : 2) : (act === 2 ? 2 : 3));
+          var p = nodeParams(act, isBoss, over);
+          // DPS 측정은 허수아비를 60턴 돌리므로 비싸다. 자동 맞춤이 꺼져 있으면 건너뛴다.
+          var m = autoHp ? measureDps(p, rng) : { dps: 0, comboRate: 0 };
+          // 적 수를 섞으면 총 HP·총 공격을 일정하게 유지한다 —
+          // 그래야 마리 수가 난이도가 아니라 "광역이 유리한가" 만 바꾼다.
+          var mix = el('enemyMix').checked;
+          var count = isBoss ? 1
+            : (mix ? [1, 2, 3][(k - 1) % 3]
+                   : (act === 1 ? (k <= 2 ? 1 : 2) : (act === 2 ? 2 : 3)));
           var base = isBoss ? boss : pool[(k - 1) % pool.length];
           if (!base) continue;
 
-          var hpEach = base.hp;
+          // 총량 고정은 마리 수의 기하학만 남긴다. 대신 단일 딜의 넘침(overflow)이
+          // 저HP 다수를 쓸어버려 광역이 불리해진다 — 현실적인 쪽도 재려면 이 옵션을 끈다.
+          var share = (mix && !isBoss && !el('mixFull').checked) ? 1.5 / count : 1;
+          var hpEach = Math.max(1, Math.round(base.hp * share));
+          var atkEach = Math.max(1, Math.round(base.atk * share));
           if (autoHp) {
             var target = isBoss ? tgtB : tgtT;
             hpEach = Math.max(1, Math.round(m.dps * target / count));
           }
           var foes = [];
-          for (var c = 0; c < count; c++) foes.push({ hp: hpEach, atk: base.atk, cd: base.cd });
+          for (var c = 0; c < count; c++)
+            foes.push({ hp: hpEach, atk: atkEach, cd: base.cd,
+                        def: base.def || 0, intents: base.intents });
 
-          var stat = { comboTurns: 0, respins: 0, maxBlock: 0, turns: 0, dealt: 0 };
+          var stat = { comboTurns: 0, respins: 0, maxBlock: 0, turns: 0, dealt: 0, stops: 0, reels: 0, busts: 0, decl: {} };
           var wins = 0, tsum = 0, hsum = 0;
           for (var r = 0; r < runs; r++) {
             var res = fight(p, foes.map(function (f) { return Object.assign({}, f); }), rng, stat);
             tsum += res.turns; if (res.win) wins++; hsum += res.hpLeft / res.maxHp;
           }
-          results.push({
+          out.push({
             act: act, node: k, isBoss: isBoss, name: base.name, count: count,
             lines: p.lines, mul: p.mul, maxHp: p.maxHp, cue: p.cue, owned: p.owned.length,
-            hpEach: hpEach, atk: base.atk, cd: base.cd, dps: m.dps,
+            hpEach: hpEach, atk: atkEach, def: base.def || 0, cd: base.cd, dps: m.dps,
             turns: tsum / runs, winRate: wins / runs, hpLeft: hsum / runs,
             comboRate: stat.comboTurns / Math.max(1, stat.turns),
             respinRate: stat.respins / Math.max(1, stat.turns),
+            stopRate: stat.stops / Math.max(1, stat.turns),
+            avgReels: stat.reels / Math.max(1, stat.turns),
+            bustRate: stat.busts / Math.max(1, stat.turns),
+            decl: stat.decl,
             maxBlock: stat.maxBlock / runs
           });
         }
       }
+    return out;
+  }
+
+  function run() {
+    if (!parseData()) return;
+    el('status').textContent = '실행 중…';
+    setTimeout(function () {
+      results = simulate({});
       draw(); report(); dump();
-      el('status').textContent = results.length + '노드 × ' + runs + '판 완료';
+      el('status').textContent = results.length + '노드 × ' + ii('runs', 800) + '판 완료';
+    }, 20);
+  }
+
+  // 중단 결정이 실제로 이득인지 — 같은 시드, 정책만 다르게.
+  function compare() {
+    if (!parseData()) return;
+    el('status').textContent = '비교 실행 중…';
+    setTimeout(function () {
+      var A = simulate({ turnMode: 'seq', policy: 'never' });
+      var B = simulate({ turnMode: 'seq', policy: 'smart' });
+      results = B; draw(); report(); dump();
+
+      var L = [];
+      L.push('같은 시드 · 같은 릴 · 정책만 다름.   완주 = 항상 3릴,  중단 = 기대값 2수 예측');
+      L.push('');
+      L.push('구간        승률 완주   승률 중단     차이    턴 완주  턴 중단   남은HP 완주  남은HP 중단    평균릴  중단률');
+      function seg(label, f) {
+        var a = A.filter(f), b = B.filter(f);
+        if (!a.length) return;
+        function av(arr, g) { return arr.reduce(function (x, r) { return x + g(r); }, 0) / arr.length; }
+        var wa = av(a, function (r) { return r.winRate; }), wb = av(b, function (r) { return r.winRate; });
+        L.push(
+          label.padEnd(12) +
+          (Math.round(wa * 1000) / 10 + '%').padStart(9) +
+          (Math.round(wb * 1000) / 10 + '%').padStart(12) +
+          ((wb - wa >= 0 ? '+' : '') + (Math.round((wb - wa) * 1000) / 10) + 'pp').padStart(9) +
+          av(a, function (r) { return r.turns; }).toFixed(2).padStart(11) +
+          av(b, function (r) { return r.turns; }).toFixed(2).padStart(9) +
+          (Math.round(av(a, function (r) { return r.hpLeft; }) * 100) + '%').padStart(13) +
+          (Math.round(av(b, function (r) { return r.hpLeft; }) * 100) + '%').padStart(13) +
+          av(b, function (r) { return r.avgReels; }).toFixed(2).padStart(10) +
+          (Math.round(av(b, function (r) { return r.stopRate; }) * 100) + '%').padStart(8));
+      }
+      seg('전체', function () { return true; });
+      seg('잡몹', function (r) { return !r.isBoss; });
+      seg('보스', function (r) { return r.isBoss; });
+      [1, 2, 3].forEach(function (a) { seg(a + '막', function (r) { return r.act === a; }); });
+      L.push('');
+
+      var dw = B.reduce(function (x, r, i) { return x + (r.winRate - A[i].winRate); }, 0) / B.length;
+      var stop = B.reduce(function (x, r) { return x + r.stopRate; }, 0) / B.length;
+      L.push('판정');
+      if (stop < 0.03) {
+        L.push('  중단률 ' + (stop * 100).toFixed(1) + '% — 최적 플레이가 거의 항상 완주한다.');
+        L.push('  결정이 사실상 존재하지 않는다. 나쁜 칸(망자) 밀도를 올리거나 어둠 유물을 넣어야 한다.');
+      } else if (Math.abs(dw) < 0.01) {
+        L.push('  중단률 ' + (stop * 100).toFixed(1) + '% 인데 승률 차이 ' + (dw * 100).toFixed(1) + 'pp — 무해하지만 무의미하다.');
+        L.push('  판단은 하는데 결과가 안 바뀐다. 큐와 같은 결말이다.');
+      } else {
+        L.push('  중단률 ' + (stop * 100).toFixed(1) + '% · 승률 차이 ' + (dw >= 0 ? '+' : '') + (dw * 100).toFixed(1) + 'pp — 결정이 결과를 바꾼다.');
+        L.push('  잘 판단한 플레이어가 실제로 보상받는다. 메커닉을 채택할 근거가 된다.');
+      }
+      el('cmp').textContent = L.join('\n');
+      el('status').textContent = '비교 완료';
     }, 20);
   }
 
@@ -699,6 +1391,11 @@
       '  (기사 ' + (pk * 100).toFixed(0) + '%)';
     var rp = 1 - Math.pow(0.9, ii('rRespin', 1));
     el('respinInfo').textContent = '리스핀 발동 확률 ' + Math.round(rp * 100) + '%';
+
+    var bad = (cnt.dead || 0);
+    el('seqInfo').textContent = el('turnMode').value === 'seq'
+      ? '나쁜 칸 ' + bad + '/' + st.length + ' (' + Math.round(bad / st.length * 100) + '%) — 중단 결정의 유일한 위험원'
+      : '순차 모드가 꺼져 있다 — 중단 결정 없음';
   }
 
   ['slots', 'cKnight', 'cTragedy', 'cMirror', 'cPriest', 'cIce', 'cRose', 'cDead', 'dens2', 'dens3', 'rRespin']
@@ -706,9 +1403,20 @@
   el('validate').addEventListener('click', function () { parseData(); refreshStrip(); });
   el('reset').addEventListener('click', function () { loadDefaults(); parseData(); refreshStrip(); });
   el('run').addEventListener('click', run);
+  el('compare').addEventListener('click', compare);
+  el('loadArch').addEventListener('click', function () {
+    el('dCombo').value = JSON.stringify(expandArchetypes(), null, 1);
+    parseData(); refreshStrip();
+  });
+  ['turnMode', 'stopPolicy', 'comboMode'].forEach(function (id) {
+    el(id).addEventListener('change', refreshStrip);
+  });
 
   loadDefaults(); parseData(); refreshStrip();
-  window.__sim = { run: run, results: function () { return results; } };
+  window.__sim = { run: run, compare: compare, simulate: simulate, parseData: parseData,
+                   archetypes: expandArchetypes, ARCHETYPES: ARCHETYPES,
+                   results: function () { return results; },
+                   cmp: function () { return el('cmp').textContent; } };
 })();
 </script>
 </body>
