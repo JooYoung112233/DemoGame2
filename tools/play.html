@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>The Last Theater — 플레이 시뮬레이터</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0b0b0e; color:#b9b4ab; min-height:100vh; padding:12px; gap:12px;
+         font:400 13px/1.5 "Malgun Gothic",system-ui,sans-serif; display:flex; justify-content:center; }
+  .frame { width:700px; flex:none; background:#131317; border:1px solid #26262d; border-radius:8px;
+           overflow:hidden; display:flex; flex-direction:column; position:relative; min-height:820px; }
+  .topbar { min-height:38px; display:flex; align-items:center; gap:10px; padding:0 12px; background:#16161b;
+            border-bottom:1px solid #24242a; font-size:12px; color:#7d7a86; flex-wrap:wrap; }
+  .topbar b { color:#c6bd95; font-weight:400; font-variant-numeric:tabular-nums; }
+  .cost { display:inline-flex; gap:3px; vertical-align:-1px; }
+  .cost i { width:11px; height:11px; border-radius:50%; border:1px solid #57545f; display:block; }
+  .cost i.on { background:#c6bd95; border-color:#c6bd95; }
+  .cheerbar { display:inline-block; width:56px; height:6px; background:#25252e; border-radius:2px;
+              overflow:hidden; vertical-align:middle; margin-left:4px; }
+  .cheerbar>i { display:block; height:100%; background:#c6bd95; transition:width .2s; }
+  .relics { display:flex; gap:3px; } .relics span { font-size:14px; cursor:help; }
+
+  .flags { display:flex; gap:5px; flex-wrap:wrap; padding:6px 12px 0; font-size:10px; }
+  .flags span { border:1px solid #3a3a45; border-radius:3px; padding:1px 5px; color:#c49a6a; background:#1d1d25; }
+  .flags span.warn { color:#b07a6a; border-color:#4a3436; }
+
+  .stage { min-height:156px; padding:10px; display:flex; gap:8px; justify-content:center;
+           background:radial-gradient(ellipse at 50% 0%,#1c1a22 0%,#100f14 70%);
+           border-bottom:1px solid #24242a; align-items:flex-start; }
+  .foe { width:180px; background:#191922; border:1px solid #2c2c36; border-radius:6px; padding:8px; }
+  .foe.aim { border-color:#a8c49a; box-shadow:0 0 0 1px #a8c49a55; cursor:crosshair; }
+  .foe.dead { opacity:.22; }
+  .foe .nm { font-size:12px; color:#c6bd95; }
+  .foe .it { font-size:11px; color:#b07a6a; min-height:16px; margin:3px 0; }
+  .foe .amp { font-size:10px; color:#c49a6a; min-height:14px; }
+  .foe .tag { font-size:10px; color:#6b6b78; line-height:1.55; margin-top:3px; }
+  .bar { height:7px; background:#25252e; border-radius:2px; overflow:hidden; margin-bottom:2px; }
+  .bar>i { display:block; height:100%; }
+  .hpb>i{background:#7a4a44;} .blb>i{background:#5a6b7a;}
+  .num { font-size:10px; color:#7d7a86; font-variant-numeric:tabular-nums; }
+
+  .board { padding:10px 12px 8px; }
+  .board .cap { font-size:11px; color:#6b6b78; margin-bottom:5px; }
+  .reels { display:flex; gap:6px; }
+  .reel { flex:1; background:#0e0e12; border:1px solid #2c2c36; border-radius:5px; overflow:hidden; }
+  .cell { height:26px; display:flex; align-items:center; justify-content:center; font-size:15px;
+          color:#45454f; border-bottom:1px solid #1c1c23; }
+  .cell.pay { height:54px; font-size:23px; color:#d8d2c4; background:#191922;
+              box-shadow:inset 0 0 0 1px #3a3a45; flex-direction:column; gap:1px; }
+  .cell.pay em { font-style:normal; font-size:10px; color:#8f8b99; }
+  .cell.pay.void { color:#5a4a4a; background:#181418; }
+  .rr { width:100%; border:0; border-top:1px solid #2c2c36; border-radius:0; padding:3px 0;
+        font-size:10px; background:#15151b; color:#7f9a72; }
+  .rr:hover:not(:disabled) { background:#1e2419; color:#a8c49a; }
+  .rr.free { color:#c6bd95; }
+
+  .hand { padding:0 12px 8px; }
+  .hand .cap { font-size:11px; color:#6b6b78; margin-bottom:5px; }
+  .hand .cap b { color:#c6bd95; font-weight:400; }
+  .hrow { display:flex; gap:5px; flex-wrap:wrap; }
+  .hc { width:160px; text-align:left; background:#191922; border:1px solid #33333d; border-radius:5px;
+        padding:6px 7px; font:inherit; color:#b9b4ab; position:relative; cursor:pointer; }
+  .hc:hover:not(.dis) { border-color:#a8c49a; }
+  .hc.dis { opacity:.32; cursor:default; }
+  .hc.pend { border-color:#c6bd95; background:#24241c; }
+  .hc.temp { border-style:dashed; border-color:#8b7aa8; }
+  .hc.tip { box-shadow:0 0 0 1px #7f9a72; }
+  .hc.seal { opacity:.25; border-style:dotted; cursor:default; }
+  .hc .c { position:absolute; right:5px; top:4px; font-size:10px; color:#c6bd95; }
+  .hc .n { font-size:11px; color:#c6bd95; padding-right:14px; }
+  .hc .r { font-size:11px; color:#7f9a72; }
+  .hc .e { font-size:10px; color:#8f8b99; line-height:1.4; }
+
+  .actions { padding:0 12px 9px; display:flex; gap:6px; align-items:center; }
+  button { background:#21212a; color:#b9b4ab; border:1px solid #57545f; border-radius:4px;
+           padding:7px 10px; font:inherit; font-size:12px; cursor:pointer; }
+  button:hover:not(:disabled){ border-color:#8b8467; color:#c6bd95; }
+  button:disabled { opacity:.32; cursor:default; }
+  button.go { border-color:#7f9a72; color:#a8c49a; }
+  button.wide { flex:1; }
+
+  .log { flex:1; min-height:90px; max-height:180px; overflow-y:auto; padding:8px 12px; font-size:11px;
+         line-height:1.62; color:#77737f; border-top:1px solid #24242a; background:#0e0e12; }
+  .log .t{color:#5c5a63;} .log .s{color:#c6bd95;} .log .d{color:#b07a6a;}
+  .log .b{color:#7f95b0;} .log .e{color:#8b7aa8;} .log .a{color:#c49a6a;}
+
+  .over { position:absolute; inset:0; background:#0b0b0eee; display:flex; flex-direction:column;
+          align-items:center; justify-content:center; gap:11px; padding:20px; overflow-y:auto; }
+  .over h3 { font-size:15px; font-weight:400; color:#c6bd95; }
+  .over .sub { font-size:11px; color:#6b6b78; text-align:center; max-width:520px; line-height:1.7; }
+  .chars { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .chr { width:200px; background:#191922; border:1px solid #33333d; border-radius:6px; padding:10px;
+         cursor:pointer; text-align:left; }
+  .chr:hover:not(.lock) { border-color:#c6bd95; }
+  .chr.lock { opacity:.42; cursor:default; }
+  .chr .n { font-size:13px; color:#c6bd95; }
+  .chr .m { font-size:10px; color:#7f9a72; margin:2px 0 4px; }
+  .chr .d { font-size:10px; color:#8f8b99; line-height:1.55; }
+  .chr .u { font-size:10px; color:#b07a6a; margin-top:4px; }
+  .cardpick { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+  .cp { width:152px; background:#191922; border:1px solid #33333d; border-radius:6px; padding:9px 8px;
+        cursor:pointer; text-align:center; }
+  .cp:hover:not(.dis) { border-color:#c6bd95; }
+  .cp.dis { opacity:.35; cursor:default; }
+  .cp .ic { font-size:22px; } .cp .n { font-size:12px; color:#c6bd95; margin:2px 0; }
+  .cp .e { font-size:10px; color:#8f8b99; line-height:1.45; }
+  .cp .x { font-size:10px; color:#7f9a72; margin-top:3px; }
+
+  .mapwrap { padding:12px; }
+  .floor { display:flex; gap:8px; justify-content:center; margin-bottom:7px; }
+  .mn { width:64px; padding:6px 4px; border-radius:6px; border:1px solid #2c2c36; background:#191922;
+        text-align:center; font-size:10px; color:#6b6b78; cursor:default; }
+  .mn .i { font-size:16px; display:block; }
+  .mn.can { border-color:#7f9a72; color:#a8c49a; cursor:pointer; }
+  .mn.can:hover { background:#1e2419; }
+  .mn.done { border-color:#3a3a45; opacity:.4; }
+  .mn.here { border-color:#c6bd95; color:#c6bd95; background:#24241c; }
+
+  .side { width:340px; flex:none; display:flex; flex-direction:column; gap:9px; }
+  .panel { background:#16161a; border:1px solid #24242a; border-radius:6px; padding:10px; }
+  .panel h2 { font-size:11px; font-weight:400; color:#5c5a63; letter-spacing:.08em; margin-bottom:6px;
+              text-transform:uppercase; }
+  .deck { display:flex; flex-wrap:wrap; gap:3px; }
+  .card { display:flex; align-items:center; gap:2px; background:#1d1d25; border:1px solid #33333d;
+          border-radius:3px; padding:1px 5px; font-size:11px; }
+  .card i { font-style:normal; font-size:13px; } .card b { font-weight:400; color:#8a8694; }
+  .note { font-size:11px; color:#56545e; line-height:1.6; margin-top:5px; }
+  table { border-collapse:collapse; width:100%; font-size:11px; }
+  td { padding:1px 0; color:#77737f; vertical-align:top; }
+  td.n { text-align:right; color:#a9a4b2; white-space:nowrap; }
+  .amprow td:first-child { color:#c49a6a; white-space:nowrap; padding-right:6px; }
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <div class="topbar">
+    <span id="tAct">—</span>
+    <span>HP <b id="tHp">—</b></span>
+    <span>방어 <b id="tBlock">0</b></span>
+    <span>반사 <b id="tThorns">0</b></span>
+    <span>골드 <b id="tGold">0</b></span>
+    <span>코스트 <span class="cost" id="tCost"></span></span>
+    <span>환호 <b id="tCheer">0</b><span class="cheerbar"><i id="tCheerI"></i></span></span>
+    <span class="relics" id="tRelics"></span>
+    <span style="margin-left:auto">턴 <b id="tTurn">0</b></span>
+  </div>
+  <div class="flags" id="flags"></div>
+  <div id="body"></div>
+  <div class="log" id="log"></div>
+  <div id="overlay"></div>
+</div>
+
+<div class="side">
+  <div class="panel">
+    <h2>증폭 — 상태이상이 피해를 곱한다</h2>
+    <table id="ampTbl"><tbody></tbody></table>
+  </div>
+  <div class="panel">
+    <h2>관중</h2>
+    <table id="cheerTbl"><tbody></tbody></table>
+  </div>
+  <div class="panel">
+    <h2>내 릴</h2>
+    <div class="deck" id="deck"></div>
+    <p class="note" id="deckInfo">—</p>
+  </div>
+  <div class="panel">
+    <h2>보유 대본</h2>
+    <table id="scrTbl"><tbody></tbody></table>
+    <p class="note" id="scrInfo">—</p>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script src="sim.js"></script>
+<script>
+(function () {
+  var T = window.Theater, Sim = window.Sim, el = function (i) { return document.getElementById(i); };
+  var S = null, pend = null, tip = null;
+  var NI = { fight:'⚔️', elite:'💀', shop:'🏪', rest:'🕯️', forge:'⚒️', boss:'👹' };
+  var NK = Sim.NK;
+
+  // 해금은 이 화면 안에서만 기억한다 — 실제 게임에서는 저장된다
+  var UNLOCKED = {};
+  Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) UNLOCKED[k] = 1; });
+  try {
+    var saved = JSON.parse(localStorage.getItem('tlt_unlock') || '{}');
+    Object.keys(saved).forEach(function (k) { UNLOCKED[k] = 1; });
+  } catch (e) {}
+  function unlock(k) {
+    if (UNLOCKED[k]) return;
+    UNLOCKED[k] = 1;
+    try { localStorage.setItem('tlt_unlock', JSON.stringify(UNLOCKED)); } catch (e) {}
+  }
+
+  // ── 타이틀 ────────────────────────────────────────────────
+  function showTitle() {
+    S = null; render();
+    var o = ov();
+    o.innerHTML = '<h3>The Last Theater</h3>'
+      + '<div class="sub">슬롯이 <b>배역</b>을 무대에 올린다. 준비한 <b>대본</b>은 요구 배역이 무대에 있을 때 상연된다.<br>'
+      + '상태이상은 피해를 <b>곱한다</b> — 먼저 걸고 그다음 터뜨린다.<br>'
+      + '<span style="color:#56545e">처음에는 두 명만 열려 있다. 나머지는 그 캐릭터의 승리 조건을 한 번 해내면 열린다.</span></div>';
+    var d = document.createElement('div'); d.className = 'chars';
+    Object.keys(T.CHARS).forEach(function (k) {
+      var c = T.CHARS[k], open = !!UNLOCKED[k], n = document.createElement('div');
+      n.className = 'chr' + (open ? '' : ' lock');
+      n.innerHTML = '<div class="n">' + (open ? c.name : '🔒 ' + c.name) + '</div>'
+        + '<div class="m">' + T.WIN_KO[c.win] + ' · 최대 코스트 ' + c.maxCost + '</div>'
+        + '<div class="d">' + c.note + '<br>'
+        + Object.keys(c.deck).map(function (id) { return T.CARDS[id].icon + c.deck[id]; }).join(' ') + '</div>'
+        + (open ? '' : '<div class="u">해금 — ' + (c.unlock || '') + '</div>');
+      if (open) n.onclick = function () { pickDiff(k); };
+      d.appendChild(n);
+    });
+    o.appendChild(d);
+  }
+
+  // ── 난이도 — 「무엇을 하러 왔는가」를 묻는 자리 ─────────────
+  function pickDiff(ck) {
+    var o = ov();
+    o.innerHTML = '<h3>' + T.CHARS[ck].name + '</h3>'
+      + '<div class="sub">이야기를 보러 왔는지, 로그라이크를 하러 왔는지 고른다.</div>';
+    var d = document.createElement('div'); d.className = 'chars';
+    Object.keys(T.DIFFICULTY).forEach(function (k) {
+      var f = T.DIFFICULTY[k], n = document.createElement('div');
+      n.className = 'chr'; n.style.width = '210px';
+      n.innerHTML = '<div class="n">' + f.note + '</div>'
+        + '<div class="m">' + f.name + ' · 적 HP ×' + f.hpMul + ' · 공격 ×' + f.atkMul + '</div>'
+        + '<div class="d">' + f.sub + '</div>';
+      n.onclick = function () { k === 'hard' ? pickAsc(ck) : startRun(ck, k, 0); };
+      d.appendChild(n);
+    });
+    o.appendChild(d);
+    var b = document.createElement('button'); b.textContent = '뒤로';
+    b.onclick = showTitle; o.appendChild(b);
+  }
+
+  function pickAsc(ck) {
+    var o = ov();
+    o.innerHTML = '<h3>저주받은 대본</h3>'
+      + '<div class="sub">승천은 수치를 올리지 않는다. 규칙을 하나씩 더한다.</div>';
+    var d = document.createElement('div'); d.className = 'cardpick';
+    [0].concat(T.ASCENSION.map(function (a) { return a.n; })).forEach(function (lv) {
+      var a = lv ? T.ASCENSION[lv - 1] : null, n = document.createElement('div');
+      n.className = 'cp'; n.style.width = '186px';
+      n.innerHTML = '<div class="n">' + (lv ? lv + '단 — ' + a.name : '승천 없음') + '</div>'
+        + '<div class="e">' + (lv ? a.desc : '어려움 그대로') + '</div>'
+        + (lv > 1 ? '<div class="x">' + (lv - 1) + '단까지 전부 포함</div>' : '');
+      n.onclick = function () { startRun(ck, 'hard', lv); };
+      d.appendChild(n);
+    });
+    o.appendChild(d);
+    var b = document.createElement('button'); b.textContent = '뒤로';
+    b.onclick = function () { pickDiff(ck); }; o.appendChild(b);
+  }
+
+  function startRun(ck, dk, asc) {
+    S = Sim.newRun({ charKey: ck, diffKey: dk, asc: asc,
+                     seed: (Date.now() & 0x7fffffff) | 1 });
+    S.feat = {};                       // 이번 판에 달성한 해금 조건
+    clearOv(); showMap();
+  }
+
+  // ── 맵 ────────────────────────────────────────────────────
+  function showMap() {
+    pend = null; tip = null;
+    var b = el('body'); b.innerHTML = '<div class="mapwrap" id="mw"></div>';
+    var w = el('mw');
+    S.map.slice().reverse().forEach(function (row) {
+      var fl = document.createElement('div'); fl.className = 'floor';
+      row.forEach(function (nd) {
+        var d = document.createElement('div');
+        var here = S.at && S.at.f === nd.f && S.at.c === nd.c;
+        var can = Sim.reachable(S, nd.f, nd.c);
+        d.className = 'mn' + (here ? ' here' : (S.cleared[nd.f + ',' + nd.c] ? ' done' : (can ? ' can' : '')));
+        d.innerHTML = '<span class="i">' + NI[nd.type] + '</span>' + NK[nd.type];
+        if (can) d.onclick = function () { enter(nd); };
+        fl.appendChild(d);
+      });
+      w.appendChild(fl);
+    });
+    render();
+  }
+
+  function enter(nd) {
+    Sim.goTo(S, nd);
+    if (nd.type === 'shop') return showShop();
+    if (nd.type === 'rest') return showRest();
+    if (nd.type === 'forge') return showForge();
+    Sim.openFight(S, nd);
+    clearOv(); nextTurn();
+  }
+
+  // ── 전투 ──────────────────────────────────────────────────
+  function nextTurn() {
+    Sim.beginTurn(S);
+    pend = null; tip = null;
+    drawFight();
+  }
+
+  function endTurn() {
+    var r = Sim.finishTurn(S);
+    if (r === 'won') return afterWin();
+    if (r === 'dead') return endRun(false);
+    checkFeats();
+    nextTurn();
+  }
+
+  function clickScript(sc) {
+    if (!Sim.canPlay(S, sc)) return;
+    if (T.scriptEffect(sc, S.ch).dmg <= 0) return fire(sc, -1);
+    pend = (pend === sc) ? null : sc;
+    drawFight();
+  }
+  function clickFoe(i) {
+    if (!pend || S.foes[i].hp <= 0) return;
+    var sc = pend; pend = null; fire(sc, i);
+  }
+  function fire(sc, tgt) {
+    var before = S.foes.filter(function (f) { return f.hp > 0; }).length;
+    var hits = (sc.effect.hits || 1);
+    Sim.playScript(S, sc, tgt);
+    // 해금 조건 관찰
+    var after = S.foes.filter(function (f) { return f.hp > 0; }).length;
+    if (before - after >= 3 && (sc.effect.aoe || S.ch.aoeFams)) S.feat.frenzy = 1;
+    if (hits >= 8) S.feat.harlequin = 1;
+    if (sc.effect.selfDamage && S.foes.some(function (f) { return f.boss && f.hp <= 0; })) S.feat.fallen = 1;
+    S.foes.forEach(function (f) { if (T.ampMul(f, {}) >= 1.5) S.feat.maestro = 1; });
+    if (S.over === 'dead') return endRun(false);
+    if (S.over === 'won') return afterWin();
+    drawFight();
+  }
+  function checkFeats() {
+    S.foes.forEach(function (f) { if (T.ampMul(f, {}) >= 1.5) S.feat.maestro = 1; });
+  }
+
+  function doReroll(k) {
+    if (Sim.doReroll(S, k)) { pend = null; tip = null; drawFight(); }
+  }
+
+  function showTip() {
+    var p = Sim.suggest(S);
+    tip = p.seq.length ? p.seq[0].sc : null;
+    drawFight();
+  }
+
+  // ── 보상 — 배역이냐 대본이냐 ──────────────────────────────
+  function afterWin() {
+    checkFeats();
+    Object.keys(S.feat).forEach(unlock);
+    if (S.at.type === 'boss') return endRun(true);
+    if (S.at.type === 'elite') return rewardScript('비극을 넘겼다 — 대본을 하나 고른다');
+    if (S.bonusScript) { S.bonusScript = 0; return rewardScript('난입자를 이겨냈다 — 대본을 하나 고른다'); }
+    rewardBoth();
+  }
+
+  function cardBox(id, extra) {
+    var d = T.CARDS[id];
+    return '<div class="ic">' + d.icon + '</div><div class="n">' + d.name + '</div>'
+      + '<div class="e">' + T.FAM_KO[d.fam] + ' · ' + T.cardText(d) + '</div>'
+      + '<div class="x">릴에 ' + (S.deck[id] || 0) + '장' + (extra ? '<br>' + extra : '') + '</div>';
+  }
+  function scriptBox(sc, extra) {
+    var p = Sim.stageProb(sc, S.deck);
+    return '<div class="n">' + sc.name + '</div>'
+      + '<div class="e">' + T.TIER_KO[sc.tier] + ' · 코스트 ' + sc.cost + '<br>'
+      + '요구 ' + T.reqText(sc) + '<br>' + T.effText(sc.effect) + '</div>'
+      + '<div class="x">상연 확률 ' + Math.round(p * 100) + '%' + (extra ? '<br>' + extra : '') + '</div>';
+  }
+
+  function rewardBoth() {
+    var o = ov();
+    o.innerHTML = '<h3>하나만 고른다</h3>'
+      + '<div class="sub"><b>배역</b>은 릴에 들어가 상연 확률을 올린다. <b>대본</b>은 할 수 있는 일을 늘린다.<br>'
+      + '릴 ' + Sim.deckSize(S) + '/' + T.CFG.reelMax + ' · 대본 ' + S.scripts.length + '/' + Sim.scriptCap(S) + '</div>';
+    var t1 = document.createElement('div'); t1.className = 'sub'; t1.textContent = '배역';
+    o.appendChild(t1);
+    var r1 = document.createElement('div'); r1.className = 'cardpick';
+    Sim.offerCards(S).forEach(function (id) {
+      var full = Sim.deckSize(S) >= T.CFG.reelMax;
+      var d = document.createElement('div'); d.className = 'cp' + (full ? ' dis' : '');
+      d.innerHTML = cardBox(id, full ? '릴이 꽉 찼다' : '');
+      if (!full) d.onclick = function () { S.deck[id] = (S.deck[id] || 0) + 1; Sim.drift(S); clearOv(); showMap(); };
+      r1.appendChild(d);
+    });
+    o.appendChild(r1);
+    var t2 = document.createElement('div'); t2.className = 'sub'; t2.textContent = '대본';
+    o.appendChild(t2);
+    var r2 = document.createElement('div'); r2.className = 'cardpick';
+    Sim.offerScripts(S, 3).forEach(function (sc) {
+      var full = S.scripts.length >= Sim.scriptCap(S);
+      var d = document.createElement('div'); d.className = 'cp' + (full ? ' dis' : '');
+      d.innerHTML = scriptBox(sc, full ? '보유 상한' : '');
+      if (!full) d.onclick = function () { S.scripts.push(sc); Sim.drift(S); clearOv(); showMap(); };
+      r2.appendChild(d);
+    });
+    o.appendChild(r2);
+    var b = document.createElement('button'); b.textContent = '넘긴다';
+    b.onclick = function () { clearOv(); showMap(); };
+    o.appendChild(b); render();
+  }
+
+  function rewardScript(title) {
+    var o = ov();
+    o.innerHTML = '<h3>' + title + '</h3>'
+      + '<div class="sub">대본은 런 전체를 따라온다. 보유 ' + S.scripts.length + '/' + Sim.scriptCap(S) + '</div>';
+    var row = document.createElement('div'); row.className = 'cardpick';
+    Sim.offerScripts(S, 3).forEach(function (sc) {
+      var full = S.scripts.length >= Sim.scriptCap(S);
+      var d = document.createElement('div'); d.className = 'cp' + (full ? ' dis' : '');
+      d.innerHTML = scriptBox(sc, full ? '보유 상한' : '');
+      if (!full) d.onclick = function () { S.scripts.push(sc); Sim.drift(S); clearOv(); showMap(); };
+      row.appendChild(d);
+    });
+    o.appendChild(row);
+    var b = document.createElement('button'); b.textContent = '넘긴다';
+    b.onclick = function () { clearOv(); showMap(); };
+    o.appendChild(b); render();
+  }
+
+  // ── 상점 ──────────────────────────────────────────────────
+  function showShop() {
+    if (!S.stock) {
+      S.stock = {
+        cards: Sim.offerCards(S).map(function (id) { return { id: id, cost: 8 + Math.floor(S.rnd() * 6) }; }),
+        scripts: Sim.offerScripts(S, 3).map(function (sc) { return { sc: sc, cost: 16 + sc.cost * 5 }; }),
+        relics: T.pickWeighted(Object.keys(T.RELICS), function () { return 1; }, S.rnd, 2)
+          .map(function (k) { return { k: k, cost: T.RELICS[k].cost }; })
+      };
+    }
+    var o = ov();
+    o.innerHTML = '<h3>소품실 — 골드 ' + S.gold + '</h3>'
+      + '<div class="sub">칸이 유한하다. 무엇을 뺄지가 결정이다.</div>';
+    var mk = function (label, items, draw, buy) {
+      var t = document.createElement('div'); t.className = 'sub'; t.textContent = label;
+      o.appendChild(t);
+      var row = document.createElement('div'); row.className = 'cardpick';
+      items.forEach(function (it, i) {
+        var poor = S.gold < it.cost;
+        var d = document.createElement('div'); d.className = 'cp' + (poor ? ' dis' : '');
+        d.innerHTML = draw(it);
+        if (!poor) d.onclick = function () { S.gold -= it.cost; buy(it); items.splice(i, 1); Sim.drift(S); showShop(); };
+        row.appendChild(d);
+      });
+      o.appendChild(row);
+    };
+    mk('배역', S.stock.cards, function (it) { return cardBox(it.id, it.cost + ' 골드'); },
+       function (it) { if (Sim.deckSize(S) < T.CFG.reelMax) S.deck[it.id] = (S.deck[it.id] || 0) + 1; });
+    mk('대본', S.stock.scripts, function (it) { return scriptBox(it.sc, it.cost + ' 골드'); },
+       function (it) { if (S.scripts.length < Sim.scriptCap(S)) S.scripts.push(it.sc); });
+    mk('유물', S.stock.relics, function (it) {
+      var r = T.RELICS[it.k];
+      return '<div class="ic">' + r.icon + '</div><div class="n">' + r.name + '</div>'
+        + '<div class="e">' + r.desc + '</div><div class="x">' + it.cost + ' 골드</div>';
+    }, function (it) { S.relics.push(it.k); });
+
+    var rem = document.createElement('div'); rem.className = 'cardpick';
+    Object.keys(S.deck).forEach(function (id) {
+      var b = document.createElement('button');
+      b.textContent = T.CARDS[id].icon + ' ' + T.CARDS[id].name + ' 빼기 (5골드)';
+      b.disabled = S.gold < 5 || Sim.deckSize(S) <= 10;
+      b.onclick = function () { S.gold -= 5; S.deck[id]--; if (!S.deck[id]) delete S.deck[id]; showShop(); };
+      rem.appendChild(b);
+    });
+    o.appendChild(rem);
+    var go = document.createElement('button'); go.className = 'go'; go.textContent = '나간다';
+    go.onclick = function () { S.stock = null; clearOv(); showMap(); };
+    o.appendChild(go); render();
+  }
+
+  function showRest() {
+    var o = ov();
+    o.innerHTML = '<h3>분장실</h3><div class="sub">HP ' + Math.round(S.hp) + '/' + S.maxHp + '</div>';
+    var row = document.createElement('div'); row.className = 'cardpick';
+    [['HP 35% 회복', function () { S.hp = Math.min(S.maxHp, S.hp + S.maxHp * 0.35); }],
+     ['최대 HP +10', function () { S.maxHp += 10; S.hp += 10; }]].forEach(function (p) {
+      var d = document.createElement('div'); d.className = 'cp';
+      d.innerHTML = '<div class="n">' + p[0] + '</div>';
+      d.onclick = function () { p[1](); clearOv(); showMap(); };
+      row.appendChild(d);
+    });
+    o.appendChild(row); render();
+  }
+
+  function showForge() {
+    var o = ov();
+    o.innerHTML = '<h3>각색실</h3>'
+      + '<div class="sub">같은 배역 2장을 1장으로 압축한다. 칸이 비고 남은 배역의 확률이 오른다.</div>';
+    var row = document.createElement('div'); row.className = 'cardpick';
+    Object.keys(S.deck).filter(function (id) { return S.deck[id] >= 2; }).forEach(function (id) {
+      var d = document.createElement('div'); d.className = 'cp';
+      d.innerHTML = cardBox(id, '2장 → 1장');
+      d.onclick = function () { S.deck[id]--; clearOv(); showMap(); };
+      row.appendChild(d);
+    });
+    o.appendChild(row);
+    var b = document.createElement('button'); b.textContent = '나간다';
+    b.onclick = function () { clearOv(); showMap(); };
+    o.appendChild(b); render();
+  }
+
+  function endRun(won) {
+    S.over = won ? 'won' : 'dead';
+    Object.keys(S.feat).forEach(unlock);
+    var o = ov();
+    var newly = Object.keys(S.feat).filter(function (k) { return T.CHARS[k]; })
+      .map(function (k) { return T.CHARS[k].name; });
+    o.innerHTML = '<h3>' + (won ? '막을 끝냈다' : '막이 내렸다') + '</h3>'
+      + '<div class="sub">' + (won ? 'HP ' + Math.round(S.hp) + '/' + S.maxHp
+        : (S.at ? (S.at.f + 1) + '층 · ' + (S.killedBy || (S.foes && S.foes[0] ? S.foes[0].name : '')) + ' 에게 무너졌다' : ''))
+      + (newly.length ? '<br><span style="color:#a8c49a">해금 — ' + newly.join(' · ') + '</span>' : '')
+      + '</div>';
+    var b = document.createElement('button'); b.className = 'go'; b.textContent = '처음으로';
+    b.onclick = showTitle; o.appendChild(b); render();
+  }
+
+  function ov() { var o = el('overlay'); o.innerHTML = '<div class="over"></div>'; return o.firstChild; }
+  function clearOv() { el('overlay').innerHTML = ''; }
+
+  // ── 전투 화면 ─────────────────────────────────────────────
+  function drawFight() {
+    var ctx = Sim.ctxOf(S, S.w);
+    var b = el('body');
+    b.innerHTML = '<div class="stage" id="stage"></div>'
+      + '<div class="board"><div class="cap" id="bcap"></div><div class="reels" id="reels"></div></div>'
+      + '<div class="hand" id="hw"></div><div class="actions" id="acts"></div>';
+
+    var st = el('stage');
+    S.foes.forEach(function (f, i) {
+      var d = document.createElement('div');
+      d.className = 'foe' + (pend && f.hp > 0 ? ' aim' : '') + (f.hp <= 0 ? ' dead' : '');
+      var amp = T.ampMul(f, {}), ampAoe = T.ampMul(f, { aoe: true }), at = [];
+      if (amp > 1) at.push('받는 피해 +' + Math.round((amp - 1) * 100) + '%');
+      if (ampAoe > amp) at.push('광역 ×' + (ampAoe / amp).toFixed(1));
+      var tags = [];
+      if (f.def) tags.push('방어력 ' + f.def + (f.defGrow ? ' (+' + f.defGrow + '/턴, 최대 ' + f.defMax + ')' : ''));
+      if (f.slowN) tags.push('🐌 둔화 ' + f.slowN);
+      if (f.burn) tags.push('🔥 화상 ' + f.burn);
+      if (f.poison) tags.push('🩸 독 ' + f.poison + (f.poison >= T.AMP.poisonLock ? ' (잠김)' : ''));
+      if (f.evadeSingle) tags.push('단일 ' + Math.round(f.evadeSingle * 100) + '% 회피');
+      if (f.doom) tags.push('🔔 ' + f.doom + '턴');
+      if (f.dotImmune) tags.push('화상·독 면역');
+      if (f.role === 'guard') tags.push('💡 본체를 지킨다');
+      if (f.guardMul && S.foes.some(function (y) { return y.hp > 0 && y.role === 'guard'; }))
+        tags.push('받는 피해 ' + Math.round(f.guardMul * 100) + '% — 조명을 먼저');
+      if (f.gimmick && T.GIMMICK_TEXT[f.gimmick]) tags.push(T.GIMMICK_TEXT[f.gimmick][0]
+        + (f.gimT ? ' ' + f.gimT + '턴' : ''));
+      if (f.seizeCd) tags.push('📜 압수 ' + (f.seizeT || f.seizeCd) + '턴');
+      d.innerHTML = '<div class="nm">' + f.name + '</div>'
+        + '<div class="it">' + (f.hp > 0 ? f.t + '턴 후 · 공격 ' + f.atk : '퇴장') + '</div>'
+        + '<div class="amp">' + at.join(' · ') + '</div>'
+        + '<div class="bar hpb"><i style="width:' + Math.max(0, f.hp / f.maxHp * 100) + '%"></i></div>'
+        + '<div class="num">HP ' + Math.max(0, Math.round(f.hp)) + '/' + f.maxHp + '</div>'
+        + (f.block ? '<div class="bar blb"><i style="width:' + Math.min(100, f.block / f.maxHp * 100) + '%"></i></div><div class="num">방어 ' + Math.round(f.block) + '</div>' : '')
+        + '<div class="tag">' + tags.join('<br>') + '</div>';
+      d.onclick = function () { clickFoe(i); };
+      st.appendChild(d);
+    });
+
+    el('bcap').innerHTML = '<b style="color:#c6bd95;font-weight:400">무대</b> — 턴이 시작되면 자동으로 올라간다. '
+      + '이 4장이 상연할 수 있는 대본을 정한다. '
+      + (S.freeReroll > 0 ? '<b style="color:#c6bd95;font-weight:400">🔁 무료 ' + S.freeReroll + '회</b> · ' : '')
+      + '<b style="color:#a8c49a;font-weight:400">🔁</b> 릴 하나를 다시 굴린다 (코스트 1)';
+    var rw = el('reels');
+    for (var k = 0; k < 4; k++) {
+      (function (k) {
+        var strip = S.strips[k], pos = S.pos[k], n = strip.length;
+        var r = document.createElement('div'); r.className = 'reel';
+        [-1, 0, 1].forEach(function (o) {
+          var raw = strip[((pos + o) % n + n) % n];
+          var id = (o === 0) ? S.stage[k] : raw, dd = T.CARDS[id] || {};
+          var c = document.createElement('div');
+          c.className = 'cell' + (o === 0 ? ' pay' : '') + (id === 'void' ? ' void' : '');
+          c.innerHTML = (dd.icon || '·') + (o === 0 ? '<em>' + (dd.name || '') + '</em>' : '');
+          c.title = (dd.name || '') + ' — ' + T.cardText(dd);
+          r.appendChild(c);
+        });
+        var rb = document.createElement('button');
+        var free = S.freeReroll > 0;
+        rb.className = 'rr' + (free ? ' free' : ''); rb.textContent = free ? '🔁 무료' : '🔁 1';
+        rb.disabled = !free && S.cost < 1;
+        rb.onclick = function () { doReroll(k); };
+        r.appendChild(rb);
+        rw.appendChild(r);
+      })(k);
+    }
+
+    var hw = el('hw');
+    var hand = Sim.handOf(S);
+    var live = S.scripts.filter(function (s) { return T.canStage(s, S.stage, ctx.relax) && !S.sealed[s.id]; }).length;
+    hw.innerHTML = '<div class="cap"><b>상연</b> — 대본을 누르고 적을 누른다 · '
+      + '무대 조건을 채운 대본 ' + live + '/' + S.scripts.length
+      + (S.temp.length ? ' · 즉석 ' + S.temp.length : '') + '</div>';
+    var hr = document.createElement('div'); hr.className = 'hrow';
+    var add = function (sc, sealed) {
+      var can = !sealed && Sim.canPlay(S, sc), staged = T.canStage(sc, S.stage, ctx.relax);
+      var btn = document.createElement('button');
+      btn.className = 'hc' + (can ? '' : ' dis') + (sc.temp ? ' temp' : '')
+        + (sealed ? ' seal' : '') + (pend === sc ? ' pend' : '') + (tip === sc ? ' tip' : '');
+      btn.innerHTML = '<div class="c">' + sc.cost + '</div>'
+        + '<div class="n">' + sc.name + (sc.temp ? ' <span style="color:#8b7aa8">즉석</span>' : '')
+        + (sealed ? ' <span style="color:#b07a6a">압수됨</span>' : '') + '</div>'
+        + '<div class="r">' + T.reqText(sc) + (staged ? ' ✓' : ' <span style="color:#7a5a5a">미충족</span>') + '</div>'
+        + '<div class="e">' + T.effText(sc.effect) + '</div>';
+      if (can) btn.onclick = function () { clickScript(sc); };
+      hr.appendChild(btn);
+    };
+    S.temp.forEach(function (sc) { add(sc, false); });
+    S.scripts.forEach(function (sc) { add(sc, !!S.sealed[sc.id]); });
+    hw.appendChild(hr);
+
+    var ac = el('acts');
+    var e = document.createElement('button');
+    e.className = 'go wide'; e.textContent = '턴 종료';
+    e.onclick = endTurn; ac.appendChild(e);
+    var h = document.createElement('button');
+    h.textContent = '💡 추천 수';
+    h.title = '봇이 이번 턴에 무엇을 먼저 둘지 계산해서 표시한다';
+    h.onclick = showTip; ac.appendChild(h);
+
+    render();
+  }
+
+  // ── 공통 렌더 ─────────────────────────────────────────────
+  function render() {
+    el('ampTbl').innerHTML = T.AMP_TEXT.map(function (r) {
+      return '<tr class="amprow"><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>';
+    }).join('');
+    el('cheerTbl').innerHTML = T.CHEER_TEXT.map(function (r) {
+      return '<tr class="amprow"><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>';
+    }).join('');
+    if (!S) {
+      ['tAct','tHp'].forEach(function (i) { el(i).textContent = '—'; });
+      el('tCost').innerHTML = ''; el('tRelics').innerHTML = ''; el('log').innerHTML = '';
+      el('deck').innerHTML = ''; el('deckInfo').textContent = '—'; el('flags').innerHTML = '';
+      el('scrTbl').innerHTML = ''; el('scrInfo').textContent = '—'; el('body').innerHTML = '';
+      return;
+    }
+    el('tAct').textContent = '제' + S.act + '막 · ' + S.ch.name
+      + ' · ' + S.diff.name + (S.asc.level ? ' 승천 ' + S.asc.level + '단' : '');
+    el('tHp').textContent = Math.max(0, Math.round(S.hp)) + '/' + S.maxHp;
+    el('tBlock').textContent = Math.round(S.block || 0);
+    el('tThorns').textContent = Math.round(S.thorns || 0);
+    el('tGold').textContent = S.gold;
+    el('tTurn').textContent = S.turn || 0;
+    el('tCheer').textContent = Math.round(S.cheer || 0);
+    el('tCheerI').style.width = Math.min(100, (S.cheer || 0) / S.asc.cheerMax * 100) + '%';
+    var cs = '';
+    for (var i = 0; i < Sim.maxCost(S); i++) cs += '<i class="' + (i < (S.cost || 0) ? 'on' : '') + '"></i>';
+    el('tCost').innerHTML = cs;
+    el('tRelics').innerHTML = (S.relics || []).map(function (k) {
+      return '<span title="' + T.RELICS[k].name + ' — ' + T.RELICS[k].desc + '">' + T.RELICS[k].icon + '</span>';
+    }).join('');
+
+    var fl = [];
+    if (S.foes && S.turn) {
+      var stallAt = Math.max(4, T.CFG.stallTurn + S.asc.stallDelta)
+        + (S.foes.some(function (f) { return f.boss; }) ? 6 : 0);
+      if (S.turn >= stallAt) fl.push(['😠 야유 중 — 매 턴 적 공격 +10% · HP −' + S.asc.stallDmg, 1]);
+      else if (stallAt - S.turn <= 3) fl.push(['😐 ' + (stallAt - S.turn) + '턴 후 야유', 0]);
+      if (S.intrudeOn) fl.push(['🚪 ' + Math.max(0, S.intrudeOn - S.turn) + '턴 후 난입', 1]);
+      if (S.censor) fl.push(['✂️ ' + T.CARDS[S.censor.id].name + ' 봉인 ' + S.censor.turns + '턴', 1]);
+      Object.keys(S.sealed || {}).forEach(function (id) {
+        var s = T.SCRIPT_BY_ID[id]; fl.push(['📜 「' + (s ? s.name : id) + '」 압수됨', 1]);
+      });
+      S.foes.forEach(function (f) {
+        if (f.hp > 0 && f.phased && f.clock != null) fl.push(['🔔 막 내림까지 ' + f.clock + '턴', 1]);
+      });
+    }
+    el('flags').innerHTML = fl.map(function (x) {
+      return '<span class="' + (x[1] ? 'warn' : '') + '">' + x[0] + '</span>'; }).join('');
+
+    el('log').innerHTML = S.log.map(function (l) {
+      return '<span class="' + l.c + '">' + l.t + '</span>'; }).slice(-80).join('<br>');
+    el('log').scrollTop = 1e6;
+
+    var host = el('deck'); host.innerHTML = '';
+    Object.keys(S.deck).sort().forEach(function (id) {
+      var d = T.CARDS[id], n = document.createElement('span');
+      n.className = 'card';
+      n.innerHTML = '<i>' + d.icon + '</i>' + d.name + ' <b>' + S.deck[id] + '</b>';
+      host.appendChild(n);
+    });
+    var by = {};
+    Object.keys(S.deck).forEach(function (id) { var f = T.CARDS[id].fam; by[f] = (by[f] || 0) + S.deck[id]; });
+    el('deckInfo').innerHTML = '칸 ' + Sim.deckSize(S) + '/' + T.CFG.reelMax
+      + ' · 종류 ' + Object.keys(S.deck).length
+      + '<br>' + T.FAMS.map(function (f) { return T.FAM_KO[f] + ' ' + (by[f] || 0); }).join(' · ');
+
+    el('scrTbl').innerHTML = S.scripts.map(function (s) {
+      var ok = S.stage ? T.canStage(s, S.stage, Sim.relicN(S, 'stand_in')) : false;
+      var p = Math.round(Sim.stageProb(s, S.deck) * 100);
+      return '<tr><td' + (ok ? ' style="color:#a8c49a"' : '') + '>' + s.name
+        + (S.sealed && S.sealed[s.id] ? ' <span style="color:#b07a6a">압수</span>' : '')
+        + '<br><span style="color:#56545e">' + T.reqText(s) + ' · ' + T.effText(s.effect)
+        + ' · 확률 ' + p + '%</span></td>'
+        + '<td class="n">c' + s.cost + '</td></tr>';
+    }).join('');
+    el('scrInfo').textContent = '보유 ' + S.scripts.length + '/' + Sim.scriptCap(S)
+      + ' · 최대 코스트 ' + Sim.maxCost(S);
+  }
+
+  showTitle();
+})();
+</script>
+</body>
+</html>

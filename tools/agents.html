@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>The Last Theater — 플레이어 100명 시뮬레이터</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0b0b0e; color:#b9b4ab; min-height:100vh; padding:12px;
+         font:400 13px/1.5 "Malgun Gothic",system-ui,sans-serif; }
+  .wrap { display:flex; gap:12px; align-items:flex-start; justify-content:center; flex-wrap:wrap; }
+  .col { display:flex; flex-direction:column; gap:10px; }
+  .panel { background:#16161a; border:1px solid #24242a; border-radius:6px; padding:10px 11px; }
+  .panel h2 { font-size:11px; font-weight:400; color:#5c5a63; letter-spacing:.08em; margin-bottom:7px;
+              text-transform:uppercase; }
+  h1 { font-size:15px; font-weight:400; color:#c6bd95; margin-bottom:3px; }
+  .lead { font-size:11px; color:#6b6b78; line-height:1.7; max-width:900px; margin-bottom:10px; }
+  button { background:#21212a; color:#b9b4ab; border:1px solid #57545f; border-radius:4px;
+           padding:6px 11px; font:inherit; font-size:12px; cursor:pointer; }
+  button:hover:not(:disabled){ border-color:#8b8467; color:#c6bd95; }
+  button:disabled { opacity:.32; cursor:default; }
+  button.go { border-color:#7f9a72; color:#a8c49a; }
+  select, input { background:#1d1d25; color:#b9b4ab; border:1px solid #3a3a45; border-radius:4px;
+                  padding:5px 7px; font:inherit; font-size:12px; }
+  table { border-collapse:collapse; width:100%; font-size:11px; }
+  th { font-weight:400; color:#5c5a63; text-align:left; padding:2px 6px 4px 0; border-bottom:1px solid #24242a; }
+  td { padding:2px 6px 2px 0; color:#8a8694; vertical-align:top; font-variant-numeric:tabular-nums; }
+  td.n, th.n { text-align:right; }
+  tr.row { cursor:pointer; }
+  tr.row:hover td { background:#1d1d25; color:#c6bd95; }
+  tr.sel td { background:#24241c; color:#c6bd95; }
+  .win { color:#a8c49a; } .lose { color:#b07a6a; }
+  .bar2 { height:6px; background:#25252e; border-radius:2px; overflow:hidden; margin-top:2px; }
+  .bar2>i { display:block; height:100%; background:#7f9a72; }
+  .note { font-size:11px; color:#56545e; line-height:1.65; margin-top:6px; }
+  .ctl { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+
+  /* 관전 화면 — play.html 과 같은 배치 */
+  .frame { width:620px; flex:none; background:#131317; border:1px solid #26262d; border-radius:8px;
+           overflow:hidden; display:flex; flex-direction:column; min-height:640px; }
+  .topbar { min-height:36px; display:flex; align-items:center; gap:10px; padding:0 11px; background:#16161b;
+            border-bottom:1px solid #24242a; font-size:12px; color:#7d7a86; flex-wrap:wrap; }
+  .topbar b { color:#c6bd95; font-weight:400; font-variant-numeric:tabular-nums; }
+  .cost { display:inline-flex; gap:3px; vertical-align:-1px; }
+  .cost i { width:10px; height:10px; border-radius:50%; border:1px solid #57545f; display:block; }
+  .cost i.on { background:#c6bd95; border-color:#c6bd95; }
+  .stage { min-height:150px; padding:9px; display:flex; gap:7px; justify-content:center;
+           background:radial-gradient(ellipse at 50% 0%,#1c1a22 0%,#100f14 70%);
+           border-bottom:1px solid #24242a; align-items:flex-start; }
+  .foe { width:172px; background:#191922; border:1px solid #2c2c36; border-radius:6px; padding:7px; }
+  .foe.dead { opacity:.22; }
+  .foe .nm { font-size:12px; color:#c6bd95; }
+  .foe .it { font-size:11px; color:#b07a6a; min-height:15px; margin:2px 0; }
+  .foe .amp { font-size:10px; color:#c49a6a; min-height:13px; }
+  .foe .tag { font-size:10px; color:#6b6b78; line-height:1.5; margin-top:2px; }
+  .bar { height:7px; background:#25252e; border-radius:2px; overflow:hidden; margin-bottom:2px; }
+  .bar>i { display:block; height:100%; }
+  .hpb>i{background:#7a4a44;} .blb>i{background:#5a6b7a;}
+  .num { font-size:10px; color:#7d7a86; font-variant-numeric:tabular-nums; }
+  .board { padding:9px 11px 7px; }
+  .board .cap { font-size:11px; color:#6b6b78; margin-bottom:5px; }
+  .reels { display:flex; gap:6px; }
+  .reel { flex:1; background:#0e0e12; border:1px solid #2c2c36; border-radius:5px; overflow:hidden; }
+  .cell { height:24px; display:flex; align-items:center; justify-content:center; font-size:14px;
+          color:#45454f; border-bottom:1px solid #1c1c23; }
+  .cell.pay { height:50px; font-size:22px; color:#d8d2c4; background:#191922;
+              box-shadow:inset 0 0 0 1px #3a3a45; flex-direction:column; gap:1px; }
+  .cell.pay em { font-style:normal; font-size:10px; color:#8f8b99; }
+  .hand { padding:0 11px 7px; }
+  .hand .cap { font-size:11px; color:#6b6b78; margin-bottom:5px; }
+  .hrow { display:flex; gap:4px; flex-wrap:wrap; }
+  .hc { width:146px; text-align:left; background:#191922; border:1px solid #33333d; border-radius:5px;
+        padding:5px 6px; position:relative; }
+  .hc.dis { opacity:.3; }
+  .hc.now { border-color:#c6bd95; background:#24241c; }
+  .hc.temp { border-style:dashed; border-color:#8b7aa8; }
+  .hc .c { position:absolute; right:5px; top:3px; font-size:10px; color:#c6bd95; }
+  .hc .n { font-size:11px; color:#c6bd95; padding-right:14px; }
+  .hc .r { font-size:10px; color:#7f9a72; }
+  .hc .e { font-size:10px; color:#8f8b99; line-height:1.35; }
+  .log { flex:1; min-height:110px; max-height:200px; overflow-y:auto; padding:7px 11px; font-size:11px;
+         line-height:1.6; color:#77737f; border-top:1px solid #24242a; background:#0e0e12; }
+  .log .t{color:#5c5a63;} .log .s{color:#c6bd95;} .log .d{color:#b07a6a;}
+  .log .b{color:#7f95b0;} .log .e{color:#8b7aa8;} .log .a{color:#c49a6a;}
+  .kind { font-size:10px; color:#8b7aa8; }
+  .cheerbar { display:inline-block; width:52px; height:6px; background:#25252e; border-radius:2px;
+              overflow:hidden; vertical-align:middle; margin-left:4px; }
+  .cheerbar>i { display:block; height:100%; background:#c6bd95; }
+  .flags { display:flex; gap:6px; flex-wrap:wrap; padding:5px 11px 0; font-size:10px; min-height:0; }
+  .flags span { border:1px solid #3a3a45; border-radius:3px; padding:1px 5px; color:#c49a6a; background:#1d1d25; }
+  .empty { padding:30px 12px; text-align:center; font-size:11px; color:#56545e; line-height:1.8; }
+</style>
+</head>
+<body>
+
+<h1>플레이어 100명 시뮬레이터</h1>
+<p class="lead">
+  확률 모델이 아니다. 실제 규칙으로 한 판을 끝까지 둔다 — 맵을 고르고, 매 턴 손패와 코스트로
+  <b style="color:#c6bd95;font-weight:400">가능한 상연 순서를 탐색해서</b> 고르고, 보상에서 배역과 대본 중 하나를 판단해 집는다.
+  플레이어마다 <b style="color:#c6bd95;font-weight:400">성향</b>이 달라서 같은 캐릭터라도 다른 덱으로 자란다.
+  아래 표에서 아무 판이나 누르면 그 판을 실제 화면으로 되돌려 본다.
+</p>
+
+<div class="ctl" style="margin-bottom:11px">
+  <span style="font-size:11px;color:#6b6b78">인원</span>
+  <input id="n" type="number" value="100" min="6" max="600" style="width:70px">
+  <span style="font-size:11px;color:#6b6b78">난이도</span>
+  <select id="diff"><option value="story">스토리</option><option value="normal" selected>보통</option><option value="hard">어려움</option></select>
+  <span style="font-size:11px;color:#6b6b78">숙련도</span>
+  <select id="skill">
+    <option value="mix" selected>섞어서 (처음·익숙·숙련)</option>
+    <option value="rookie">처음 하는 사람만</option>
+    <option value="mid">익숙한 사람만</option>
+    <option value="expert">숙련자만</option>
+  </select>
+  <span style="font-size:11px;color:#6b6b78">시드</span>
+  <input id="seed" type="number" value="1000" style="width:88px">
+  <label style="font-size:11px;color:#6b6b78" title="켜면 매번 같은 100명이 나온다 — 밸런스 수정 전후를 비교할 때 쓴다">
+    <input id="fix" type="checkbox" style="vertical-align:-1px"> 시드 고정
+  </label>
+  <button class="go" id="run">100명 돌린다</button>
+  <span id="prog" style="font-size:11px;color:#7f9a72"></span>
+</div>
+
+<div class="wrap">
+  <div class="col" style="width:660px">
+    <div class="panel">
+      <h2>결과 — 판을 누르면 관전한다</h2>
+      <div style="max-height:340px;overflow-y:auto">
+        <table id="runs"><thead><tr>
+          <th>#</th><th>캐릭터</th><th>성향</th><th class="n">층</th><th class="n">턴</th>
+          <th class="n">HP</th><th>끝</th><th>덱</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <div class="panel"><h2>숙련도별 — 로그라이크라면 처음이 낮고 반복하면 올라야 한다</h2>
+      <table id="bySkill"><tbody></tbody></table></div>
+    <div class="panel"><h2>캐릭터별</h2><table id="byChar"><tbody></tbody></table></div>
+    <div class="panel"><h2>성향별</h2><table id="byPol"><tbody></tbody></table></div>
+    <div class="panel"><h2>어디서 죽었나</h2><table id="byDeath"><tbody></tbody></table></div>
+    <div class="panel"><h2>빌드가 갈라지나 — 캐릭터별로 실제로 자란 릴</h2>
+      <table id="builds"><tbody></tbody></table>
+      <p class="note" id="divNote">—</p></div>
+    <div class="panel"><h2>많이 상연된 대본</h2><table id="topScripts"><tbody></tbody></table></div>
+  </div>
+
+  <div class="col">
+    <div class="frame">
+      <div class="topbar">
+        <span id="wAct">—</span>
+        <span>HP <b id="wHp">—</b></span>
+        <span>방어 <b id="wBlock">0</b></span>
+        <span>반사 <b id="wThorns">0</b></span>
+        <span>골드 <b id="wGold">0</b></span>
+        <span>코스트 <span class="cost" id="wCost"></span></span>
+        <span>환호 <b id="wCheer">0</b><span class="cheerbar"><i id="wCheerI"></i></span></span>
+        <span style="margin-left:auto">턴 <b id="wTurn">0</b></span>
+      </div>
+      <div id="wFlags" class="flags"></div>
+      <div id="wBody"><div class="empty">왼쪽 표에서 판을 하나 고르면<br>그 판이 여기서 실제로 돌아간다</div></div>
+      <div class="log" id="wLog"></div>
+    </div>
+    <div class="panel">
+      <h2>관전</h2>
+      <div class="ctl">
+        <button id="pPrev">◀</button>
+        <button class="go" id="pPlay">▶ 재생</button>
+        <button id="pNext">▶</button>
+        <select id="pSpeed"><option value="700">느리게</option><option value="330" selected>보통</option><option value="120">빠르게</option></select>
+        <span id="pPos" style="font-size:11px;color:#6b6b78">—</span>
+      </div>
+      <input id="pBar" type="range" min="0" max="0" value="0" style="width:100%;margin-top:7px">
+      <p class="note" id="pWho">—</p>
+    </div>
+    <div class="panel"><h2>관중</h2><table id="cheerTbl"><tbody></tbody></table></div>
+    <div class="panel"><h2>보스 기믹 — 강제되는 대응</h2><table id="gimTbl"><tbody></tbody></table></div>
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script src="sim.js"></script>
+<script>
+(function () {
+  var T = window.Theater, Sim = window.Sim, el = function (i) { return document.getElementById(i); };
+  var RUNS = [], W = null, timer = null;
+
+  var CK = Object.keys(T.CHARS), PK = Object.keys(Sim.POLICIES), SK = Object.keys(Sim.SKILLS);
+
+  el('cheerTbl').tBodies[0].innerHTML = T.CHEER_TEXT.map(function (r) {
+    return '<tr class="amprow"><td style="color:#c49a6a;white-space:nowrap;padding-right:6px">'
+      + r[0] + '</td><td>' + r[1] + '</td></tr>';
+  }).join('');
+  el('gimTbl').tBodies[0].innerHTML = Object.keys(T.GIMMICK_TEXT).map(function (k) {
+    var g = T.GIMMICK_TEXT[k];
+    return '<tr><td style="color:#c49a6a;white-space:nowrap;padding-right:6px">' + g[0]
+      + '</td><td>' + g[1] + '</td></tr>';
+  }).join('') + T.INTRUDERS.map(function (iv) {
+    return '<tr><td style="color:#8b7aa8;white-space:nowrap;padding-right:6px">' + iv.icon + ' ' + iv.name
+      + '</td><td>' + iv.demands + '</td></tr>';
+  }).join('');
+
+  // ── 100명 돌리기 ──────────────────────────────────────────
+  el('run').onclick = function () {
+    var n = Math.max(6, Math.min(600, +el('n').value || 100));
+    var diff = el('diff').value;
+    // 기본은 매번 새 시드다. 고정을 켜면 같은 100명이 다시 나온다 —
+    // 수치를 바꾸기 전후를 비교할 때만 그게 필요하다.
+    if (!el('fix').checked) el('seed').value = 1 + Math.floor(Math.random() * 2000000000);
+    var seed0 = +el('seed').value || 1;
+    RUNS = []; el('run').disabled = true;
+    var i = 0;
+    (function chunk() {
+      var t0 = performance.now();
+      while (i < n && performance.now() - t0 < 90) {
+        // 캐릭터 × 성향 × 숙련도를 골고루 — 여기에 개인 편차가 더해져 100명이 100명이 된다
+        var ck = CK[i % CK.length], pk = PK[Math.floor(i / CK.length) % PK.length];
+        // 숙련도는 캐릭터·성향과 겹치지 않는 주기로 돌린다.
+        // i % 3 은 캐릭터 6종의 i % 6 에 종속돼서 숙련도가 캐릭터에 고정됐다.
+        var sw = el('skill').value;
+        var sk = sw === 'mix' ? SK[Math.floor(i / (CK.length * PK.length)) % SK.length] : sw;
+        var r = Sim.run({ seed: seed0 + i * 7919, charKey: ck, diffKey: diff, policyKey: pk, skillKey: sk });
+        r.i = RUNS.length; r.seed = seed0 + i * 7919; r.ck = ck; r.pk = pk; r.sk = sk; r.diff = diff;
+        r.log = null;                              // 100판 로그는 안 들고 있는다
+        RUNS.push(r); i++;
+      }
+      el('prog').textContent = i + '/' + n;
+      if (i < n) return setTimeout(chunk, 0);
+      el('run').disabled = false;
+      el('prog').textContent = n + '명 완료';
+      report();
+    })();
+  };
+
+  // ── 집계 ─────────────────────────────────────────────────
+  function pct(a, b) { return b ? (a / b * 100).toFixed(0) + '%' : '—'; }
+  function avg(a, g) { return a.length ? a.reduce(function (x, r) { return x + g(r); }, 0) / a.length : 0; }
+
+  function report() {
+    var tb = el('runs').tBodies[0]; tb.innerHTML = '';
+    RUNS.forEach(function (r) {
+      var tr = document.createElement('tr'); tr.className = 'row';
+      tr.innerHTML = '<td>' + (r.i + 1) + '</td><td>' + r.char + '</td>'
+        + '<td>' + r.policy + '<span style="color:#56545e"> · ' + r.skill + '</span></td>'
+        + '<td class="n">' + r.floor + '</td><td class="n">' + r.turns + '</td>'
+        + '<td class="n">' + r.hp + '</td>'
+        + '<td class="' + (r.won ? 'win' : 'lose') + '">' + (r.won ? '클리어' : (r.killedBy || '')) + '</td>'
+        + '<td>' + Object.keys(r.deck).sort(function (a, b) { return r.deck[b] - r.deck[a]; }).slice(0, 5)
+            .map(function (k) { return T.CARDS[k].icon + r.deck[k]; }).join(' ') + '</td>';
+      tr.onclick = function () { watch(r, tr); };
+      tb.appendChild(tr);
+    });
+
+    group(el('bySkill'), SK.map(function (k) { return Sim.SKILLS[k].name; }), function (r) { return r.skill; },
+      function (k) { var s = Sim.SKILLS[SK.filter(function (x) { return Sim.SKILLS[x].name === k; })[0]];
+                     return s ? (s.depth + '수 앞을 본다 · 실수 ' + Math.round(s.err * 100) + '%') : ''; });
+    group(el('byChar'), CK.map(function (k) { return T.CHARS[k].name; }), function (r) { return r.char; },
+      function (k) { var c = T.CHARS[CK.filter(function (x) { return T.CHARS[x].name === k; })[0]];
+                     return T.WIN_KO[c.win]; });
+    group(el('byPol'), PK.map(function (k) { return Sim.POLICIES[k].name; }), function (r) { return r.policy; },
+      function (k) { return (Sim.POLICIES[PK.filter(function (x) { return Sim.POLICIES[x].name === k; })[0]] || {}).desc; });
+
+    var dd = {};
+    RUNS.forEach(function (r) { var k = r.won ? '클리어' : (r.killedBy || '?'); dd[k] = (dd[k] || 0) + 1; });
+    el('byDeath').tBodies[0].innerHTML = Object.keys(dd).sort(function (a, b) { return dd[b] - dd[a]; })
+      .map(function (k) {
+        return '<tr><td>' + k + '</td><td class="n">' + dd[k] + '명</td>'
+          + '<td style="width:130px"><div class="bar2"><i style="width:' + (dd[k] / RUNS.length * 100) + '%"></i></div></td></tr>';
+      }).join('');
+
+    // 빌드 분화 — 캐릭터별로 가장 많이 담긴 배역 상위 5
+    var bt = [], sigs = {};
+    CK.forEach(function (ck) {
+      var rs = RUNS.filter(function (r) { return r.ck === ck; });
+      if (!rs.length) return;
+      var tot = {};
+      rs.forEach(function (r) { Object.keys(r.deck).forEach(function (id) { tot[id] = (tot[id] || 0) + r.deck[id]; }); });
+      var top = Object.keys(tot).sort(function (a, b) { return tot[b] - tot[a]; }).slice(0, 6);
+      sigs[ck] = top.slice(0, 4).join(',');
+      bt.push('<tr><td>' + T.CHARS[ck].name + '</td><td style="color:#c49a6a">' + T.WIN_KO[T.CHARS[ck].win] + '</td>'
+        + '<td>' + top.map(function (id) { return T.CARDS[id].icon + (tot[id] / rs.length).toFixed(1); }).join(' ') + '</td>'
+        + '<td class="n">대본 ' + avg(rs, function (r) { return r.scripts.length; }).toFixed(1) + '</td></tr>');
+    });
+    el('builds').tBodies[0].innerHTML = bt.join('');
+    var uniq = {}; Object.keys(sigs).forEach(function (k) { uniq[sigs[k]] = 1; });
+    el('divNote').textContent = '캐릭터 ' + CK.length + '종 중 서로 다른 릴 구성 ' + Object.keys(uniq).length
+      + '종 · 평균 대본 ' + avg(RUNS, function (r) { return r.scripts.length; }).toFixed(1) + '장'
+      + ' · 증폭 걸린 턴 ' + pct(RUNS.reduce(function (a, r) { return a + r.stats.ampTurns; }, 0),
+                              RUNS.reduce(function (a, r) { return a + r.stats.turns; }, 0))
+      + ' · 코스트 사용 ' + pct(RUNS.reduce(function (a, r) { return a + r.stats.costUsed; }, 0),
+                              RUNS.reduce(function (a, r) { return a + r.stats.costMax; }, 0))
+      + ' · 재굴림 ' + (RUNS.reduce(function (a, r) { return a + r.stats.rerolls; }, 0) / Math.max(1, RUNS.reduce(function (a, r) { return a + r.stats.turns; }, 0))).toFixed(2) + '회/턴'
+      + ' · 기립박수 ' + (RUNS.reduce(function (a, r) { return a + (r.stats.ovations || 0); }, 0) / RUNS.length).toFixed(1) + '회/판'
+      + ' · 난입 ' + (RUNS.reduce(function (a, r) { return a + (r.stats.intrusions || 0); }, 0) / RUNS.length).toFixed(1) + '회/판';
+
+    var sc = {};
+    RUNS.forEach(function (r) { Object.keys(r.stats.byScript).forEach(function (n) { sc[n] = (sc[n] || 0) + r.stats.byScript[n]; }); });
+    el('topScripts').tBodies[0].innerHTML = Object.keys(sc).sort(function (a, b) { return sc[b] - sc[a]; })
+      .slice(0, 14).map(function (n) { return '<tr><td>' + n + '</td><td class="n">' + sc[n] + '회</td></tr>'; }).join('');
+  }
+
+  function group(host, keys, get, sub) {
+    host.tBodies[0].innerHTML = keys.map(function (k) {
+      var rs = RUNS.filter(function (r) { return get(r) === k; });
+      if (!rs.length) return '';
+      var wr = rs.filter(function (r) { return r.won; }).length;
+      return '<tr><td>' + k + '</td>'
+        + '<td style="color:#56545e">' + (sub ? sub(k) : '') + '</td>'
+        + '<td class="n" style="color:' + (wr ? '#a8c49a' : '#8a8694') + '">승 ' + pct(wr, rs.length) + '</td>'
+        + '<td class="n">평균 ' + avg(rs, function (r) { return r.floor; }).toFixed(1) + '층</td>'
+        + '<td class="n">증폭 ' + pct(rs.reduce(function (a, r) { return a + r.stats.ampTurns; }, 0),
+                                    rs.reduce(function (a, r) { return a + r.stats.turns; }, 0)) + '</td>'
+        + '<td style="width:90px"><div class="bar2"><i style="width:'
+          + (avg(rs, function (r) { return r.floor; }) / 12 * 100) + '%"></i></div></td></tr>';
+    }).join('');
+  }
+
+  // ── 관전 — 같은 시드로 다시 돌려 기록을 받는다 ─────────────
+  function watch(r, tr) {
+    stop();
+    Array.prototype.forEach.call(el('runs').tBodies[0].rows, function (x) { x.className = 'row'; });
+    if (tr) tr.className = 'row sel';
+    var full = Sim.run({ seed: r.seed, charKey: r.ck, diffKey: r.diff, policyKey: r.pk, trace: true });
+    W = { r: full, i: 0 };
+    el('pBar').max = Math.max(0, full.trace.length - 1);
+    el('pBar').value = 0;
+    el('pWho').textContent = full.char + ' · ' + full.policy + ' · '
+      + (full.won ? '클리어' : full.floor + '층에서 ' + (full.killedBy || '') + ' 에게') + ' · '
+      + T.WIN_KO[T.CHARS[r.ck].win] + ' 빌드 · 기록 ' + full.trace.length + '컷';
+    frame(0);
+  }
+
+  el('pBar').oninput = function () { stop(); frame(+el('pBar').value); };
+  el('pPrev').onclick = function () { stop(); frame(W ? W.i - 1 : 0); };
+  el('pNext').onclick = function () { stop(); frame(W ? W.i + 1 : 0); };
+  el('pPlay').onclick = function () {
+    if (!W) return;
+    if (timer) return stop();
+    el('pPlay').textContent = '⏸ 정지';
+    timer = setInterval(function () {
+      if (!W || W.i >= W.r.trace.length - 1) return stop();
+      frame(W.i + 1);
+    }, +el('pSpeed').value);
+  };
+  function stop() { if (timer) clearInterval(timer); timer = null; el('pPlay').textContent = '▶ 재생'; }
+
+  var NK = Sim.NK;
+  function frame(i) {
+    if (!W) return;
+    var tc = W.r.trace;
+    i = Math.max(0, Math.min(tc.length - 1, i));
+    W.i = i; el('pBar').value = i;
+    var f = tc[i], s = f.snap;
+    el('pPos').textContent = (i + 1) + '/' + tc.length + ' · ' + f.kind + ' · ' + f.txt;
+
+    el('wAct').textContent = '제' + s.act + '막 · ' + W.r.char
+      + (s.node ? ' · ' + NK[s.node.type] + ' ' + (s.node.f + 1) + '층' : '');
+    el('wHp').textContent = Math.max(0, Math.round(s.hp)) + '/' + s.maxHp;
+    el('wBlock').textContent = Math.round(s.block);
+    el('wThorns').textContent = Math.round(s.thorns);
+    el('wGold').textContent = s.gold;
+    el('wTurn').textContent = s.turn;
+    var cs = '';
+    for (var c = 0; c < s.maxCost; c++) cs += '<i class="' + (c < s.cost ? 'on' : '') + '"></i>';
+    el('wCost').innerHTML = cs;
+    el('wCheer').textContent = Math.round(s.cheer || 0);
+    el('wCheerI').style.width = Math.min(100, (s.cheer || 0)) + '%';
+
+    var fl = [];
+    if (s.intrudeIn) fl.push('🚪 ' + s.intrudeIn + '턴 후 난입');
+    if (s.censor) fl.push('✂️ ' + s.censor.name + ' 봉인 ' + s.censor.turns + '턴');
+    (s.sealed || []).forEach(function (n) { fl.push('📜 「' + n + '」 압수됨'); });
+    s.foes.forEach(function (fo) {
+      if (fo.hp > 0 && fo.clock != null && fo.phased) fl.push('🔔 막 내림까지 ' + fo.clock + '턴');
+      if (fo.hp > 0 && fo.gimmick && T.GIMMICK_TEXT[fo.gimmick]) fl.push(T.GIMMICK_TEXT[fo.gimmick][0]);
+      if (fo.hp > 0 && fo.role === 'guard') fl.push('💡 조명 보호 중');
+    });
+    el('wFlags').innerHTML = fl.map(function (x) { return '<span>' + x + '</span>'; }).join('');
+
+    var body = el('wBody');
+    if (!s.foes.length || !s.stage.length) {
+      body.innerHTML = '<div class="empty">' + f.txt + '<br><span class="kind">'
+        + (f.kind === 'node' ? '이동' : f.kind) + '</span></div>';
+    } else {
+      body.innerHTML = '<div class="stage" id="wStage"></div>'
+        + '<div class="board"><div class="cap" id="wCap"></div><div class="reels" id="wReels"></div></div>'
+        + '<div class="hand" id="wHand"></div>';
+      var st = el('wStage');
+      s.foes.forEach(function (fo) {
+        var amp = T.ampMul(fo, {}), ampAoe = T.ampMul(fo, { aoe: true }), at = [];
+        if (amp > 1) at.push('받는 피해 +' + Math.round((amp - 1) * 100) + '%');
+        if (ampAoe > amp) at.push('광역 ×' + (ampAoe / amp).toFixed(1));
+        var tags = [];
+        if (fo.def) tags.push('방어력 ' + fo.def + (fo.defGrow ? ' (+' + fo.defGrow + '/턴)' : ''));
+        if (fo.slowN) tags.push('🐌 둔화 ' + fo.slowN);
+        if (fo.burn) tags.push('🔥 화상 ' + fo.burn);
+        if (fo.poison) tags.push('🩸 독 ' + fo.poison + (fo.poison >= T.AMP.poisonLock ? ' (잠김)' : ''));
+        if (fo.evadeSingle) tags.push('단일 ' + Math.round(fo.evadeSingle * 100) + '% 회피');
+        if (fo.doom) tags.push('🔔 ' + fo.doom + '턴');
+        if (fo.dotImmune) tags.push('화상·독 면역');
+        var d = document.createElement('div');
+        d.className = 'foe' + (fo.hp <= 0 ? ' dead' : '');
+        d.innerHTML = '<div class="nm">' + fo.name + '</div>'
+          + '<div class="it">' + (fo.hp > 0 ? fo.t + '턴 후 · 공격 ' + fo.atk : '퇴장') + '</div>'
+          + '<div class="amp">' + at.join(' · ') + '</div>'
+          + '<div class="bar hpb"><i style="width:' + Math.max(0, fo.hp / fo.maxHp * 100) + '%"></i></div>'
+          + '<div class="num">HP ' + Math.max(0, Math.round(fo.hp)) + '/' + fo.maxHp + '</div>'
+          + (fo.block ? '<div class="bar blb"><i style="width:' + Math.min(100, fo.block / fo.maxHp * 100) + '%"></i></div><div class="num">방어 ' + Math.round(fo.block) + '</div>' : '')
+          + '<div class="tag">' + tags.join('<br>') + '</div>';
+        st.appendChild(d);
+      });
+
+      el('wCap').innerHTML = '<b style="color:#c6bd95;font-weight:400">무대</b> — '
+        + s.stage.map(function (id) { return T.CARDS[id].icon + T.CARDS[id].name; }).join(' · ');
+      var rw = el('wReels');
+      for (var k = 0; k < 4; k++) {
+        var strip = s.strips[k] || [], pos = s.pos[k] || 0, n = strip.length || 1;
+        var rr = document.createElement('div'); rr.className = 'reel';
+        [-1, 0, 1].forEach(function (o) {
+          var id = strip[((pos + o) % n + n) % n], dd = T.CARDS[id] || {};
+          var cc = document.createElement('div');
+          cc.className = 'cell' + (o === 0 ? ' pay' : '');
+          cc.innerHTML = (dd.icon || '·') + (o === 0 ? '<em>' + (dd.name || '') + '</em>' : '');
+          rr.appendChild(cc);
+        });
+        rw.appendChild(rr);
+      }
+
+      var hw = el('wHand'), live = s.scripts.filter(function (x) { return x.can; }).length;
+      hw.innerHTML = '<div class="cap">상연 — 무대 조건을 채운 대본 ' + live + '/' + s.scripts.length
+        + (s.temp.length ? ' · 즉석 ' + s.temp.length : '') + '</div>';
+      var hr = document.createElement('div'); hr.className = 'hrow';
+      var nowName = f.kind === 'play' ? f.txt.replace(/^상연 「|」$/g, '') : null;
+      s.temp.concat(s.scripts).forEach(function (x) {
+        var d = document.createElement('div');
+        d.className = 'hc' + (x.can ? '' : ' dis') + (x.temp ? ' temp' : '')
+          + (nowName && x.name === nowName ? ' now' : '');
+        d.innerHTML = '<div class="c">' + x.cost + '</div>'
+          + '<div class="n">' + x.name + (x.temp ? ' <span style="color:#8b7aa8">즉석</span>' : '') + '</div>'
+          + '<div class="r">' + x.req + (x.can ? ' ✓' : '') + '</div>'
+          + '<div class="e">' + x.eff + '</div>';
+        hr.appendChild(d);
+      });
+      hw.appendChild(hr);
+    }
+
+    var lg = W.r.log.slice(Math.max(0, f.logLen - 26), f.logLen);
+    el('wLog').innerHTML = lg.map(function (l) { return '<span class="' + l.c + '">' + l.t + '</span>'; }).join('<br>');
+    el('wLog').scrollTop = 1e6;
+  }
+})();
+</script>
+</body>
+</html>
