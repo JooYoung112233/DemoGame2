@@ -466,6 +466,8 @@
     S.map = makeMap(rnd);
     S.w = makePlayer(pol, ch, sk, rnd);
     var w = S.w;
+    S.meta = opt.meta || null;
+    applyMeta(S, w);
 
     var guard = 0;
     while (guard++ < 400) {
@@ -497,7 +499,7 @@
   function finish(S, won, killedBy) {
     var st = S.stats;
     return { won: won, killedBy: killedBy, char: S.ch.name, charKey: keyOf(T.CHARS, S.ch),
-      policy: S.pol.name, skill: S.sk.name, w: S.w, feat: S.feat,
+      policy: S.pol.name, skill: S.sk.name, w: S.w, feat: S.feat, seenIds: S.seenIds || {},
       floor: S.at ? S.at.f + 1 : 0, nodes: st.nodes, turns: st.turns,
       hp: Math.max(0, Math.round(S.hp)), maxHp: S.maxHp, gold: S.gold,
       deck: Object.assign({}, S.deck), scripts: S.scripts.map(function (s) { return s.name; }),
@@ -505,6 +507,49 @@
       relics: S.relics.slice(), stats: st, log: S.log, trace: S.trace };
   }
   function keyOf(o, v) { return Object.keys(o).filter(function (k) { return o[k] === v; })[0]; }
+
+  // ── 판 사이에 남은 것을 이 판에 적용한다 ──────────────────
+  // 초연 기록(시작 릴 교체 · 시작 대본) · 유물 계승 · 대본 서고.
+  // 이게 「다음 판을 할 이유」다.
+  function applyMeta(S, w) {
+    var m = S.meta;
+    if (!m) return;
+    var p = T.premiereAt(m.floors || 0);
+    S.premiere = p;
+
+    // 시작 릴 교체 — 가장 값이 낮은 칸을 이 캐릭터 풀의 가장 값 높은 배역으로 바꾼다
+    for (var i = 0; i < p.swap; i++) {
+      var worst = null, wv = 1e9;
+      Object.keys(S.deck).forEach(function (id) {
+        var v = cardValueDrop(S, w, id);
+        if (v < wv) { wv = v; worst = id; }
+      });
+      var best = null, bv = -1e9;
+      (S.ch.pool || Object.keys(T.CARDS)).forEach(function (id) {
+        if (T.CARDS[id].hidden) return;
+        var v = cardValue(S, w, id);
+        if (v > bv) { bv = v; best = id; }
+      });
+      if (!worst || !best || best === worst) break;
+      S.deck[worst]--; if (!S.deck[worst]) delete S.deck[worst];
+      S.deck[best] = (S.deck[best] || 0) + 1;
+      lg(S, 'e', '  📓 초연 기록 — ' + T.CARDS[worst].name + ' → ' + T.CARDS[best].name);
+    }
+
+    // 시작 대본 — 서고에 남은 것 위주로 뽑는다
+    for (var j = 0; j < p.script; j++) {
+      var offer = offerScripts(S, 3), pick = null, pv = 0;
+      offer.forEach(function (sc) { var v = scriptValue(S, w, sc); if (v > pv) { pv = v; pick = sc; } });
+      if (pick) { S.scripts.push(pick); lg(S, 'e', '  📓 초고 — 「' + pick.name + '」 을 들고 시작한다'); }
+    }
+
+    // 유물 계승 — 창고에서 가장 값이 큰 것을 하나 들고 온다
+    if ((m.vault || []).length) {
+      var vb = null, vv = -1e9;
+      m.vault.forEach(function (k) { var v = relicValue(S, w, k); if (v > vv) { vv = v; vb = k; } });
+      if (vb) { S.relics.push(vb); lg(S, 'e', '  🏛 계승 — ' + T.RELICS[vb].name); }
+    }
+  }
 
   // ── 맵 ───────────────────────────────────────────────────
   function makeMap(rnd) {
@@ -573,6 +618,8 @@
   // 해금 관찰 — 상연 한 번마다
   function watchFeats(S, sc, aliveBefore) {
     if (!S.feat) S.feat = {};
+    if (!S.seenIds) S.seenIds = {};
+    S.seenIds[sc.id] = 1;                       // 대본 서고에 남는다
     var eff = sc.effect || {};
     var aoe = !!eff.aoe || ((S.ch.aoeFams || []).length && T.scriptFam(sc)
               && S.ch.aoeFams.indexOf(T.scriptFam(sc)) >= 0);
@@ -993,7 +1040,11 @@
   function offerScripts(S, n) {
     var owned = {}; S.scripts.forEach(function (s) { owned[s.id] = 1; });
     var pool = T.SCRIPTS.filter(function (s) { return !owned[s.id] && s.tier !== 'one'; });
-    return T.pickWeighted(pool, function (sc) { return T.scriptWeight(S.ch, sc); }, S.rnd, n);
+    var seen = (S.meta && S.meta.seen) || {};
+    // 대본 서고 — 예전 판에서 상연해 본 대본이 더 자주 뜬다. 덱을 이어서 만들어가는 감각.
+    return T.pickWeighted(pool, function (sc) {
+      return T.scriptWeight(S.ch, sc) * (seen[sc.id] ? T.ARCHIVE_MUL : 1);
+    }, S.rnd, n);
   }
 
   // 숙련도에 따라 보상 평가가 흔들린다 — 처음 하는 사람은 좋은 걸 알아보지 못한다
@@ -1154,6 +1205,8 @@
     var e = 0, unlocked = {}, tried = {}, out = [];
     var asc = 0, diff = 'normal', firstClear = null, clears = 0;
     var streak = 0, stopAt = null, stopWhy = null, firstNormal = null, droppedAt = null;
+    // 판 사이에 남는 것 — 이게 「다음 판을 할 이유」다
+    var meta = { floors: 0, seen: {}, vault: [] };
     Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) unlocked[k] = 1; });
     var PKs = Object.keys(POLICIES), fav = PKs[Math.floor(rnd() * PKs.length)];
 
@@ -1169,8 +1222,27 @@
       var playedDiff = diff, playedAsc = asc;   // 기록은 실제로 플레이한 난이도로 남긴다
       var runSeed = ((opt.seed | 0) + i * 104729) | 0;
       var r = run({ seed: runSeed, charKey: ck, diffKey: diff,
-                    policyKey: pk, skillObj: sk, asc: asc });
-      Object.keys(r.feat || {}).forEach(function (k) { if (T.CHARS[k]) unlocked[k] = 1; });
+                    policyKey: pk, skillObj: sk, asc: asc, meta: meta });
+      var newUnlock = 0;
+      Object.keys(r.feat || {}).forEach(function (k) {
+        if (T.CHARS[k] && !unlocked[k]) { unlocked[k] = 1; newUnlock++; }
+      });
+
+      // 이 판의 흔적을 남긴다 — 층수 · 상연한 대본 · 유물
+      var beforeP = T.premiereAt(meta.floors);
+      meta.floors += r.floor;
+      var afterP = T.premiereAt(meta.floors);
+      var newPremiere = (afterP.swap > beforeP.swap || afterP.script > beforeP.script
+                      || afterP.vault > beforeP.vault) ? 1 : 0;
+      Object.keys(r.seenIds || {}).forEach(function (k) { meta.seen[k] = 1; });
+      if (r.relics.length) {
+        // 그 판에서 가장 값이 큰 유물 하나가 창고에 남는다
+        var keep = r.relics[0];
+        if (meta.vault.indexOf(keep) < 0) {
+          if (meta.vault.length < afterP.vault) meta.vault.push(keep);
+          else meta.vault[Math.floor(rnd() * meta.vault.length)] = keep;
+        }
+      }
       // 깊게 간 판이 더 가르치고, 이긴 판이 가장 많이 가르친다
       e += learn * (0.045 + (r.floor / 12) * 0.055 + (r.won ? 0.11 : 0));
       if (r.won) {
@@ -1194,17 +1266,33 @@
 
       // 그만두는가
       if (r.won) streak = 0; else streak++;
+
+      // ── 다음 판을 할 이유가 있는가 ──────────────────────
+      // 이탈을 그냥 확률로 두면 설계를 재는 게 아니라 내 가정을 재는 것이 된다.
+      // 그래서 「새로운 것이 생겼는가」로 묶는다 — 해금 · 초연 기록 · 계승 · 안 써본 캐릭터.
+      var novelty = 0;
+      if (newUnlock) novelty += 0.30;                                  // 이번 판에 캐릭터가 열렸다
+      if (newPremiere) novelty += 0.22;                                // 시작 조건이 자랐다
+      if (Object.keys(unlocked).filter(function (k) { return !tried[k]; }).length) novelty += 0.16;
+      if (afterP.next) {                                               // 다음 기록이 눈앞이다
+        var need = afterP.next.at - meta.floors;
+        if (need <= 12) novelty += 0.14;
+      }
+      if (meta.vault.length) novelty += 0.08;                          // 계승할 유물이 있다
+      novelty = Math.min(0.75, novelty);
+      out[out.length - 1].novelty = novelty;
+
       if (!firstClear) {
         // 첫 클리어 전 — 연속 패배가 인내를 넘으면 떠날 수 있다.
         // 스토리로 내려가 진행 중이면 더 버틴다 (내용을 보고 있으니까)
         var pat = patience * (diff === 'story' ? 2 : 1);
-        if (streak >= pat && rnd() < 0.55) { stopAt = i; stopWhy = '포기'; break; }
+        if (streak >= pat && rnd() < 0.55 * (1 - novelty)) { stopAt = i; stopWhy = '포기'; break; }
       } else {
         // 첫 클리어 후 — 만족하고 떠나거나 계속 올린다.
         // 스토리를 넘긴 것과 보통을 넘긴 것을 같게 보면 안 된다.
-        // 같게 뒀을 때 79% 가 스토리 클리어 직후 떠나 아무도 승천에 닿지 못했다.
         var keep = firstNormal ? 0.45 + persistence * 0.5    // 로그라이크를 이겼다 — 승천이 남았다
                               : 0.72 + persistence * 0.25;   // 이야기만 봤다 — 아직 본편이 남았다
+        keep = keep + (1 - keep) * novelty;                  // 새 것이 있으면 남는다
         if (rnd() > keep) { stopAt = i; stopWhy = '만족'; break; }
       }
     }
@@ -1213,7 +1301,9 @@
              played: out.length, stopAt: stopAt, stopWhy: stopWhy || '관측 종료',
              patience: patience, persistence: persistence,
              ceiling: ceiling, learn: learn, endSkill: Math.min(ceiling, e),
-             unlocked: Object.keys(unlocked), maxAsc: asc };
+             unlocked: Object.keys(unlocked), maxAsc: asc,
+             meta: { floors: meta.floors, seen: Object.keys(meta.seen).length, vault: meta.vault.slice() },
+             premiere: T.premiereAt(meta.floors) };
   }
 
   // ── 사람이 플레이할 때 쓰는 문 ────────────────────────────

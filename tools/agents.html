@@ -138,6 +138,9 @@
       <h2 style="margin-top:10px">첫 클리어까지 몇 판</h2>
       <table id="fcTbl"><tbody></tbody></table>
       <p class="note" id="fcNote">—</p>
+      <h2 style="margin-top:10px">판 사이에 쌓인 것 — 다음 판을 할 이유</h2>
+      <table id="metaTbl"><tbody></tbody></table>
+      <p class="note" id="metaNote">—</p>
       <h2 style="margin-top:10px">캐릭터 해금률</h2>
       <table id="unTbl"><tbody></tbody></table>
     </div>
@@ -415,6 +418,22 @@
       + ' · 승천 도달 ' + avg(C, function (c) { return c.maxAsc; }).toFixed(1) + '단'
       + '<br>계속 지다가 스토리로 내려간 사람 ' + pct(dropped.length, C.length)
       + (dropped.length ? ' (중위 ' + med(dropped.map(function (c) { return c.droppedAt; })) + '판째)' : '');
+
+    // 판 사이에 쌓인 것 — 초연 기록 단계별 도달률
+    el('metaTbl').tBodies[0].innerHTML = T.PREMIERE.map(function (p) {
+      var n = C.filter(function (c) { return c.meta.floors >= p.at; }).length;
+      return '<tr><td class="n" style="color:#c49a6a">누적 ' + p.at + '층</td>'
+        + '<td>' + p.name + '<br><span style="color:#56545e">' + p.desc + '</span></td>'
+        + '<td style="width:70px"><div class="bar2"><i style="width:' + (n / Math.max(1, C.length) * 100) + '%"></i></div></td>'
+        + '<td class="n">' + pct(n, C.length) + '</td></tr>';
+    }).join('');
+    el('metaNote').innerHTML = '누적 층수 중위 ' + med(C.map(function (c) { return c.meta.floors; }))
+      + ' · 대본 서고 ' + avg(C, function (c) { return c.meta.seen; }).toFixed(0) + '종'
+      + ' · 계승 창고 ' + avg(C, function (c) { return c.meta.vault.length; }).toFixed(1) + '개'
+      + '<br>시작 릴 교체 ' + avg(C, function (c) { return c.premiere.swap; }).toFixed(1) + '칸'
+      + ' · 시작 대본 +' + avg(C, function (c) { return c.premiere.script; }).toFixed(1)
+      + '<br><span style="color:#c49a6a">「다음 판을 할 이유」</span>가 있을 때 이탈이 줄어든다 — '
+      + '해금 · 초연 기록 · 계승 · 안 써본 캐릭터가 그 이유다';
 
     var un = {};
     C.forEach(function (c) { c.unlocked.forEach(function (k) { un[k] = (un[k] || 0) + 1; }); });

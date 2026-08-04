@@ -335,6 +335,41 @@
               note: '이미 이겨본 사람의 자리', sub: '운과 실력이 함께 있어야 한다. 여기서 승천이 열린다.' }
   };
 
+  // ── 판 사이에 남는 것 ─────────────────────────────────────
+  // 화폐를 만들지 않는다. 저번 판의 「흔적」이 다음 판을 조금 낫게 한다.
+  // 이게 없으면 다음 판을 할 이유가 해금 하나뿐이고, 그러면 사람이 떠난다.
+
+  // ① 초연 기록 — 누적 도달 층수로 시작 조건이 자란다
+  // 층수 기준은 실측으로 잡았다 — 누적 층수 중위가 82 인데 130·210·320 을 요구하니
+  // 후반 단계 도달률이 21% · 9% · 3% 였다. 닿지 않는 목표는 이유가 되지 않는다.
+  var PREMIERE = [
+    { at: 18,  kind: 'swap',   n: 1, name: '연습실',     desc: '시작 릴의 배역 1칸을 원하는 것으로 바꾼다' },
+    { at: 45,  kind: 'script', n: 1, name: '초고',       desc: '시작 대본 +1' },
+    { at: 85,  kind: 'swap',   n: 3, name: '전속 배우',   desc: '시작 릴을 3칸까지 바꾼다' },
+    { at: 140, kind: 'vault',  n: 1, name: '극장 창고',   desc: '계승 유물 슬롯 +1' },
+    { at: 210, kind: 'script', n: 2, name: '개정판',     desc: '시작 대본 +1 (누적 2)' }
+  ];
+
+  // ② 유물 계승 — 런이 끝나면 그 판의 유물 하나가 창고에 남는다.
+  //    다음 런은 창고에서 하나를 들고 시작한다. 골드로 사는 게 아니라 저번 판에서 가져온다.
+  var VAULT_BASE = 1;
+
+  // ③ 대본 서고 — 한 번이라도 상연한 대본은 다음 런 보상에 더 자주 뜬다.
+  //    「내 덱을 만들어간다」는 감각이 여기서 나온다.
+  var ARCHIVE_MUL = 2.2;
+
+  function premiereAt(floors) {
+    var o = { swap: 0, script: 0, vault: VAULT_BASE, next: null };
+    PREMIERE.forEach(function (p) {
+      if (floors >= p.at) {
+        if (p.kind === 'swap') o.swap = Math.max(o.swap, p.n);
+        if (p.kind === 'script') o.script = Math.max(o.script, p.n);
+        if (p.kind === 'vault') o.vault += p.n;
+      } else if (!o.next) o.next = p;
+    });
+    return o;
+  }
+
   // ── 승천 — 저주받은 대본 ──────────────────────────────────
   // 반복 성장의 뼈대다. 수치를 올리지 않고 규칙을 하나씩 더한다.
   // 축은 셋이다 — 보스 기믹 / 난입 / 관중.
@@ -787,6 +822,7 @@
     GIMMICK_TEXT: GIMMICK_TEXT, INTRUDERS: INTRUDERS, intrudeChance: intrudeChance,
     CHEER: CHEER, CHEER_TEXT: CHEER_TEXT,
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
+    PREMIERE: PREMIERE, premiereAt: premiereAt, ARCHIVE_MUL: ARCHIVE_MUL, VAULT_BASE: VAULT_BASE,
     makeOpeners: makeOpeners, scriptOptions: scriptOptions,
     SCRIPTS: SCRIPTS, SCRIPT_BY_ID: SCRIPT_BY_ID, allScripts: allScripts,
     canStage: canStage, reqText: reqText, RELICS: RELICS,
