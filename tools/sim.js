@@ -1344,8 +1344,10 @@
                      : T.EVENTS[Math.floor(S.rnd() * T.EVENTS.length)];
     if (!ev) return null;
     var take = eventValue(S, w, ev.id);
+    S.stats.events = (S.stats.events || 0) + 1;
     // 사건 판단도 숙련도에 흔들린다 — 처음 하는 사람은 대가를 못 읽는다
-    if (noisy(S, take) > 0) { applyEvent(S, w, ev.id); lg(S, 'e', '  ' + ev.icon + ' ' + ev.name + ' — 받아들였다'); }
+    if (noisy(S, take) > 0) { S.stats.eventsTaken = (S.stats.eventsTaken || 0) + 1;
+      applyEvent(S, w, ev.id); lg(S, 'e', '  ' + ev.icon + ' ' + ev.name + ' — 받아들였다'); }
     else lg(S, 'e', '  ' + ev.icon + ' ' + ev.name + ' — 지나갔다');
     return ev;
   }

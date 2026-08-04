@@ -141,6 +141,8 @@
       <h2 style="margin-top:10px">판 사이에 쌓인 것 — 다음 판을 할 이유</h2>
       <table id="metaTbl"><tbody></tbody></table>
       <p class="note" id="metaNote">—</p>
+      <h2 style="margin-top:10px">승천 도달 — 반복의 끝이 어디까지 가나</h2>
+      <table id="ascTbl"><tbody></tbody></table>
       <h2 style="margin-top:10px">캐릭터 해금률</h2>
       <table id="unTbl"><tbody></tbody></table>
     </div>
@@ -162,6 +164,8 @@
       <table id="builds"><tbody></tbody></table>
       <p class="note" id="divNote">—</p></div>
     <div class="panel"><h2>많이 상연된 대본</h2><table id="topScripts"><tbody></tbody></table></div>
+    <div class="panel"><h2>유물 채용 — 아무도 안 사는 유물이 있는가</h2>
+      <table id="relicTbl"><tbody></tbody></table></div>
   </div>
 
   <div class="col">
@@ -197,8 +201,16 @@
   </div>
 </div>
 
-<script src="engine.js"></script>
-<script src="sim.js"></script>
+<!-- 캐시 무효화 — 프리뷰가 옛 engine.js/sim.js 를 붙들고 있어서
+     캐릭터 6종·둔화 상한 0.6 시절 결과를 최신 결과로 착각한 일이 있었다.
+     document.write 는 파싱 중 동기 실행이라 로드 순서가 보장된다. -->
+<script>
+  (function () {
+    var v = '?v=' + Date.now();
+    document.write('<scr' + 'ipt src="engine.js' + v + '"><\/scr' + 'ipt>');
+    document.write('<scr' + 'ipt src="sim.js' + v + '"><\/scr' + 'ipt>');
+  })();
+</script>
 <script>
 (function () {
   var T = window.Theater, Sim = window.Sim, el = function (i) { return document.getElementById(i); };
@@ -356,7 +368,31 @@
                               RUNS.reduce(function (a, r) { return a + r.stats.costMax; }, 0))
       + ' · 재굴림 ' + (RUNS.reduce(function (a, r) { return a + r.stats.rerolls; }, 0) / Math.max(1, RUNS.reduce(function (a, r) { return a + r.stats.turns; }, 0))).toFixed(2) + '회/턴'
       + ' · 기립박수 ' + (RUNS.reduce(function (a, r) { return a + (r.stats.ovations || 0); }, 0) / RUNS.length).toFixed(1) + '회/판'
-      + ' · 난입 ' + (RUNS.reduce(function (a, r) { return a + (r.stats.intrusions || 0); }, 0) / RUNS.length).toFixed(1) + '회/판';
+      + ' · 난입 ' + (RUNS.reduce(function (a, r) { return a + (r.stats.intrusions || 0); }, 0) / RUNS.length).toFixed(1) + '회/판'
+      + '<br>사건 ' + (RUNS.reduce(function (a, r) { return a + (r.stats.events || 0); }, 0) / RUNS.length).toFixed(1) + '회/판'
+      + ' · 받아들인 비율 ' + pct(RUNS.reduce(function (a, r) { return a + (r.stats.eventsTaken || 0); }, 0),
+                                RUNS.reduce(function (a, r) { return a + (r.stats.events || 0); }, 0))
+      + ' · 캐릭터 승률 스프레드 ' + (function () {
+          var w = CK.map(function (ck) {
+            var rs = RUNS.filter(function (r) { return r.ck === ck; });
+            return rs.length ? rs.filter(function (r) { return r.won; }).length / rs.length : null;
+          }).filter(function (x) { return x != null; });
+          if (w.length < 2) return '—';
+          return Math.round((Math.max.apply(null, w) - Math.min.apply(null, w)) * 100) + 'pp';
+        })();
+
+    // 유물 채용 — 값이 0 인 유물은 설계가 죽어 있다는 뜻이다
+    var rc = {};
+    RUNS.forEach(function (r) { (r.relics || []).forEach(function (k) { rc[k] = (rc[k] || 0) + 1; }); });
+    el('relicTbl').tBodies[0].innerHTML = Object.keys(T.RELICS)
+      .sort(function (a, b) { return (rc[b] || 0) - (rc[a] || 0); })
+      .map(function (k) {
+        var r = T.RELICS[k], n = rc[k] || 0;
+        return '<tr' + (n ? '' : ' style="opacity:.45"') + '><td>' + r.icon + ' ' + r.name
+          + (r.dark ? ' <span style="color:#8b7aa8">어둠' + r.asc + '</span>' : '') + '</td>'
+          + '<td style="color:#56545e">' + r.desc + '</td>'
+          + '<td class="n">' + (n ? (n / RUNS.length).toFixed(2) + '/판' : '—') + '</td></tr>';
+      }).join('');
 
     var sc = {};
     RUNS.forEach(function (r) { Object.keys(r.stats.byScript).forEach(function (n) { sc[n] = (sc[n] || 0) + r.stats.byScript[n]; }); });
@@ -418,6 +454,23 @@
       + ' · 승천 도달 ' + avg(C, function (c) { return c.maxAsc; }).toFixed(1) + '단'
       + '<br>계속 지다가 스토리로 내려간 사람 ' + pct(dropped.length, C.length)
       + (dropped.length ? ' (중위 ' + med(dropped.map(function (c) { return c.droppedAt; })) + '판째)' : '');
+
+    // 승천 도달 분포 — 각 단에 새로 열리는 어둠 유물을 같이 보여준다
+    el('ascTbl').tBodies[0].innerHTML = T.ASCENSION.map(function (a) {
+      var n = C.filter(function (c) { return c.maxAsc >= a.n; }).length;
+      var opens = Object.keys(T.RELICS).filter(function (k) {
+        return T.RELICS[k].dark && T.RELICS[k].asc === a.n; })
+        .map(function (k) { return T.RELICS[k].icon + T.RELICS[k].name; }).join(' ');
+      return '<tr><td class="n" style="color:#c49a6a">' + a.n + '단</td>'
+        + '<td>' + a.name + '<br><span style="color:#56545e">' + a.desc
+        + (opens ? ' · <span style="color:#8b7aa8">' + opens + ' 열림</span>' : '') + '</span></td>'
+        + '<td style="width:70px"><div class="bar2"><i style="width:' + (n / Math.max(1, C.length) * 100) + '%"></i></div></td>'
+        + '<td class="n">' + pct(n, C.length) + '</td></tr>';
+    }).join('')
+      + '<tr><td colspan="4" class="note">승천 평균 '
+      + avg(C, function (c) { return c.maxAsc; }).toFixed(2) + '단 · 보통을 넘긴 사람 중 2단 이상 '
+      + pct(C.filter(function (c) { return c.maxAsc >= 2; }).length,
+            Math.max(1, C.filter(function (c) { return c.firstNormal; }).length)) + '</td></tr>';
 
     // 판 사이에 쌓인 것 — 초연 기록 단계별 도달률
     el('metaTbl').tBodies[0].innerHTML = T.PREMIERE.map(function (p) {

@@ -172,8 +172,14 @@
   </div>
 </div>
 
-<script src="engine.js"></script>
-<script src="sim.js"></script>
+<!-- 캐시 무효화 — 프리뷰가 옛 engine.js/sim.js 를 붙들면 옛 규칙으로 플레이하게 된다 -->
+<script>
+  (function () {
+    var v = '?v=' + Date.now();
+    document.write('<scr' + 'ipt src="engine.js' + v + '"><\/scr' + 'ipt>');
+    document.write('<scr' + 'ipt src="sim.js' + v + '"><\/scr' + 'ipt>');
+  })();
+</script>
 <script>
 (function () {
   var T = window.Theater, Sim = window.Sim, el = function (i) { return document.getElementById(i); };
