@@ -46,6 +46,11 @@
   //   rewardNoise : 보상 평가가 얼마나 흔들리는가
   //   shopSmart   : 상점에서 계획대로 사는가, 눈에 띄는 걸 사는가
   var SKILLS = {
+    // 계획을 아예 안 하는 사람. 눈에 보이는 큰 것을 그냥 낸다 —
+    // 1수만 보고, 셋업의 값을 모르고, 재굴림을 거의 쓰지 않는다.
+    // 이 등급이 없으면 「가장 낮은 사람」도 2수를 봐서 초보를 과대평가한다.
+    naive:  { name: '무작정', depth: 1, width: 1, err: 0.5, setup: 0.12, useReroll: 0.04,
+              rewardNoise: 0.85, shopSmart: 0.15, driftRate: 0.3 },
     rookie: { name: '처음', depth: 2, width: 2, err: 0.34, setup: 0.35, useReroll: 0.25,
               rewardNoise: 0.6, shopSmart: 0.35, driftRate: 0.22 },
     mid:    { name: '익숙', depth: 3, width: 4, err: 0.14, setup: 0.75, useReroll: 0.7,
@@ -57,15 +62,19 @@
   // 숙련도는 3단이 아니라 연속이다 — 반복 플레이를 재려면 그 사이 값이 필요하다.
   // t=0 처음 · t=0.5 익숙 · t=1 숙련
   var SK_KEYS = ['depth', 'width', 'err', 'setup', 'useReroll', 'rewardNoise', 'shopSmart', 'driftRate'];
+  // 출발점은 「무작정」이다 — 첫 판을 두는 사람은 계획을 세우지 않는다.
+  // 이전에는 곡선이 「처음」(2수)에서 시작해서 가장 낮은 사람도 예측을 했다.
+  var SK_CURVE = [[0, 'naive'], [0.28, 'rookie'], [0.62, 'mid'], [1, 'expert']];
   function skillMix(t) {
     t = Math.max(0, Math.min(1, t));
-    var lo, hi, u;
-    if (t < 0.5) { lo = SKILLS.rookie; hi = SKILLS.mid; u = t / 0.5; }
-    else { lo = SKILLS.mid; hi = SKILLS.expert; u = (t - 0.5) / 0.5; }
+    var i = 0;
+    while (i < SK_CURVE.length - 2 && t > SK_CURVE[i + 1][0]) i++;
+    var a = SK_CURVE[i], b = SK_CURVE[i + 1];
+    var lo = SKILLS[a[1]], hi = SKILLS[b[1]], u = (t - a[0]) / (b[0] - a[0]);
     var o = { name: '숙련 ' + Math.round(t * 100), t: t };
     SK_KEYS.forEach(function (k) { o[k] = lo[k] + (hi[k] - lo[k]) * u; });
-    o.depth = Math.max(2, Math.round(o.depth));
-    o.width = Math.max(2, Math.round(o.width));
+    o.depth = Math.max(1, Math.round(o.depth));
+    o.width = Math.max(1, Math.round(o.width));
     return o;
   }
 
@@ -1137,8 +1146,14 @@
     // 학습 속도는 실측 근거가 없는 가정이다. 0.65~1.6 으로 뒀을 때 5판 만에
     // 숙련도가 22% → 65% 로 뛰어서 사람보다 훨씬 빨랐다. 절반으로 낮췄다.
     var ceiling = 0.55 + rnd() * 0.45, learn = 0.3 + rnd() * 0.55;
+    // 사람은 그만둔다. 계속 지면 포기하고, 엔딩을 보면 만족하거나 승천을 올린다.
+    //   patience    — 연속 패배를 몇 번까지 버티나
+    //   persistence — 첫 클리어 뒤에도 계속할 성향
+    // 이게 없으면 모두가 관측 창을 끝까지 채워서 「몇 판 만에 떠나는가」를 잴 수 없다.
+    var patience = 3 + Math.floor(rnd() * 6), persistence = rnd();
     var e = 0, unlocked = {}, tried = {}, out = [];
     var asc = 0, diff = 'normal', firstClear = null, clears = 0;
+    var streak = 0, stopAt = null, stopWhy = null, firstNormal = null, droppedAt = null;
     Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) unlocked[k] = 1; });
     var PKs = Object.keys(POLICIES), fav = PKs[Math.floor(rnd() * PKs.length)];
 
@@ -1152,7 +1167,8 @@
       tried[ck] = 1;
       var pk = rnd() < 0.28 ? PKs[Math.floor(rnd() * PKs.length)] : fav;
       var playedDiff = diff, playedAsc = asc;   // 기록은 실제로 플레이한 난이도로 남긴다
-      var r = run({ seed: ((opt.seed | 0) + i * 104729) | 0, charKey: ck, diffKey: diff,
+      var runSeed = ((opt.seed | 0) + i * 104729) | 0;
+      var r = run({ seed: runSeed, charKey: ck, diffKey: diff,
                     policyKey: pk, skillObj: sk, asc: asc });
       Object.keys(r.feat || {}).forEach(function (k) { if (T.CHARS[k]) unlocked[k] = 1; });
       // 깊게 간 판이 더 가르치고, 이긴 판이 가장 많이 가르친다
@@ -1160,14 +1176,42 @@
       if (r.won) {
         clears++;
         if (!firstClear) firstClear = i;
-        if (diff === 'normal') diff = 'hard';
-        else asc = Math.min(T.ASCENSION.length, asc + 1);
+        if (playedDiff === 'story') diff = 'normal';          // 이야기를 봤으니 로그라이크로
+        else if (playedDiff === 'normal') {
+          if (!firstNormal) firstNormal = i;
+          diff = 'hard';
+        } else asc = Math.min(T.ASCENSION.length, asc + 1);
+      } else if (!firstClear && diff === 'normal' && streak >= 2 && rnd() < 0.45) {
+        // 계속 지면 난이도를 내린다. 이 행동이 없으면 스토리 난이도가 아무 역할도 하지 않는다.
+        diff = 'story'; if (!droppedAt) droppedAt = i;
       }
-      out.push({ i: i, char: r.char, charKey: ck, policy: r.policy, skill: sk.t,
-                 diff: playedDiff, asc: playedAsc, won: r.won, floor: r.floor, killedBy: r.killedBy,
+      // 관전을 위해 이 판을 재현할 수 있는 값을 전부 남긴다
+      out.push({ i: i, char: r.char, charKey: ck, policy: r.policy, policyKey: pk, skill: sk.t,
+                 diff: playedDiff, asc: playedAsc, seed: runSeed,
+                 won: r.won, floor: r.floor, killedBy: r.killedBy, hp: r.hp, gold: r.gold,
+                 deck: r.deck, scripts: r.scripts, relics: r.relics, stats: r.stats, feat: r.feat,
                  unlocked: Object.keys(unlocked).length });
+
+      // 그만두는가
+      if (r.won) streak = 0; else streak++;
+      if (!firstClear) {
+        // 첫 클리어 전 — 연속 패배가 인내를 넘으면 떠날 수 있다.
+        // 스토리로 내려가 진행 중이면 더 버틴다 (내용을 보고 있으니까)
+        var pat = patience * (diff === 'story' ? 2 : 1);
+        if (streak >= pat && rnd() < 0.55) { stopAt = i; stopWhy = '포기'; break; }
+      } else {
+        // 첫 클리어 후 — 만족하고 떠나거나 계속 올린다.
+        // 스토리를 넘긴 것과 보통을 넘긴 것을 같게 보면 안 된다.
+        // 같게 뒀을 때 79% 가 스토리 클리어 직후 떠나 아무도 승천에 닿지 못했다.
+        var keep = firstNormal ? 0.45 + persistence * 0.5    // 로그라이크를 이겼다 — 승천이 남았다
+                              : 0.72 + persistence * 0.25;   // 이야기만 봤다 — 아직 본편이 남았다
+        if (rnd() > keep) { stopAt = i; stopWhy = '만족'; break; }
+      }
     }
-    return { firstClear: firstClear, clears: clears, runs: out,
+    return { firstClear: firstClear, firstNormal: firstNormal, droppedAt: droppedAt,
+             clears: clears, runs: out,
+             played: out.length, stopAt: stopAt, stopWhy: stopWhy || '관측 종료',
+             patience: patience, persistence: persistence,
              ceiling: ceiling, learn: learn, endSkill: Math.min(ceiling, e),
              unlocked: Object.keys(unlocked), maxAsc: asc };
   }

@@ -101,13 +101,21 @@
 </p>
 
 <div class="ctl" style="margin-bottom:11px">
+  <span style="font-size:11px;color:#6b6b78">모드</span>
+  <select id="mode">
+    <option value="single" selected>단판 — 여러 사람이 한 판씩</option>
+    <option value="career">여정 — 한 사람이 반복한다</option>
+  </select>
   <span style="font-size:11px;color:#6b6b78">인원</span>
-  <input id="n" type="number" value="100" min="6" max="600" style="width:70px">
+  <input id="n" type="number" value="100" min="6" max="1000" style="width:70px">
+  <span style="font-size:11px;color:#6b6b78" id="runsLbl">판/명</span>
+  <input id="runsN" type="number" value="25" min="5" max="60" style="width:60px" disabled>
   <span style="font-size:11px;color:#6b6b78">난이도</span>
   <select id="diff"><option value="story">스토리</option><option value="normal" selected>보통</option><option value="hard">어려움</option></select>
   <span style="font-size:11px;color:#6b6b78">숙련도</span>
   <select id="skill">
-    <option value="mix" selected>섞어서 (처음·익숙·숙련)</option>
+    <option value="mix" selected>섞어서 (무작정·처음·익숙·숙련)</option>
+    <option value="naive">무작정 — 계획을 안 한다</option>
     <option value="rookie">처음 하는 사람만</option>
     <option value="mid">익숙한 사람만</option>
     <option value="expert">숙련자만</option>
@@ -123,12 +131,22 @@
 
 <div class="wrap">
   <div class="col" style="width:660px">
+    <div class="panel" id="careerWrap" style="display:none">
+      <h2>여정 — 반복하면 정말 늘어나는가</h2>
+      <table id="careerTbl"><tbody></tbody></table>
+      <p class="note" id="careerNote">—</p>
+      <h2 style="margin-top:10px">첫 클리어까지 몇 판</h2>
+      <table id="fcTbl"><tbody></tbody></table>
+      <p class="note" id="fcNote">—</p>
+      <h2 style="margin-top:10px">캐릭터 해금률</h2>
+      <table id="unTbl"><tbody></tbody></table>
+    </div>
     <div class="panel">
       <h2>결과 — 판을 누르면 관전한다</h2>
       <div style="max-height:340px;overflow-y:auto">
         <table id="runs"><thead><tr>
-          <th>#</th><th>캐릭터</th><th>성향</th><th class="n">층</th><th class="n">턴</th>
-          <th class="n">HP</th><th>끝</th><th>덱</th>
+          <th>#</th><th>캐릭터</th><th>성향 · 숙련</th><th class="n">층</th><th class="n">턴</th>
+          <th class="n">HP</th><th class="n">골드</th><th>끝</th><th>덱</th>
         </tr></thead><tbody></tbody></table>
       </div>
     </div>
@@ -198,15 +216,57 @@
       + '</td><td>' + iv.demands + '</td></tr>';
   }).join('');
 
+  var CAREERS = [];
+
+  el('mode').onchange = function () {
+    var c = el('mode').value === 'career';
+    el('runsN').disabled = !c;
+    el('careerWrap').style.display = c ? '' : 'none';
+    el('n').value = c ? 40 : 100;
+    el('run').textContent = c ? '여정 돌린다' : '100명 돌린다';
+    el('skill').disabled = c;                 // 여정은 숙련도가 판마다 자란다
+  };
+
+  // ── 여정 — 한 사람이 여러 판을 반복한다 ───────────────────
+  function runCareers(n, runs, seed0) {
+    CAREERS = []; RUNS = [];
+    var i = 0;
+    (function chunk() {
+      var t0 = performance.now();
+      while (i < n && performance.now() - t0 < 120) {
+        var c = Sim.career({ seed: seed0 + i * 15485863, runs: runs });
+        c.who = i + 1; CAREERS.push(c);
+        c.runs.forEach(function (r) {
+          RUNS.push({ i: RUNS.length, who: c.who, run: r.i, seed: r.seed,
+            ck: r.charKey, pk: r.policyKey, skillT: r.skill, diff: r.diff, asc: r.asc,
+            char: r.char, policy: r.policy, skill: '숙련 ' + Math.round(r.skill * 100) + '%',
+            won: r.won, floor: r.floor, killedBy: r.killedBy, hp: r.hp, gold: r.gold,
+            deck: r.deck, scripts: r.scripts, relics: r.relics, stats: r.stats, career: 1 });
+        });
+        i++;
+      }
+      el('prog').textContent = i + '/' + n + '명';
+      if (i < n) return setTimeout(chunk, 0);
+      el('run').disabled = false;
+      el('prog').textContent = n + '명 × ' + runs + '판 = ' + RUNS.length + '판 완료';
+      try { report(); reportCareer(runs); } catch (err) { el('prog').textContent = '집계 오류 — ' + err.message + ' | ' + (err.stack||'').split(String.fromCharCode(10))[1]; }
+    })();
+  }
+
   // ── 100명 돌리기 ──────────────────────────────────────────
   el('run').onclick = function () {
-    var n = Math.max(6, Math.min(600, +el('n').value || 100));
+    var n = Math.max(6, Math.min(1000, +el('n').value || 100));
     var diff = el('diff').value;
+    if (!el('fix').checked) el('seed').value = 1 + Math.floor(Math.random() * 2000000000);
+    if (el('mode').value === 'career') {
+      el('run').disabled = true;
+      return runCareers(n, Math.max(5, Math.min(60, +el('runsN').value || 25)), +el('seed').value || 1);
+    }
     // 기본은 매번 새 시드다. 고정을 켜면 같은 100명이 다시 나온다 —
     // 수치를 바꾸기 전후를 비교할 때만 그게 필요하다.
     if (!el('fix').checked) el('seed').value = 1 + Math.floor(Math.random() * 2000000000);
     var seed0 = +el('seed').value || 1;
-    RUNS = []; el('run').disabled = true;
+    RUNS = []; CAREERS = []; el('run').disabled = true;
     var i = 0;
     (function chunk() {
       var t0 = performance.now();
@@ -226,7 +286,7 @@
       if (i < n) return setTimeout(chunk, 0);
       el('run').disabled = false;
       el('prog').textContent = n + '명 완료';
-      report();
+      try { report(); } catch (err) { el('prog').textContent = '집계 오류 — ' + err.message; }
     })();
   };
 
@@ -238,11 +298,15 @@
     var tb = el('runs').tBodies[0]; tb.innerHTML = '';
     RUNS.forEach(function (r) {
       var tr = document.createElement('tr'); tr.className = 'row';
-      tr.innerHTML = '<td>' + (r.i + 1) + '</td><td>' + r.char + '</td>'
+      tr.innerHTML = '<td>' + (r.career ? r.who + '-' + r.run : (r.i + 1)) + '</td>'
+        + '<td>' + r.char + '</td>'
         + '<td>' + r.policy + '<span style="color:#56545e"> · ' + r.skill + '</span></td>'
-        + '<td class="n">' + r.floor + '</td><td class="n">' + r.turns + '</td>'
-        + '<td class="n">' + r.hp + '</td>'
-        + '<td class="' + (r.won ? 'win' : 'lose') + '">' + (r.won ? '클리어' : (r.killedBy || '')) + '</td>'
+        + '<td class="n">' + r.floor + '</td>'
+        + '<td class="n">' + (r.turns != null ? r.turns : (r.stats ? r.stats.turns : '')) + '</td>'
+        + '<td class="n">' + r.hp + '</td><td class="n">' + r.gold + '</td>'
+        + '<td class="' + (r.won ? 'win' : 'lose') + '">' + (r.won ? '클리어' : (r.killedBy || ''))
+        + (r.career ? ' <span style="color:#56545e">' + T.DIFFICULTY[r.diff].name
+            + (r.asc ? ' ' + r.asc + '단' : '') + '</span>' : '') + '</td>'
         + '<td>' + Object.keys(r.deck).sort(function (a, b) { return r.deck[b] - r.deck[a]; }).slice(0, 5)
             .map(function (k) { return T.CARDS[k].icon + r.deck[k]; }).join(' ') + '</td>';
       tr.onclick = function () { watch(r, tr); };
@@ -297,6 +361,73 @@
       .slice(0, 14).map(function (n) { return '<tr><td>' + n + '</td><td class="n">' + sc[n] + '회</td></tr>'; }).join('');
   }
 
+  // ── 여정 집계 ─────────────────────────────────────────────
+  function reportCareer(window_) {
+    var C = CAREERS;
+    // 판 번호대별 — 반복하면 정말 늘어나는가
+    var bands = [[1,5],[6,10],[11,15],[16,20],[21,60]];
+    el('careerTbl').tBodies[0].innerHTML = bands.filter(function (b) { return b[0] <= window_; })
+      .map(function (b) {
+        var rs = RUNS.filter(function (r) { return r.run >= b[0] && r.run <= b[1]; });
+        if (!rs.length) return '';
+        var norm = rs.filter(function (r) { return r.diff === 'normal'; });
+        return '<tr><td>' + b[0] + '~' + Math.min(b[1], window_) + '판째</td>'
+          + '<td class="n">숙련 ' + Math.round(avg(rs, function (r) { return r.skillT; }) * 100) + '%</td>'
+          + '<td class="n">' + avg(rs, function (r) { return r.floor; }).toFixed(1) + '층</td>'
+          + '<td class="n" style="color:#a8c49a">보통 ' + (norm.length ? pct(norm.filter(function (r) { return r.won; }).length, norm.length) : '—') + '</td>'
+          + '<td class="n">승천 ' + avg(rs, function (r) { return r.asc; }).toFixed(1) + '단</td>'
+          + '<td style="width:70px"><div class="bar2"><i style="width:'
+            + (norm.length ? norm.filter(function (r) { return r.won; }).length / norm.length * 100 : 0) + '%"></i></div></td>'
+          + '<td class="n" style="color:#56545e">' + rs.length + '판</td></tr>';
+      }).join('');
+
+    var gave = C.filter(function (c) { return c.stopWhy === '포기'; });
+    var done = C.filter(function (c) { return c.firstClear; });
+    el('careerNote').innerHTML = '한 사람이 실제로 플레이한 판 수 — 중위 '
+      + med(C.map(function (c) { return c.played; })) + '판 · 최대 관측 ' + window_ + '판'
+      + '<br>떠난 이유 — 😞 포기 ' + pct(gave.length, C.length)
+      + ' · 🙂 만족 ' + pct(C.filter(function (c) { return c.stopWhy === '만족'; }).length, C.length)
+      + ' · 관측 종료 ' + pct(C.filter(function (c) { return c.stopWhy === '관측 종료'; }).length, C.length);
+
+    // 첫 클리어까지 몇 판
+    var fc = done.map(function (c) { return c.firstClear; }).sort(function (a, b) { return a - b; });
+    var buckets = [[1,3],[4,6],[7,10],[11,15],[16,60]];
+    el('fcTbl').tBodies[0].innerHTML = buckets.map(function (b) {
+      var n = fc.filter(function (x) { return x >= b[0] && x <= b[1]; }).length;
+      return '<tr><td>' + b[0] + '~' + b[1] + '판</td>'
+        + '<td style="width:170px"><div class="bar2"><i style="width:' + (n / Math.max(1, C.length) * 100) + '%"></i></div></td>'
+        + '<td class="n">' + n + '명</td><td class="n" style="color:#56545e">' + pct(n, C.length) + '</td></tr>';
+    }).join('')
+      + '<tr><td style="color:#b07a6a">못 이기고 떠남</td>'
+      + '<td style="width:170px"><div class="bar2"><i style="width:' + ((C.length - fc.length) / Math.max(1, C.length) * 100) + '%;background:#7a4a44"></i></div></td>'
+      + '<td class="n">' + (C.length - fc.length) + '명</td><td class="n" style="color:#56545e">'
+      + pct(C.length - fc.length, C.length) + '</td></tr>';
+    // 스토리 클리어와 보통 클리어를 섞으면 안 된다 — 뜻이 다르다
+    var fn = C.filter(function (c) { return c.firstNormal; }).map(function (c) { return c.firstNormal; });
+    var dropped = C.filter(function (c) { return c.droppedAt; });
+    el('fcNote').innerHTML = '첫 클리어 <span style="color:#56545e">(스토리 포함)</span> — 중위 ' + (fc.length ? med(fc) + '판' : '—')
+      + ' · 평균 ' + (fc.length ? (fc.reduce(function (a, b) { return a + b; }, 0) / fc.length).toFixed(1) + '판' : '—')
+      + ' · 가장 빠른 ' + (fc[0] || '—') + ' · 가장 늦은 ' + (fc[fc.length - 1] || '—')
+      + '<br>10판 안에 엔딩 ' + pct(fc.filter(function (x) { return x <= 10; }).length, C.length)
+      + ' · 총 클리어 ' + avg(C, function (c) { return c.clears; }).toFixed(1) + '회'
+      + '<br><b style="color:#c6bd95;font-weight:400">보통을 넘긴 사람 ' + pct(fn.length, C.length) + '</b>'
+      + (fn.length ? ' (중위 ' + med(fn) + '판째)' : '')
+      + ' · 승천 도달 ' + avg(C, function (c) { return c.maxAsc; }).toFixed(1) + '단'
+      + '<br>계속 지다가 스토리로 내려간 사람 ' + pct(dropped.length, C.length)
+      + (dropped.length ? ' (중위 ' + med(dropped.map(function (c) { return c.droppedAt; })) + '판째)' : '');
+
+    var un = {};
+    C.forEach(function (c) { c.unlocked.forEach(function (k) { un[k] = (un[k] || 0) + 1; }); });
+    el('unTbl').tBodies[0].innerHTML = CK.map(function (k) {
+      var c = T.CHARS[k], n = un[k] || 0;
+      return '<tr><td>' + c.name + (c.start ? ' <span style="color:#56545e">기본</span>' : '') + '</td>'
+        + '<td style="color:#56545e">' + (c.unlock || '—') + '</td>'
+        + '<td style="width:60px"><div class="bar2"><i style="width:' + (n / Math.max(1, C.length) * 100) + '%"></i></div></td>'
+        + '<td class="n">' + pct(n, C.length) + '</td></tr>';
+    }).join('');
+  }
+  function med(a) { var b = a.slice().sort(function (x, y) { return x - y; }); return b.length ? b[Math.floor(b.length / 2)] : 0; }
+
   function group(host, keys, get, sub) {
     host.tBodies[0].innerHTML = keys.map(function (k) {
       var rs = RUNS.filter(function (r) { return get(r) === k; });
@@ -318,7 +449,10 @@
     stop();
     Array.prototype.forEach.call(el('runs').tBodies[0].rows, function (x) { x.className = 'row'; });
     if (tr) tr.className = 'row sel';
-    var full = Sim.run({ seed: r.seed, charKey: r.ck, diffKey: r.diff, policyKey: r.pk, trace: true });
+    // 여정 판은 숙련도가 판마다 다르다 — 그 값을 그대로 넘겨야 같은 판이 재생된다
+    var full = Sim.run({ seed: r.seed, charKey: r.ck, diffKey: r.diff, policyKey: r.pk,
+      skillKey: r.sk, skillObj: r.skillT != null ? Sim.skillMix(r.skillT) : null,
+      asc: r.asc || 0, trace: true });
     W = { r: full, i: 0 };
     el('pBar').max = Math.max(0, full.trace.length - 1);
     el('pBar').value = 0;
