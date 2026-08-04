@@ -210,7 +210,8 @@
       note: '악상 대본의 화상·독·둔화 +1 · 악상이 아닌 대본은 코스트 +1',
       deck: { piano: 4, violin: 4, drum: 3, trumpet: 3, joy: 4 },
       pool: ['piano', 'violin', 'drum', 'trumpet', 'cold', 'rage', 'candle'],
-      unlock: '한 전투에서 증폭 배율 1.5배 이상을 만든다',
+      // 둔화 상한을 +45% 로 내린 뒤 1.5배는 도달 불가가 됐다 (해금률 0%) — 상한 아래로 내렸다
+      unlock: '한 전투에서 증폭 배율 1.35배 이상을 만든다',
       openers: [['one', 'trumpet'], ['one', 'piano'], ['two', 'piano', 'drum']] },
     // 자해를 무시하게 하면 대가가 없어져 곱셈도 없다 — 그냥 밋밋한 딜러였다(38%).
     // 자해를 실제로 받게 하니 곱셈이 생겼지만 저숙련에서 자살이 됐다 (보통 8%).
@@ -224,8 +225,11 @@
       pool: ['dead', 'tragedy', 'sword', 'chain', 'candle', 'violin'],
       unlock: 'HP 25% 이하로 한 전투를 이겨낸다',
       openers: [['one', 'sword'], ['one', 'tragedy'], ['two', 'dead', 'tragedy']] },
-    harlequin: { name: '어릿광대', maxCost: 4, handBonus: 2, hpDelta: -8,
-      note: '대본 보유 +2 · 최대 HP −8 — 다타로 상태이상을 쌓는다', win: 'hits',
+    // 다타 감쇠(×0.6) · 보석 상한 · 증폭 하향을 연달아 맞아 곱셈이 세 번 깎였다 (17%).
+    // 상태이상에 얹혀 있던 정체성을 독립시켰다 — 다타가 방어력을 벗긴다.
+    // 여러 번 찔러 틈을 만드는 그림이고, 철갑 인형처럼 방어력으로 버티는 적의 답이 된다.
+    harlequin: { name: '어릿광대', maxCost: 4, handBonus: 2, hitsShred: 1,
+      note: '대본 보유 +2 · 다타 대본은 타격 수만큼 대상의 방어력을 영구히 깎는다', win: 'hits',
       deck: { jester: 4, acrobat: 4, gem: 3, dancer: 3, curtain: 4 },
       pool: ['jester', 'acrobat', 'dancer', 'gem', 'candle', 'violin'],
       unlock: '한 전투에서 즉석 대본을 6장 상연한다',

@@ -304,6 +304,19 @@
     var guarded = alive.some(function (f) { return f.role === 'guard'; });
     var gm = function (f) { return (guarded && f.guardMul && f.role !== 'guard') ? f.guardMul : 1; };
 
+    // 「어릿광대」 — 다타가 방어력을 벗긴다. 여러 번 찔러 틈을 만든다.
+    var hits0 = (sc.effect && sc.effect.hits) || 1;
+    if (ctx.ch.hitsShred && hits0 > 1) {
+      var shred = hits0 * ctx.ch.hitsShred;
+      var targets = (acc.aoe > 0) ? alive : [t0];
+      var did = 0;
+      targets.forEach(function (f) {
+        if (f.def <= 0) return;
+        var cut = Math.min(f.def, shred); f.def -= cut; did = Math.max(did, cut);
+      });
+      if (did > 0) ev.push('🎭 ' + hits0 + '타 — 방어력 −' + did);
+    }
+
     if (acc.dmg > 0) {
       var amp = T.ampMul(t0, {});
       var d = T.damageEnemy(t0, acc.dmg * gm(t0), { single: true, pierce: acc.pierce, rnd: ctx.rnd });
@@ -736,7 +749,8 @@
     if (sc.temp) { S.fightTempPlays = (S.fightTempPlays || 0) + 1;
                    if (S.fightTempPlays >= 6) S.feat.harlequin = 1; }
     if ((S.stats.ovations || 0) >= 3) S.feat.darling = 1;      // 한 판에 기립 박수 3회
-    if (S.foes.some(function (f) { return f.hp > 0 && T.ampMul(f, {}) >= 1.5; })) S.feat.maestro = 1;
+    // 둔화 상한이 +45% 라 1.5 는 도달 불가였다 (해금률 0%) — 상한 아래로 내렸다
+    if (S.foes.some(function (f) { return f.hp > 0 && T.ampMul(f, {}) >= 1.35; })) S.feat.maestro = 1;
   }
 
   // 난입 예약 — 비극은 반드시 하나, 공연은 확률. 승천이 확률과 인원을 올린다.
