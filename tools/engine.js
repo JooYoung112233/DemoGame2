@@ -219,10 +219,27 @@
       deck: { jester: 4, acrobat: 4, gem: 3, dancer: 3, curtain: 4 },
       pool: ['jester', 'acrobat', 'dancer', 'gem', 'candle', 'violin'],
       unlock: '한 전투에서 즉석 대본을 6장 상연한다',
-      openers: [['one', 'jester'], ['one', 'acrobat'], ['two', 'jester', 'jester']] }
+      openers: [['one', 'jester'], ['one', 'acrobat'], ['two', 'jester', 'jester']] },
+
+    // 관중이 곱셈이 되는 캐릭터. 환호가 오를수록 세지고, 같은 대본을 반복하면 두 배로 식는다 —
+    // 「매 턴 다른 것을 해야 하는」 유일한 캐릭터다.
+    // 전투가 4~5턴이라 환호 100 은 닿지 않았다 — 환호 빌드가 환호 보상을 못 받았다.
+    // 무대에 오르면 이미 팬이 있고(30), 박수를 받는 기준도 낮다(80).
+    darling: { name: '관객의 총아', maxCost: 4, win: 'cheer',
+      cheerDmgPer: 0.07, cheerDmgCap: 0.7, ovationBonus: 1, repeatMul: 2, cheerW: 2.6,
+      cheerStart: 28, cheerNeed: 55,
+      note: '환호 30으로 시작 · 환호 10당 피해 +7% (최대 +70%) · 박수 기준 80 · 기립 박수 코스트 +3'
+          + ' · 같은 대본 반복 감점 2배',
+      // 첫 덱이 방어·회복·골드 위주라 딜이 없었다 (승률 8%).
+      // 배역 순수로 채워서 계열 대본「배역들」이 자주 뜨게 했다 — 그게 딜이면서 환호다.
+      deck: { king: 4, jester: 4, singer: 3, trumpet: 3, crown: 2, joy: 2 },
+      pool: ['king', 'jester', 'singer', 'trumpet', 'crown', 'joy', 'priest'],
+      unlock: '한 판에서 기립 박수를 3회 받는다',
+      openers: [['one', 'king'], ['one', 'trumpet'], ['two', 'singer', 'trumpet']] }
   };
 
-  var WIN_KO = { burst: '한 방', sweep: '광역 소각', reflect: '반사·방어', status: '상태이상 증폭', hits: '다타 누적' };
+  var WIN_KO = { burst: '한 방', sweep: '광역 소각', reflect: '반사·방어', status: '상태이상 증폭',
+                 hits: '다타 누적', cheer: '관중 환호' };
 
   // 캐릭터별 대본 풀 — 요구 배역이 이 캐릭터 풀에 들어 있으면 보상에 더 자주 뜬다
   function scriptWeight(ch, sc) {
@@ -331,7 +348,8 @@
     // 익숙·숙련만 6pp·3pp 깎였다. 초보의 죽음은 수치가 아니라 기믹 대응 실패다.
     normal: { name: '보통',   hpMul: 2.55, atkMul: 2.0,
               note: '로그라이크로 한다', sub: '첫 클리어가 사건이다. 죽고 다시 하면서 배운다.' },
-    hard:   { name: '어려움', hpMul: 3.3,  atkMul: 2.7,
+    // 승천 1단이 곧 이 난이도다. 3.3 / 2.7 로는 클리어가 15% 라 승천이 거의 올라가지 않았다.
+    hard:   { name: '어려움', hpMul: 3.0,  atkMul: 2.4,
               note: '이미 이겨본 사람의 자리', sub: '운과 실력이 함께 있어야 한다. 여기서 승천이 열린다.' }
   };
 
@@ -464,12 +482,14 @@
   // ── 관중 ──────────────────────────────────────────────────
   // 야유만 있으면 압박뿐이다. 환호를 같이 둬서 「크게 가는 것」이 보상받게 한다.
   // 그리고 같은 대본 반복에 감점을 둔다 — 측정에서 1종 대본 반복이 전체 상연의 40% 였다.
+  // 요구가 100 이고 적립이 느려서 기립 박수가 0.6~0.8 회/판 이었다 —
+  // 전투가 4~5턴인데 100 은 닿지 않는다. 요구를 낮추고 적립을 올렸다.
   var CHEER = {
-    max: 100,
-    onThree: 14,      // 3종·계열 대본을 상연하면
-    onKill: 9,        // 적이 퇴장하면
-    onAmp: 11,        // 증폭이 실제로 터지면
-    onHits: 5,        // 3타 이상 다타
+    max: 80,
+    onThree: 18,      // 3종·계열 대본을 상연하면
+    onKill: 12,       // 적이 퇴장하면
+    onAmp: 14,        // 증폭이 실제로 터지면
+    onHits: 7,        // 3타 이상 다타
     repeat: -9,       // 같은 대본을 연속으로 또 쓰면 (반복마다 누적)
     coolPerTurn: -10, // 야유 구간(12턴 이후)부터 매 턴 식는다
     ovation: 2        // 가득 차면 기립 박수 — 코스트 +2 즉시 회복
@@ -669,7 +689,14 @@
     madBaton:   { name: '광인의 지휘봉', icon: '🪄', cost: 28, dark: true, asc: 3,
                 desc: '화상·독·둔화 2배 · 회복 효과 절반' },
     lastActor:  { name: '마지막 배우',   icon: '🕴', cost: 30, dark: true, asc: 4,
-                desc: '기립 박수가 코스트 +4 · 최대 HP −20%' }
+                desc: '기립 박수가 코스트 +4 · 최대 HP −20%' },
+    // 승천 5단 이상에 아무것도 없어서 올라갈 이유가 끊겼다 — 2단 이상 도달이 20% 였다
+    emptyHouse: { name: '텅 빈 객석',   icon: '🕳', cost: 26, dark: true, asc: 5,
+                desc: '야유가 오지 않는다 · 환호도 쌓이지 않는다' },
+    doubleCast: { name: '더블 캐스팅',  icon: '👥', cost: 32, dark: true, asc: 6,
+                desc: '매 턴 무대를 두 번 올린다 (좋은 쪽 자동 선택) · 최대 코스트 −1' },
+    finalCurtain:{ name: '마지막 막',   icon: '🎦', cost: 34, dark: true, asc: 8,
+                desc: '모든 대본의 피해 +35% · 12턴을 넘기면 즉시 패배' }
   };
 
   // ── 효과 적용 ─────────────────────────────────────────────

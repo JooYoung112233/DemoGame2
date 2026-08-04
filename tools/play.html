@@ -414,7 +414,10 @@
       S.stock = {
         cards: Sim.offerCards(S).map(function (id) { return { id: id, cost: 8 + Math.floor(S.rnd() * 6) }; }),
         scripts: Sim.offerScripts(S, 3).map(function (sc) { return { sc: sc, cost: 16 + sc.cost * 5 }; }),
-        relics: T.pickWeighted(Object.keys(T.RELICS), function () { return 1; }, S.rnd, 2)
+        // 어둠 유물은 승천 단계로 열린다
+        relics: T.pickWeighted(Object.keys(T.RELICS).filter(function (k) {
+          var r = T.RELICS[k]; return !r.dark || (S.asc.level || 0) >= r.asc;
+        }), function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2)
           .map(function (k) { return { k: k, cost: T.RELICS[k].cost }; })
       };
     }
@@ -440,9 +443,11 @@
        function (it) { if (S.scripts.length < Sim.scriptCap(S)) S.scripts.push(it.sc); });
     mk('유물', S.stock.relics, function (it) {
       var r = T.RELICS[it.k];
-      return '<div class="ic">' + r.icon + '</div><div class="n">' + r.name + '</div>'
+      return '<div class="ic">' + r.icon + '</div>'
+        + '<div class="n">' + r.name
+        + (r.dark ? ' <span style="color:#8b7aa8">어둠</span>' : '') + '</div>'
         + '<div class="e">' + r.desc + '</div><div class="x">' + it.cost + ' 골드</div>';
-    }, function (it) { S.relics.push(it.k); });
+    }, function (it) { Sim.takeRelic(S, it.k); });
 
     // 릴 판매 — 좁히면 확률이 오르고 자금도 생긴다. 상점마다 상한이 있다.
     var G = T.CFG.gold;
@@ -680,6 +685,14 @@
       if (S.turn >= stallAt) fl.push(['😠 야유 중 — 매 턴 적 공격 +10% · HP −' + S.asc.stallDmg, 1]);
       else if (stallAt - S.turn <= 3) fl.push(['😐 ' + (stallAt - S.turn) + '턴 후 야유', 0]);
       if (S.intrudeOn) fl.push(['🚪 ' + Math.max(0, S.intrudeOn - S.turn) + '턴 후 난입', 1]);
+      // 「관객의 총아」 — 환호가 그대로 화력이다
+      if (S.ch.cheerDmgPer) {
+        var cm = 1 + Math.min(S.ch.cheerDmgCap || 0.7,
+          Math.floor((S.cheer || 0) / 10) * S.ch.cheerDmgPer);
+        fl.push(['🙌 환호 피해 ×' + cm.toFixed(2), 0]);
+      }
+      if (Sim.relicN(S, 'finalCurtain')) fl.push(['🎦 마지막 막 — ' + Math.max(0, 12 - S.turn) + '턴 남음', 1]);
+      if (Sim.relicN(S, 'emptyHouse')) fl.push(['🕳 텅 빈 객석 — 야유도 환호도 없다', 0]);
       if (S.censor) fl.push(['✂️ ' + T.CARDS[S.censor.id].name + ' 봉인 ' + S.censor.turns + '턴', 1]);
       Object.keys(S.sealed || {}).forEach(function (id) {
         var s = T.SCRIPT_BY_ID[id]; fl.push(['📜 「' + (s ? s.name : id) + '」 압수됨', 1]);

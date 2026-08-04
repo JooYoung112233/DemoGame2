@@ -84,7 +84,8 @@
     sweep:   { aoe: 1.5, status: 1.15 },
     reflect: { block: 1.4, thorns: 2.0 },
     status:  { status: 1.6 },
-    hits:    { status: 1.3, aoe: 1.1 }
+    hits:    { status: 1.3, aoe: 1.1 },
+    cheer:   { dmg: 1.1, heal: 1.2 }
   };
 
   function mergeW(pol, ch) {
@@ -235,6 +236,17 @@
     // 어둠 유물 — 상태이상 2배 / 회복 절반
     if (ctx.statusMul > 1) { acc.burn *= ctx.statusMul; acc.poison *= ctx.statusMul; acc.slow *= ctx.statusMul; }
     if (ctx.healMul != null && ctx.healMul !== 1) acc.heal *= ctx.healMul;
+    // 「관객의 총아」 — 환호가 그대로 곱셈이 된다. 무대를 데우고 나서 큰 것을 낸다.
+    if (ctx.ch.cheerDmgPer) {
+      var cm = 1 + Math.min(ctx.ch.cheerDmgCap || 0.7,
+        Math.floor((C.cheer || 0) / 10) * ctx.ch.cheerDmgPer);
+      if (cm > 1) {
+        acc.dmg *= cm; acc.aoe *= cm;
+        ev.push('🙌 환호 ' + Math.round(C.cheer) + ' — 피해 ×' + cm.toFixed(2));
+      }
+    }
+    // 어둠 유물 「마지막 막」
+    if (ctx.finalCurtain) { acc.dmg *= 1.35; acc.aoe *= 1.35; }
 
     C.block += acc.block;
     var cap = C.maxHp * ((ctx.blockCapPct != null ? ctx.blockCapPct : T.CFG.blockCapPct) / 100);
@@ -296,21 +308,26 @@
         acc.slow ? '둔화 +' + acc.slow : ''].filter(Boolean).join(' · '));
     }
     var kills = alive.length - C.foes.filter(function (f) { return f.hp > 0; }).length;
-    cheerFor(C, sc, kills, ev, ctx.cheerMax || T.CHEER.max, ctx.ovation);
+    if (!ctx.noCheer) {
+      var need = ctx.cheerNeed ? Math.min(ctx.cheerNeed, ctx.cheerMax || T.CHEER.max)
+                               : (ctx.cheerMax || T.CHEER.max);
+      cheerFor(C, sc, kills, ev, need, ctx.ovation, ctx.repeatMul);
+    }
     return ev;
   }
 
   // ── 관중 ─────────────────────────────────────────────────
   // 크게 가면 환호가 오르고, 같은 대본을 반복하면 식는다.
   // 계획 탐색과 실제 진행이 같은 함수를 쓴다 — 그래서 봇이 환호를 계산에 넣는다.
-  function cheerFor(C, sc, kills, ev, cap, ova) {
+  function cheerFor(C, sc, kills, ev, cap, ova, repMul) {
     var CH = T.CHEER, d = 0;
     cap = cap || CH.max;
     if (sc.tier === 'three' || sc.tier === 'fam') d += CH.onThree;
     if (C.ampHit) d += CH.onAmp;
     if ((sc.effect.hits || 1) >= 3) d += CH.onHits;
     if (kills > 0) d += CH.onKill * kills;
-    if (C.lastPlay === sc.id) { C.repeatN = (C.repeatN || 0) + 1; d += CH.repeat * C.repeatN; }
+    // 반복 감점 — 「관객의 총아」는 이 감점이 두 배다. 매 턴 다른 것을 해야 한다.
+    if (C.lastPlay === sc.id) { C.repeatN = (C.repeatN || 0) + 1; d += CH.repeat * C.repeatN * (repMul || 1); }
     else { C.lastPlay = sc.id; C.repeatN = 0; }
     C.cheer = Math.max(0, Math.min(cap, (C.cheer || 0) + d));
     if (C.cheer >= cap) {
@@ -365,7 +382,9 @@
     // 관중 — 환호가 오르면 기립 박수(코스트 +2)가 가까워진다. 코스트 1 ≈ 2.2 점이니
     // 환호 1 점은 대략 2.2×2/100 의 값이다. 여기에 「반복하면 식는다」가 다양성을 만든다.
     v += (C.cheer - C0.cheer) * 0.06 * (ctx.cheerW || 1);
-    if (C.ovation) v += 9;
+    if (C.ovation) v += 9 * (ctx.cheerW || 1);
+    // 「관객의 총아」는 환호 자체가 화력이다 — 쌓아둔 환호에도 값이 있다
+    if (ctx.ch.cheerDmgPer) v += (C.cheer || 0) * 0.10;
     v -= C.cost * 2.2;                                          // 코스트를 남기면 손해
     if (C.hp - Math.max(0, inc - C.block) <= 0) v -= 400;       // 이 턴에 죽는 계획은 버린다
     return v;
@@ -635,6 +654,7 @@
     if (eff.damage) { S.fightAnyDmg = 1; if (!aoe) S.fightAoeOnly = 0; }
     if (sc.temp) { S.fightTempPlays = (S.fightTempPlays || 0) + 1;
                    if (S.fightTempPlays >= 6) S.feat.harlequin = 1; }
+    if ((S.stats.ovations || 0) >= 3) S.feat.darling = 1;      // 한 판에 기립 박수 3회
     if (S.foes.some(function (f) { return f.hp > 0 && T.ampMul(f, {}) >= 1.5; })) S.feat.maestro = 1;
   }
 
@@ -663,10 +683,18 @@
       blockCapPct: T.CFG.blockCapPct * (relicN(S, 'crackMirror') ? 0.8 : 1),
       statusMul: relicN(S, 'madBaton') ? 2 : 1,
       healMul: relicN(S, 'madBaton') ? 0.5 : 1,
-      ovation: T.CHEER.ovation + relicN(S, 'lastActor') * 2,
+      ovation: T.CHEER.ovation + relicN(S, 'lastActor') * 2 + (S.ch.ovationBonus || 0),
+      cheerNeed: S.ch.cheerNeed || null,
+      repeatMul: S.ch.repeatMul || 1,
+      cheerW: S.ch.cheerW || 1,
+      noCheer: relicN(S, 'emptyHouse') ? 1 : 0,
+      finalCurtain: relicN(S, 'finalCurtain') ? 1 : 0,
       overflowMul: (S.ch.overflowMul || 1) * (relicN(S, 'mirrorR') ? 2 : 1) };
   }
-  function maxCost(S) { return S.ch.maxCost + relicN(S, 'drumOpen') + relicN(S, 'darkScript'); }
+  function maxCost(S) {
+    return Math.max(1, S.ch.maxCost + relicN(S, 'drumOpen') + relicN(S, 'darkScript')
+                       - relicN(S, 'doubleCast'));
+  }
   function scriptCap(S) {
     return 8 + (S.ch.handBonus || 0) + relicN(S, 'archive') * 3 + relicN(S, 'tornScript') * 4;
   }
@@ -701,7 +729,7 @@
     });
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
     S.strips = [0, 1, 2, 3].map(function () { return T.buildStrip(S.deck, S.rnd); });
-    S.cheer = 0; S.lastPlay = null; S.repeatN = 0;
+    S.cheer = S.ch.cheerStart || 0; S.lastPlay = null; S.repeatN = 0;
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     S.ovations = 0;
     if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
@@ -817,6 +845,20 @@
       line = line.map(function (id) { return id === S.censor.id ? 'void' : id; });
     }
     S.pos = idx; S.stage = line;
+    // 어둠 유물 「더블 캐스팅」 — 무대를 두 번 올려 좋은 쪽을 쓴다
+    if (relicN(S, 'doubleCast') && !S.inDouble) {
+      S.inDouble = 1;
+      var keepIdx = idx.slice(), keepLine = line.slice();
+      var ctx = ctxOf(S, S.w);
+      var scoreOf = function () {
+        return S.scripts.filter(function (s) {
+          return !S.sealed[s.id] && T.canStage(s, S.stage, ctx.relax); }).length;
+      };
+      var a = scoreOf();
+      autoSpin(S);
+      if (scoreOf() < a) { S.pos = keepIdx; S.stage = keepLine; }
+      S.inDouble = 0;
+    }
   }
 
   // 압수당한 대본은 이 전투 동안 손에서 사라진다
@@ -876,8 +918,14 @@
     });
     // 관객의 야유 — 막이 길어지면 적이 세지고 플레이어가 깎인다.
     // 보스 막은 원래 길다. 같은 시계를 물리면 2막이 열리는 순간 야유까지 겹쳐 터진다.
+    // 어둠 유물 「마지막 막」 — 12턴을 넘기면 즉시 패배
+    if (relicN(S, 'finalCurtain') && S.turn >= 12) {
+      lg(S, 'e', '  🎦 마지막 막 — 시간이 다 됐다');
+      return { won: false, killedBy: '마지막 막' };
+    }
     var stallAt = Math.max(4, T.CFG.stallTurn + S.asc.stallDelta)
       + (S.foes.some(function (f) { return f.boss; }) ? 6 : 0);
+    if (relicN(S, 'emptyHouse')) stallAt = 1e9;      // 어둠 유물 — 야유가 오지 않는다
     if (S.turn >= stallAt) {
       S.foes.forEach(function (f) { if (f.hp > 0) f.atk = Math.ceil(f.atk * (1 + T.CFG.stallAtkPer)); });
       S.hp -= S.asc.stallDmg;
@@ -1167,13 +1215,17 @@
                  thorns: 8, mirrorR: 10, improv: 14, encore: 16, candleR: 12, phoenix: 26,
                  // 어둠 유물 — 이득이 크지만 대가가 있다. 봇은 그 대가를 값에 반영한다.
                  darkScript: 26, crackMirror: 14, hungrySeat: 16, tornScript: 12,
-                 madBaton: 22, lastActor: 14 };
+                 madBaton: 22, lastActor: 14,
+                 emptyHouse: 18, doubleCast: 20, finalCurtain: 24 };
     var v = base[k] || 10;
     if (k === 'thorns' || k === 'mirrorR' || k === 'crackMirror') v *= w.thorns;
     if (k === 'embers' || k === 'madBaton') v *= w.status;
     if (k === 'archive' || k === 'tornScript') v *= (S.pol.grab.script || 1);
     if (k === 'madBaton') v *= (w.heal > 0.8 ? 0.6 : 1);        // 회복에 의존하면 손해다
     if (k === 'tornScript') v *= 0.7;                            // 즉석 대본을 잃는다
+    if (k === 'emptyHouse') v *= (S.ch.cheerDmgPer ? 0.2 : 1);   // 환호 빌드에는 자살이다
+    if (k === 'doubleCast') v *= (S.ch.maxCost >= 5 ? 1.3 : 0.8);// 코스트가 넉넉해야 낸다
+    if (k === 'finalCurtain') v *= (w.dmg > 1 ? 1.2 : 0.7);      // 빨리 끝낼 수 있어야 낸다
     if (relicN(S, k)) v *= 0.5;
     return v;
   }
@@ -1424,6 +1476,10 @@
         if (need <= 12) novelty += 0.14;
       }
       if (meta.vault.length) novelty += 0.08;                          // 계승할 유물이 있다
+      // 다음 승천 단에서 어둠 유물이 열린다 — 이게 승천을 올릴 이유다.
+      // 이걸 빼두면 「더 아픈 같은 게임」이라 2단 이상 도달이 18% 에서 멈췄다.
+      if (firstNormal && Object.keys(T.RELICS).some(function (k) {
+        return T.RELICS[k].dark && T.RELICS[k].asc === asc + 1; })) novelty += 0.22;
       novelty = Math.min(0.75, novelty);
       out[out.length - 1].novelty = novelty;
 
@@ -1491,7 +1547,7 @@
     S.stats.fights++;
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false; S.over = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
-    S.cheer = 0; S.lastPlay = null; S.repeatN = 0;
+    S.cheer = S.ch.cheerStart || 0; S.lastPlay = null; S.repeatN = 0;
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
     S.foes = pickFoes(S, nd).map(function (b) {
@@ -1617,7 +1673,8 @@
     // 사람 플레이용
     newRun: newRun, goTo: goTo, openFight: openFight, beginTurn: beginTurn,
     playScript: playScript, canPlay: canPlay, doReroll: doReroll, finishTurn: finishTurn,
-    suggest: suggest, handOf: handOf, applyEvent: applyEvent, doEvent: doEvent, EVENTS_ID: 1, reachable: reachable, maxCost: maxCost, scriptCap: scriptCap,
+    suggest: suggest, handOf: handOf, applyEvent: applyEvent, doEvent: doEvent,
+    takeRelic: takeRelic, reachable: reachable, maxCost: maxCost, scriptCap: scriptCap,
     relicN: relicN, deckSize: deckSize, offerCards: offerCards, offerScripts: offerScripts,
     scriptValue: scriptValue, cardValue: cardValue, ctxOf: ctxOf, drift: drift
   };
