@@ -211,6 +211,8 @@
     return { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost, gold: S.gold,
       foes: S.foes.map(cloneFoe), tempN: S.temp.length, dead: false,
       cheer: S.cheer || 0, lastPlay: S.lastPlay, repeatN: S.repeatN || 0, maxPlay: S.maxPlay || 0, bleed: S.bleed || 0,
+      demand: S.demand, tHits: S.tHits || 0, tPlays: S.tPlays || 0, tBlock: S.tBlock || 0,
+      tHeal: S.tHeal || 0, tSelf: S.tSelf || 0, fThorns: S.fThorns || 0,
       usedF: Object.assign({}, S.usedF || {}) };
   }
 
@@ -363,6 +365,17 @@
         acc.slow ? '둔화 +' + acc.slow : ''].filter(Boolean).join(' · '));
     }
     var kills = alive.length - C.foes.filter(function (f) { return f.hp > 0; }).length;
+
+    // 이번 턴 누적 — 관객의 요구를 판정하는 데 쓴다
+    C.tHits = (C.tHits || 0) + (acc.dmg > 0 || acc.aoe > 0 ? hits0 : 0);
+    C.tPlays = (C.tPlays || 0) + 1;
+    C.tBlock = (C.tBlock || 0) + acc.block;
+    C.tHeal = (C.tHeal || 0) + acc.heal;
+    C.tSelf = (C.tSelf || 0) + acc.selfDmg;
+    checkDemand(C, ctx, {
+      sc: sc, hits: hits0, kills: kills, target: t0,
+      dmg: acc.dmg, aoe: acc.aoe, aoeHit: acc.aoe > 0 ? alive.length : 0
+    });
     // 처형에 성공하면 태운 피가 즉시 절반 돌아온다 — 자해를 「죽이는 데」 쓰게 만든다.
     // 실패해도 다음 턴에 돌아온다(bleedBack) — 그래야 계속 태울 수 있다.
     if (acc.selfDmg > 0 && ctx.ch.selfRefund) {
@@ -385,6 +398,46 @@
   // ── 관중 ─────────────────────────────────────────────────
   // 크게 가면 환호가 오르고, 같은 대본을 반복하면 식는다.
   // 계획 탐색과 실제 진행이 같은 함수를 쓴다 — 그래서 봇이 환호를 계산에 넣는다.
+  // ── 관객의 요구 ──────────────────────────────────────────
+  // 판정을 applyPlay 안에 두는 이유 — 계획 탐색도 같은 함수를 쓰므로
+  // 봇이 「이 대본을 내면 요구가 채워진다」를 계산에 넣게 된다.
+  function demandMet(C, d, f) {
+    if (!d) return false;
+    switch (d.id) {
+      case 'burst':  return f.target && f.dmg >= f.target.maxHp * 0.30;
+      case 'kill':   return f.kills > 0;
+      case 'hits':   return (C.tHits || 0) >= 5;
+      case 'aoe':    return f.aoeHit >= 3;
+      case 'burn':   return C.foes.some(function (x) { return x.hp > 0 && x.burn >= 8; });
+      case 'slow':   return C.foes.some(function (x) { return x.hp > 0 && (x.slowN || 0) >= 5; });
+      case 'block':  return (C.tBlock || 0) >= 25;
+      case 'thorns': return (C.fThorns || 0) >= 20;
+      case 'big':    return f.sc.tier === 'three' || f.sc.tier === 'fam';
+      case 'many':   return (C.tPlays || 0) >= 4;
+      case 'self':   return (C.tSelf || 0) >= 15;
+      case 'heal':   return (C.tHeal || 0) >= 20;
+    }
+    return false;
+  }
+
+  function checkDemand(C, ctx, f) {
+    var d = C.demand;
+    if (!d || !demandMet(C, d, f)) return;
+    C.cheer = (C.cheer || 0) + T.DEMAND_CHEER;
+    C.demandDone = (C.demandDone || 0) + 1;
+    C.demand = nextDemand(C, ctx);          // 달성하면 즉시 다음 요구가 온다
+  }
+
+  // 캐릭터 승리 조건 쪽으로 기울이되 고정하지는 않는다 —
+  // 못 하는 요구가 가끔 오는 것이 「포기한다」는 판단을 만든다
+  function nextDemand(C, ctx) {
+    var cur = C.demand ? C.demand.id : null;
+    var pool = T.DEMANDS.filter(function (x) { return x.id !== cur; });
+    return T.pickWeighted(pool, function (x) {
+      return x.win && ctx.ch.win === x.win ? 1.5 : 1;
+    }, ctx.rnd, 1)[0];
+  }
+
   function cheerFor(C, sc, kills, ev, cap, ova, repMul, fresh) {
     var CH = T.CHEER, d = 0;
     cap = cap || CH.max;
@@ -485,7 +538,9 @@
             var C = { hp: nd.C.hp, maxHp: nd.C.maxHp, block: nd.C.block, thorns: nd.C.thorns,
                       cost: nd.C.cost, gold: nd.C.gold, foes: nd.C.foes.map(cloneFoe), dead: false,
                       cheer: nd.C.cheer, lastPlay: nd.C.lastPlay, repeatN: nd.C.repeatN,
-                      maxPlay: nd.C.maxPlay, bleed: nd.C.bleed || 0, usedF: Object.assign({}, nd.C.usedF || {}) };
+                      maxPlay: nd.C.maxPlay, bleed: nd.C.bleed || 0, usedF: Object.assign({}, nd.C.usedF || {}),
+                      demand: nd.C.demand, tHits: nd.C.tHits, tPlays: nd.C.tPlays, tBlock: nd.C.tBlock,
+                      tHeal: nd.C.tHeal, tSelf: nd.C.tSelf, fThorns: nd.C.fThorns };
             applyPlay(C, sc, tg, Object.assign({}, ctx, { rnd: function () { return 0.5; } }));
             var n2 = { C: C, seq: nd.seq.concat([{ hi: hi, sc: sc, tgt: tg }]) };
             n2.sc = evaluate(C, C0, ctx.w, ctx);
@@ -912,6 +967,11 @@
     S.cast = pickCast(S, S.w);   // 전투 전 캐스팅
     S.cast2 = S.growth.cast ? pickCast(S, S.w, S.cast) : null;
     S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
+    // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
+    // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
+    S.fThorns = 0;
+    S.demand = (nd.type === 'elite' || nd.type === 'boss') ? nextDemand({}, ctxOf(S, S.w)) : null;
+    if (S.demand) S.stats.demandOffer = (S.stats.demandOffer || 0) + 1;
     S.lastPlay = null; S.repeatN = 0; S.usedF = {};
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     S.ovations = 0;
@@ -929,6 +989,7 @@
       S.turn++; S.stats.turns++;
       S.cost = maxCost(S);
       S.stats.costMax += S.cost;
+      S.tHits = 0; S.tPlays = 0; S.tBlock = 0; S.tHeal = 0; S.tSelf = 0;
       if (relicN(S, 'darkScript')) S.hp -= 2;
       if (S.bleed > 0) { var bk = Math.round(S.bleed); S.hp = Math.min(S.maxHp, S.hp + bk); S.bleed = 0;
         if (bk > 0) lg(S, 's', '  🩸 태운 피 ' + bk + ' 이 돌아왔다'); }
@@ -992,11 +1053,20 @@
         var C = { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost,
                   gold: S.gold, foes: S.foes, dead: false, ampHit: 0,
                   cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay, bleed: S.bleed || 0,
+                  demand: S.demand, tHits: S.tHits || 0, tPlays: S.tPlays || 0, tBlock: S.tBlock || 0,
+                  tHeal: S.tHeal || 0, tSelf: S.tSelf || 0, fThorns: S.fThorns || 0,
                   usedF: S.usedF || (S.usedF = {}) };
         var ev = applyPlay(C, a.sc, a.tgt, ctx);
         S.hp = C.hp; S.block = C.block; S.thorns = C.thorns; S.cost = C.cost; S.gold = C.gold;
         S.cheer = C.cheer; S.lastPlay = C.lastPlay; S.repeatN = C.repeatN; S.maxPlay = C.maxPlay;
         S.bleed = C.bleed || 0;
+        S.tHits = C.tHits; S.tPlays = C.tPlays; S.tBlock = C.tBlock; S.tHeal = C.tHeal; S.tSelf = C.tSelf;
+        if (C.demand !== S.demand) {
+          lg(S, 's', '  🎯 관객이 만족했다 — 환호 +' + T.DEMAND_CHEER
+            + ' · 다음 요구 ' + (C.demand ? C.demand.icon + ' ' + C.demand.name : ''));
+          S.stats.demandDone = (S.stats.demandDone || 0) + 1;
+          S.demand = C.demand;
+        }
         S.usedF = C.usedF || S.usedF;
         if (C.ovation) S.stats.ovations = (S.stats.ovations || 0) + 1;
         if (C.ampHit) ampTurn = 1;
@@ -1167,7 +1237,7 @@
         var rd = S.ch.thornsIgnoreDef ? S.thorns
                : Math.max(0, S.thorns - f.def * T.AMP.thornsDefPart);
         if (f.block > 0) { var rb = Math.min(f.block, rd); f.block -= rb; rd -= rb; }
-        f.hp -= rd; if (rd > 0) lg(S, 'b', '    반사 ' + Math.round(rd));
+        f.hp -= rd; if (rd > 0) { S.fThorns = (S.fThorns || 0) + rd; lg(S, 'b', '    반사 ' + Math.round(rd)); }
       }
     });
     tr(S, 'enemy', '적 행동');
@@ -1834,6 +1904,11 @@
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false; S.over = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
     S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
+    // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
+    // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
+    S.fThorns = 0;
+    S.demand = (nd.type === 'elite' || nd.type === 'boss') ? nextDemand({}, ctxOf(S, S.w)) : null;
+    if (S.demand) S.stats.demandOffer = (S.stats.demandOffer || 0) + 1;
     S.lastPlay = null; S.repeatN = 0; S.usedF = {};
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
@@ -1884,6 +1959,7 @@
     S.turn++; S.stats.turns++;
     S.cost = maxCost(S); S.stats.costMax += S.cost;
     S.freeReroll = (S.ch.freeReroll || 0) + (S.growth.reroll || 0);
+    S.tHits = 0; S.tPlays = 0; S.tBlock = 0; S.tHeal = 0; S.tSelf = 0;
     if (relicN(S, 'darkScript')) S.hp -= 2;
       if (S.bleed > 0) { var bk = Math.round(S.bleed); S.hp = Math.min(S.maxHp, S.hp + bk); S.bleed = 0;
         if (bk > 0) lg(S, 's', '  🩸 태운 피 ' + bk + ' 이 돌아왔다'); }   // 어둠 유물 — 각본이 피를 먹는다
@@ -1926,11 +2002,20 @@
     var C = { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost,
               gold: S.gold, foes: S.foes, dead: false, ampHit: 0,
               cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay, bleed: S.bleed || 0,
+                  demand: S.demand, tHits: S.tHits || 0, tPlays: S.tPlays || 0, tBlock: S.tBlock || 0,
+                  tHeal: S.tHeal || 0, tSelf: S.tSelf || 0, fThorns: S.fThorns || 0,
                   usedF: S.usedF || (S.usedF = {}) };
     var ev = applyPlay(C, sc, tgt == null ? -1 : tgt, ctx);
     S.hp = C.hp; S.block = C.block; S.thorns = C.thorns; S.cost = C.cost; S.gold = C.gold;
     S.cheer = C.cheer; S.lastPlay = C.lastPlay; S.repeatN = C.repeatN; S.maxPlay = C.maxPlay;
         S.bleed = C.bleed || 0;
+        S.tHits = C.tHits; S.tPlays = C.tPlays; S.tBlock = C.tBlock; S.tHeal = C.tHeal; S.tSelf = C.tSelf;
+        if (C.demand !== S.demand) {
+          lg(S, 's', '  🎯 관객이 만족했다 — 환호 +' + T.DEMAND_CHEER
+            + ' · 다음 요구 ' + (C.demand ? C.demand.icon + ' ' + C.demand.name : ''));
+          S.stats.demandDone = (S.stats.demandDone || 0) + 1;
+          S.demand = C.demand;
+        }
         S.usedF = C.usedF || S.usedF;
     if (C.ovation) S.stats.ovations = (S.stats.ovations || 0) + 1;
     if (C.ampHit) S.ampTurn = 1;

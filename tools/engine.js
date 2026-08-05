@@ -565,9 +565,33 @@
     ovationGold: 5
   };
 
+  // ── 관객의 요구 ───────────────────────────────────────────
+  // 플레이어의 목표가 「효율적으로 죽이기」 하나뿐이면 매 턴 같은 판단이 된다.
+  // 요구가 붙으면 효율과 관객이 충돌한다 — 지금 죽일 수 있는데 웃기려고 다타를 낼 것인가.
+  //
+  //   · 하나씩 걸고, 달성하면 즉시 다음이 온다 (짧은 전투 1개, 보스전 3~4개로 자연 스케일)
+  //   · 실패 벌칙은 없다. 못 하는 요구가 반드시 나오니 「포기한다」가 판단이어야 한다
+  //   · 수치는 절대값이 아니라 비율 — 막마다 자동으로 맞는다
+  var DEMANDS = [
+    { id: 'burst',  icon: '🩸', name: '피를 보여라',    desc: '한 번의 상연으로 적 최대 HP의 30%', win: 'burst' },
+    { id: 'kill',   icon: '💀', name: '단칼에',         desc: '한 번의 상연으로 적을 퇴장시킨다',   win: 'burst' },
+    { id: 'hits',   icon: '🎭', name: '웃겨라',         desc: '한 턴에 5회 이상 타격',             win: 'hits' },
+    { id: 'aoe',    icon: '👥', name: '무대를 채워라',  desc: '한 번의 광역으로 3명 이상 타격',     win: 'sweep' },
+    { id: 'burn',   icon: '🔥', name: '불태워라',       desc: '화상을 8 이상 쌓는다',              win: 'status' },
+    { id: 'slow',   icon: '❄️', name: '얼려라',         desc: '둔화를 5스택 이상 쌓는다',          win: 'status' },
+    { id: 'block',  icon: '🛡', name: '막아내라',       desc: '한 턴에 방어 25 이상',              win: 'reflect' },
+    { id: 'thorns', icon: '🪞', name: '되갚아라',       desc: '반사로 누적 20 피해',               win: 'reflect' },
+    { id: 'big',    icon: '🎬', name: '대작을 올려라',  desc: '3종 또는 계열 대본을 상연한다' },
+    { id: 'many',   icon: '⚡', name: '쉬지 마라',      desc: '한 턴에 대본 4장 이상 상연' },
+    { id: 'self',   icon: '🕯', name: '희생하라',       desc: '한 턴에 자해로 15 이상 잃는다',      win: 'burst' },
+    { id: 'heal',   icon: '🌹', name: '살려라',         desc: '한 턴에 회복 20 이상',              win: 'cheer' }
+  ];
+  var DEMAND_CHEER = 30;      // 달성하면 환호 +30 — 기립 박수의 절반쯤이 한 번에 온다
+
   var CHEER_TEXT = [
     ['🙌 환호', '3종·계열 상연 +14 · 적 퇴장 +9 · 증폭 폭발 +11 · 다타 +5'],
     ['👏 기립 박수', '환호가 가득 차면 즉시 코스트 +2 · 골드 +5 (환호는 0으로)'],
+    ['🎯 관객의 요구', '요구를 들어주면 환호 +30 · 곧바로 다음 요구가 온다 (실패해도 벌은 없다)'],
     ['😐 반복', '같은 대본을 연속으로 또 쓰면 환호 −9 (반복할수록 누적)'],
     ['😠 야유', '12턴부터 매 턴 적 공격 +10% · 내 HP −3 · 환호 −10']
   ];
@@ -984,7 +1008,7 @@
     WIN_KO: WIN_KO, scriptWeight: scriptWeight, pickWeighted: pickWeighted,
     GIMMICK_TEXT: GIMMICK_TEXT, INTRUDERS: INTRUDERS, intrudeChance: intrudeChance,
     GROWTH: GROWTH,
-    CHEER: CHEER, CHEER_TEXT: CHEER_TEXT,
+    CHEER: CHEER, CHEER_TEXT: CHEER_TEXT, DEMANDS: DEMANDS, DEMAND_CHEER: DEMAND_CHEER,
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
     PREMIERE: PREMIERE, premiereAt: premiereAt, ARCHIVE_MUL: ARCHIVE_MUL, VAULT_BASE: VAULT_BASE,
     EVENTS: EVENTS,
