@@ -121,6 +121,15 @@
     <option value="mid">익숙한 사람만</option>
     <option value="expert">숙련자만</option>
   </select>
+  <!-- 승천 단계 — 어둠 유물은 여기서만 열린다. 이게 없어서 단판 모드는 어둠 유물 11종을
+       한 번도 보지 못했다 (채용률 전부 0). 여정 모드는 판마다 스스로 올라간다. -->
+  <span style="font-size:11px;color:#6b6b78">승천</span>
+  <select id="asc">
+    <option value="0" selected>없음</option>
+    <option value="1">1단</option><option value="2">2단</option><option value="3">3단</option>
+    <option value="4">4단</option><option value="5">5단</option><option value="6">6단</option>
+    <option value="7">7단</option><option value="8">8단</option>
+  </select>
   <span style="font-size:11px;color:#6b6b78">시드</span>
   <input id="seed" type="number" value="1000" style="width:88px">
   <label style="font-size:11px;color:#6b6b78" title="켜면 매번 같은 100명이 나온다 — 밸런스 수정 전후를 비교할 때 쓴다">
@@ -237,6 +246,7 @@
   el('mode').onchange = function () {
     var c = el('mode').value === 'career';
     el('runsN').disabled = !c;
+    el('asc').disabled = c;                   // 여정은 판마다 스스로 올라간다
     el('careerWrap').style.display = c ? '' : 'none';
     el('n').value = c ? 120 : 168;
     el('run').textContent = c ? '여정 돌린다' : '돌린다';
@@ -294,8 +304,11 @@
         // 이전처럼 42명(7×6) 단위로 끊으면 100명을 돌려도 숙련자가 한 명도 안 나온다.
         var sw = el('skill').value;
         var sk = sw === 'mix' ? SK[i % SK.length] : sw;
-        var r = Sim.run({ seed: seed0 + i * 7919, charKey: ck, diffKey: diff, policyKey: pk, skillKey: sk });
-        r.i = RUNS.length; r.seed = seed0 + i * 7919; r.ck = ck; r.pk = pk; r.sk = sk; r.diff = diff;
+        var asc = +el('asc').value || 0;
+        var r = Sim.run({ seed: seed0 + i * 7919, charKey: ck, diffKey: diff,
+                          policyKey: pk, skillKey: sk, asc: asc });
+        r.i = RUNS.length; r.seed = seed0 + i * 7919; r.ck = ck; r.pk = pk; r.sk = sk;
+        r.diff = diff; r.asc = asc;
         r.log = null;                              // 100판 로그는 안 들고 있는다
         RUNS.push(r); i++;
       }

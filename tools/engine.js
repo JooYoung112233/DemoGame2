@@ -287,7 +287,7 @@
     { act: 1, name: '잊혀진 관객',   hp: 18, atk: 4,  def: 0, cd: 2, intents: [['attack', 3]] },
     { act: 1, name: '가면 없는 배우', hp: 22, atk: 5,  def: 1, cd: 2, intents: [['attack', 2], ['attackBleed', 1, 2]] },
     // 쿨타임 1 은 다수로 나오면 즉사가 된다 — 3마리면 턴당 36 피해로 2턴에 끝났다
-    { act: 1, name: '무대 거미',     hp: 14, atk: 6,  def: 0, cd: 1, maxCount: 2, intents: [['attack', 2], ['doubleStrike', 1]] },
+    { act: 1, name: '무대 거미',     hp: 14, atk: 6,  def: 0, cd: 2, maxCount: 2, intents: [['attack', 2], ['doubleStrike', 1]] },
     // 잡몹도 대응을 요구해야 전투가 「스쳐 지나가지」 않는다 — 수치는 그대로 두고 규칙을 준다
     { act: 1, name: '춤추는 그림자', hp: 20, atk: 5,  def: 2, cd: 2, evadeSingle: 0.25,
       intents: [['attack', 2], ['defend', 1, 6]], demands: '광역 · 다타' },
@@ -297,7 +297,8 @@
       adds: [{ name: '시종', hp: 15, atk: 6, def: 0, cd: 2, role: 'guard',
                intents: [['attack', 2], ['defend', 1, 5]] }],
       intents: [['attack', 2], ['buff', 1, 4]], demands: '시종을 먼저' },
-    { act: 2, name: '웃는 병사',     hp: 28, atk: 10, def: 2, cd: 2, defGrow: 2, defMax: 10,
+    // 2막 최다 학살자였다 — 7 캐릭터 중 5명의 1위 사인. 4마리 × 공격 18 × 방어력 성장이 겹쳤다.
+    { act: 2, name: '웃는 병사',     hp: 28, atk: 8, def: 2, cd: 2, defGrow: 1, defMax: 7, maxCount: 3,
       intents: [['attack', 2], ['attackBleed', 1, 3]], demands: '관통 · 빠른 처리' },
     { act: 2, name: '노래하는 해골', hp: 24, atk: 7,  def: 1, cd: 3, intents: [['attack', 1], ['attackBurn', 1, 3], ['healAll', 1, 8]], demands: '한 번에 눕히기' },
     { act: 2, name: '박수치는 관객', hp: 26, atk: 8,  def: 2, cd: 2, gimmick: 'mimic', gimCd: 4,
@@ -357,7 +358,11 @@
       intents: [['attack', 2], ['doubleStrike', 1]], demands: '난입 — 무대가 무너진다' }
   ];
   // 층이 올라갈수록 난입 확률이 오른다
-  function intrudeChance(floor) { return Math.min(0.30, 0.06 + floor * 0.02); }
+  // 막이 오를수록 난입이 잦아진다 — 중간 구간에도 위협이 있어야 한다
+  function intrudeChance(floor) {
+    var act = Math.min(3, Math.floor(floor / CFG.actLen) + 1);
+    return [0.08, 0.24, 0.36][act - 1];
+  }
 
   // 스토리는 서사를 보러 온 사람의 자리다 — 어느 덱이든 넘어가야 한다.
   // 보통은 로그라이크의 기본값이다 — 첫 클리어가 사건이어야 한다.
@@ -365,13 +370,13 @@
   var DIFFICULTY = {
     // 계획을 안 하는 사람도 넘길 수 있어야 이 난이도가 제 역할을 한다.
     // HP ×1.35 / 공격 ×1.05 로는 무작정형이 24% 였다 — 구제가 아니었다.
-    story:  { name: '스토리', hpMul: 1.0, atkMul: 0.62,
+    story:  { name: '스토리', hpMul: 1.0, atkMul: 0.55,
               note: '이야기를 보러 왔다', sub: '계획 없이 눌러도 막을 넘긴다. 규칙을 익히는 자리다.' },
     // 공격 배율을 2.0 → 2.15 로 올려 봤는데 처음 하는 사람은 26% 에서 그대로였고
     // 익숙·숙련만 6pp·3pp 깎였다. 초보의 죽음은 수치가 아니라 기믹 대응 실패다.
     // 맵 규칙(보스 직전 분장실 보장·소품실 최소 2개)이 승률을 올려서(숙련 44% → 58%)
     // 공격 배율로 되돌렸다. 이 지렛대는 숙련만 깎고 초보는 그대로 둔다 — 27.2 참조.
-    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.95,
+    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.72,
               note: '로그라이크로 한다', sub: '첫 클리어가 사건이다. 죽고 다시 하면서 배운다.' },
     // 승천 1단이 곧 이 난이도다. 3.3 / 2.7 로는 클리어가 15% 라 승천이 거의 올라가지 않았다.
     hard:   { name: '어려움', hpMul: 3.0,  atkMul: 2.05,
@@ -498,9 +503,10 @@
     // 10턴 — 초보의 전투는 길다. 야유가 그걸 실제로 물어야 앞쪽 층이 위협이 된다.
     // 초보 죽음의 76% 가 10~12층에 몰려 있었다. 1~9층이 무저항이면 로그라이크가 아니다.
     stallTurn: 10, stallAtkPer: 0.10, stallDmg: 3,
-    // 막별 HP 곡선 — 1막 적이 두꺼우면 첫 전투가 벽으로 느껴진다.
+    // 막별 곡선 — 사망의 52% 가 1막에 몰려 있었다. 1막을 낮추고 2·3막을 올린다.
+    // HP 뿐 아니라 공격도 막마다 오른다 — 뒤로 갈수록 실수의 대가가 커야 한다.
     // 같은 배율을 전 막에 물리면 잡몹 하나에 3~4턴이 걸렸다.
-    actHp: [0.68, 0.88, 1.0],
+    actHp: [0.60, 1.00, 1.30], actAtk: [0.85, 1.05, 1.25],
     // 골드 — 남으면 결정이 아니다.
     // 이전 수치(시작 40 · 공연 16~27 · 비극 +15 · 난입 +20)로는 판 끝에 평균 94 가 남고
     // 61% 가 60 이상을 남겼다. 살 것을 다 사고도 남는다는 뜻이다.

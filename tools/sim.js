@@ -796,6 +796,8 @@
     var q = [];
     if (nd.type === 'elite') {
       q.push({ who: pool[Math.floor(S.rnd() * pool.length)], on: 2 });
+      // 2막부터 비극은 난입자가 둘이다
+      if (S.act >= 2) q.push({ who: pool[Math.floor(S.rnd() * pool.length)], on: 5 });
     }
     var p = Math.min(0.85, T.intrudeChance(nd.f) * S.asc.intrudeMul);
     for (var i = q.length; i < S.asc.intrudeMax; i++) {
@@ -850,16 +852,27 @@
           });
         }
       }
-      return T.makeEnemy(b, S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1), S.diff.atkMul);
+      return T.makeEnemy(b, S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1),
+        S.diff.atkMul * (T.CFG.actAtk[S.act - 1] || 1));
     });
     // 보스의 동반자는 전투 시작과 함께 무대에 선다
     S.foes.slice().forEach(function (f) {
       (f.adds || []).forEach(function (a) {
         S.foes.push(T.makeEnemy(Object.assign({ act: S.act }, a),
-          S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1), S.diff.atkMul));
+          S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1),
+          S.diff.atkMul * (T.CFG.actAtk[S.act - 1] || 1)));
       });
       if (f.gimCd) f.gimT = f.gimCd;
       if (f.seizeCd) f.seizeT = f.seizeCd;
+    });
+    // 잡몹 기믹은 무리에서 한 마리만 발동한다.
+    // 기믹은 단독 보스를 상정하고 만들었는데 4마리가 각자 들고 있으면 4중으로 터진다 —
+    // 「박수치는 관객」 4마리가 재연을 네 번 하면서 2막 최다 학살자가 됐다.
+    var gimSeen = {};
+    S.foes.forEach(function (f) {
+      if (f.boss || !f.gimmick) return;
+      if (gimSeen[f.gimmick]) { f.gimmick = null; f.gimT = null; }
+      else gimSeen[f.gimmick] = 1;
     });
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
     S.strips = [0, 1, 2, 3].map(function () { return T.buildStrip(S.deck, S.rnd); });
@@ -1718,15 +1731,26 @@
           });
         }
       }
-      return T.makeEnemy(b, S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1), S.diff.atkMul);
+      return T.makeEnemy(b, S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1),
+        S.diff.atkMul * (T.CFG.actAtk[S.act - 1] || 1));
     });
     S.foes.slice().forEach(function (f) {
       (f.adds || []).forEach(function (a) {
         S.foes.push(T.makeEnemy(Object.assign({ act: S.act }, a),
-          S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1), S.diff.atkMul));
+          S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1),
+          S.diff.atkMul * (T.CFG.actAtk[S.act - 1] || 1)));
       });
       if (f.gimCd) f.gimT = f.gimCd;
       if (f.seizeCd) f.seizeT = f.seizeCd;
+    });
+    // 잡몹 기믹은 무리에서 한 마리만 발동한다.
+    // 기믹은 단독 보스를 상정하고 만들었는데 4마리가 각자 들고 있으면 4중으로 터진다 —
+    // 「박수치는 관객」 4마리가 재연을 네 번 하면서 2막 최다 학살자가 됐다.
+    var gimSeen = {};
+    S.foes.forEach(function (f) {
+      if (f.boss || !f.gimmick) return;
+      if (gimSeen[f.gimmick]) { f.gimmick = null; f.gimT = null; }
+      else gimSeen[f.gimmick] = 1;
     });
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
     S.strips = [0, 1, 2, 3].map(function () { return T.buildStrip(S.deck, S.rnd); });
@@ -1750,7 +1774,8 @@
       while (S.intrudeQ.length && S.turn >= S.intrudeQ[0].on) {
         var ent = S.intrudeQ.shift();
         var iv = T.makeEnemy(Object.assign({ act: S.act }, ent.who),
-          S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1), S.diff.atkMul);
+          S.diff.hpMul * (T.CFG.actHp[S.act - 1] || 1),
+          S.diff.atkMul * (T.CFG.actAtk[S.act - 1] || 1));
         if (iv.gimCd) iv.gimT = iv.gimCd;
         if (iv.seizeCd) iv.seizeT = iv.seizeCd;
         S.foes.push(iv); S.intruderIdx = S.foes.length - 1;
