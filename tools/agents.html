@@ -100,6 +100,11 @@
   아래 표에서 아무 판이나 누르면 그 판을 실제 화면으로 되돌려 본다.
 </p>
 
+<!-- 지금 실려 있는 규칙을 그대로 보여준다.
+     프리뷰가 쿼리스트링 캐시 버스터를 무시하고 옛 engine.js 를 붙드는 일이 있었고,
+     그때 옛 빌드 결과를 최신으로 착각했다. 캐시를 못 막으면 최소한 보이게는 해야 한다. -->
+<p class="lead" id="buildLine" style="color:#c49a6a;margin-bottom:8px">—</p>
+
 <div class="ctl" style="margin-bottom:11px">
   <span style="font-size:11px;color:#6b6b78">모드</span>
   <select id="mode">
@@ -227,6 +232,14 @@
   var RUNS = [], W = null, timer = null;
 
   var CK = Object.keys(T.CHARS), PK = Object.keys(Sim.POLICIES), SK = Object.keys(Sim.SKILLS);
+
+  // 지금 실려 있는 규칙 — 이 줄이 예상과 다르면 브라우저가 옛 스크립트를 붙들고 있는 것이다
+  el('buildLine').textContent = '실린 규칙 — '
+    + T.CFG.floors + '층(' + T.CFG.actLen + '×3) · 캐릭터 ' + CK.length + '종'
+    + ' · 유물 ' + Object.keys(T.RELICS).length + '종'
+    + ' · 막 HP ' + T.CFG.actHp.join('/') + ' · 막 공격 ' + (T.CFG.actAtk || []).join('/')
+    + ' · 보통 공격 ×' + T.DIFFICULTY.normal.atkMul
+    + ' · 초연 기록 ' + T.PREMIERE.map(function (p) { return p.at; }).join('·');
 
   el('cheerTbl').tBodies[0].innerHTML = T.CHEER_TEXT.map(function (r) {
     return '<tr class="amprow"><td style="color:#c49a6a;white-space:nowrap;padding-right:6px">'

@@ -719,6 +719,9 @@
       el('scrTbl').innerHTML = ''; el('scrInfo').textContent = '—'; el('body').innerHTML = '';
       return;
     }
+    // 실린 규칙이 예상과 다르면 브라우저가 옛 스크립트를 붙들고 있는 것이다
+    document.title = 'The Last Theater — ' + T.CFG.floors + '층 · 캐릭터 '
+      + Object.keys(T.CHARS).length + '종 · 공격 ×' + S.diff.atkMul;
     el('tAct').textContent = '제' + S.act + '막 · ' + S.ch.name
       + ' · ' + S.diff.name + (S.asc.level ? ' 승천 ' + S.asc.level + '단' : '');
     el('tHp').textContent = Math.max(0, Math.round(S.hp)) + '/' + S.maxHp;
