@@ -182,8 +182,8 @@
     // 골드로 사는 계승이 아니라, 그 캐릭터의 승리 조건을 한 번 해내면 열린다.
     // 곱셈이 없는 캐릭터는 3막을 못 넘는다 — 측정에서 연출가만 1% 였다.
     // 「같은 배역을 겹쳐 세운다」가 연출가의 곱셈이다. 릴 집중과 직접 이어진다.
-    director: { name: '연출가', maxCost: 4, freeReroll: 1, pairBonus: 0.45, win: 'burst', start: true,
-      note: '최대 코스트 4 · 턴마다 재굴림 1회 무료 · 무대에 같은 배역이 2장이면 그 대본 피해 +45%',
+    director: { name: '연출가', maxCost: 4, freeReroll: 1, pairBonus: 0.7, win: 'burst', start: true,
+      note: '최대 코스트 4 · 턴마다 재굴림 1회 무료 · 무대에 같은 배역이 2장이면 그 대본 피해 +70%',
       deck: { knight: 4, sword: 3, shield: 3, rose: 3, rage: 3, gem: 2 },
       pool: ['knight', 'king', 'sword', 'shield', 'trumpet', 'gem'],
       openers: [['one', 'knight'], ['one', 'shield'], ['two', 'knight', 'shield']] },
@@ -196,8 +196,8 @@
       unlock: '한 전투를 광역 대본만으로 끝낸다',
       openers: [['one', 'knight'], ['one', 'rage'], ['two', 'king', 'rage']] },
     // 3막 적 다섯 중 셋이 방어력이 높다. 반사가 방어력에 깎이면 이 캐릭터만 원천 봉인된다.
-    mirror: { name: '거울의 배우', maxCost: 4, thornsMul: 1.5, overflowMul: 1.4, thornsIgnoreDef: true, start: true,
-      note: '반사 상한 1.5배 · 초과 방어 전환 1.4배 · 반사가 방어력을 무시한다', win: 'reflect',
+    mirror: { name: '거울의 배우', maxCost: 4, thornsMul: 1.35, overflowMul: 1.2, thornsIgnoreDef: true, start: true,
+      note: '반사 상한 1.35배 · 초과 방어 전환 1.2배 · 반사가 방어력을 무시한다', win: 'reflect',
       deck: { mirror: 5, shield: 5, mask: 3, rose: 3, priest: 2 },
       pool: ['mirror', 'shield', 'mask', 'curtain', 'rose', 'priest'],
       openers: [['one', 'shield'], ['one', 'mirror'], ['two', 'shield', 'mirror']] },
@@ -217,10 +217,13 @@
     // 자해를 실제로 받게 하니 곱셈이 생겼지만 저숙련에서 자살이 됐다 (보통 8%).
     // 그래서 둘을 붙였다 — 자해로는 죽지 않고, 처형에 성공하면 태운 피가 절반 돌아온다.
     // 위험은 남는다: 피가 낮아지면 적이 끝낸다.
+    // 21전투짜리 판에서는 자해가 누적 위험이 되어 봇이 아예 안 썼다 —
+    // 코스트 사용률이 50% 로 혼자 압도적으로 낮았다 (다른 캐릭터 67~71%).
+    // 태운 피가 다음 턴에 절반 돌아오면 계속 태울 수 있다. 위험은 그 한 턴에 남는다.
     fallen: { name: '타락한 감독', maxCost: 5, selfToDmg: 2.2, hpDelta: 20,
-      selfFloor: true, selfRefund: 0.5,
-      note: '최대 코스트 5 · 최대 HP +20 · 자해한 만큼 피해 +2.2배'
-          + ' · 자해로는 쓰러지지 않는다 · 적이 퇴장하면 태운 피의 절반이 돌아온다', win: 'burst',
+      selfFloor: true, selfRefund: 0.5, bleedBack: 0.5,
+      note: '최대 코스트 5 · 최대 HP +20 · 자해한 만큼 피해 +2.2배 · 자해로는 쓰러지지 않는다'
+          + ' · 태운 피의 절반이 다음 턴에 돌아온다 (적을 퇴장시키면 즉시)', win: 'burst',
       deck: { dead: 4, tragedy: 4, sword: 4, candle: 3, chain: 3 },
       pool: ['dead', 'tragedy', 'sword', 'chain', 'candle', 'violin'],
       unlock: 'HP 25% 이하로 한 전투를 이겨낸다',
@@ -228,8 +231,10 @@
     // 다타 감쇠(×0.6) · 보석 상한 · 증폭 하향을 연달아 맞아 곱셈이 세 번 깎였다 (17%).
     // 상태이상에 얹혀 있던 정체성을 독립시켰다 — 다타가 방어력을 벗긴다.
     // 여러 번 찔러 틈을 만드는 그림이고, 철갑 인형처럼 방어력으로 버티는 적의 답이 된다.
-    harlequin: { name: '어릿광대', maxCost: 4, handBonus: 2, hitsShred: 1,
-      note: '대본 보유 +2 · 다타 대본은 타격 수만큼 대상의 방어력을 영구히 깎는다', win: 'hits',
+    harlequin: { name: '어릿광대', maxCost: 4, handBonus: 2, hitsShred: 1, hitsDotFull: true, hitSpill: true,
+      note: '대본 보유 +2 · 다타 대본은 타격 수만큼 방어력을 영구히 깎는다'
+          + ' · 다타의 화상·독이 감쇠 없이 타격 수만큼 들어간다'
+          + ' · 적이 퇴장하면 남은 타격이 다음 적에게 넘어간다', win: 'hits',
       deck: { jester: 4, acrobat: 4, gem: 3, dancer: 3, curtain: 4 },
       pool: ['jester', 'acrobat', 'dancer', 'gem', 'candle', 'violin'],
       unlock: '한 전투에서 즉석 대본을 6장 상연한다',
@@ -240,9 +245,9 @@
     // 전투가 4~5턴이라 환호 100 은 닿지 않았다 — 환호 빌드가 환호 보상을 못 받았다.
     // 무대에 오르면 이미 팬이 있고(30), 박수를 받는 기준도 낮다(80).
     darling: { name: '관객의 총아', maxCost: 4, win: 'cheer',
-      cheerDmgPer: 0.09, cheerDmgCap: 0.9, ovationBonus: 1, repeatMul: 2, cheerW: 2.6,
+      cheerDmgPer: 0.13, cheerDmgCap: 0.9, ovationBonus: 1, repeatMul: 2, cheerW: 2.6,
       cheerStart: 28, cheerNeed: 55, freshBonus: 9,
-      note: '환호 28로 시작 · 환호 10당 피해 +9% (최대 +90%) · 박수 기준 55 · 기립 박수 코스트 +3'
+      note: '환호 28로 시작 · 환호 10당 피해 +13% (최대 +90%) · 박수 기준 55 · 기립 박수 코스트 +3'
           + ' · 이번 전투에 처음 쓰는 대본마다 환호 +9 · 같은 대본 반복 감점 2배',
       // 첫 덱이 방어·회복·골드 위주라 딜이 없었다 (승률 8%).
       // 배역 순수로 채워서 계열 대본「배역들」이 자주 뜨게 했다 — 그게 딜이면서 환호다.
@@ -366,7 +371,7 @@
     // 익숙·숙련만 6pp·3pp 깎였다. 초보의 죽음은 수치가 아니라 기믹 대응 실패다.
     // 맵 규칙(보스 직전 분장실 보장·소품실 최소 2개)이 승률을 올려서(숙련 44% → 58%)
     // 공격 배율로 되돌렸다. 이 지렛대는 숙련만 깎고 초보는 그대로 둔다 — 27.2 참조.
-    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.62,
+    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.8,
               note: '로그라이크로 한다', sub: '첫 클리어가 사건이다. 죽고 다시 하면서 배운다.' },
     // 승천 1단이 곧 이 난이도다. 3.3 / 2.7 로는 클리어가 15% 라 승천이 거의 올라가지 않았다.
     hard:   { name: '어려움', hpMul: 3.0,  atkMul: 2.05,
@@ -752,7 +757,9 @@
     if (e.thorns) r.thorns += e.thorns * mul;
     // 다타 대본은 화상·독을 타격 횟수에 비례해 얹는다 — 다타 빌드가 상태이상 엔진이 된다.
     // 배율을 그대로 hits 로 두면 「서커스」(딜5×8) 하나가 판을 끝냈다. 0.6 으로 눌렀다.
-    var stMul = hits > 1 ? Math.max(1, Math.ceil(hits * AMP.hitsToDot)) : 1;
+    // 「어릿광대」는 감쇠 없이 타격 수만큼 얹는다 — 다타가 그 캐릭터의 전부다
+    var hd = ch.hitsDotFull ? 1 : AMP.hitsToDot;
+    var stMul = hits > 1 ? Math.max(1, Math.ceil(hits * hd)) : 1;
     if (e.burn) r.burn += e.burn * stMul;
     if (e.poison) r.poison += e.poison * stMul;
     if (e.slow) r.slow += e.slow;
@@ -878,7 +885,14 @@
   function damageEnemy(e, amount, opt) {
     opt = opt || {};
     if (amount <= 0) return 0;
-    if (opt.single && e.evadeSingle && opt.rnd && opt.rnd() < e.evadeSingle) return 0;
+    // 회피는 타격마다 판정한다. 한 번에 판정하면 5타 대본이 통째로 빗나가서
+    // 「유령 배우」(요구: 광역·다타) 앞에서 다타 빌드가 오히려 더 약했다.
+    if (opt.single && e.evadeSingle && opt.rnd) {
+      var h = Math.max(1, opt.hits || 1), landed = 0;
+      for (var i = 0; i < h; i++) if (opt.rnd() >= e.evadeSingle) landed++;
+      if (!landed) return 0;
+      amount = amount * landed / h;
+    }
     amount = amount * ampMul(e, opt);
     if (!opt.pierce) amount = Math.max(amount * AMP.minPierce, amount - e.def);
     if (e.block > 0) { var ab = Math.min(e.block, amount); e.block -= ab; amount -= ab; }

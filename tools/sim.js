@@ -210,7 +210,7 @@
   function snapCombat(S) {
     return { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost, gold: S.gold,
       foes: S.foes.map(cloneFoe), tempN: S.temp.length, dead: false,
-      cheer: S.cheer || 0, lastPlay: S.lastPlay, repeatN: S.repeatN || 0, maxPlay: S.maxPlay || 0,
+      cheer: S.cheer || 0, lastPlay: S.lastPlay, repeatN: S.repeatN || 0, maxPlay: S.maxPlay || 0, bleed: S.bleed || 0,
       usedF: Object.assign({}, S.usedF || {}) };
   }
 
@@ -317,9 +317,27 @@
       if (did > 0) ev.push('🎭 ' + hits0 + '타 — 방어력 −' + did);
     }
 
+    // 「어릿광대」 — 적이 퇴장하면 남은 타격이 다음 적에게 넘어간다.
+    // 다타는 단일 대상에 묶여 있어서 적 3~4마리 앞에서 광역 빌드에 밀렸다.
+    if (acc.dmg > 0 && ctx.ch.hitSpill && hits0 > 1 && alive.length > 1) {
+      var per = acc.dmg * gm(t0) / hits0, left = alive.slice(), cur = t0, tot0 = 0, ampS = T.ampMul(t0, {});
+      for (var hi2 = 0; hi2 < hits0; hi2++) {
+        if (cur.hp <= 0) {
+          left = left.filter(function (f) { return f.hp > 0; });
+          if (!left.length) break;
+          cur = left[0];
+        }
+        tot0 += T.damageEnemy(cur, per, { single: true, pierce: acc.pierce, rnd: ctx.rnd, hits: 1 });
+      }
+      ev.push('🎭 ' + hits0 + '타 분산 — 합계 ' + Math.round(tot0));
+      if (ampS > 1) C.ampHit = 1;
+      C.maxPlay = Math.max(C.maxPlay || 0, acc.dmg);
+      acc.dmg = 0;
+    }
     if (acc.dmg > 0) {
       var amp = T.ampMul(t0, {});
-      var d = T.damageEnemy(t0, acc.dmg * gm(t0), { single: true, pierce: acc.pierce, rnd: ctx.rnd });
+      var d = T.damageEnemy(t0, acc.dmg * gm(t0),
+        { single: true, pierce: acc.pierce, rnd: ctx.rnd, hits: hits0 });
       ev.push(t0.name + ' 에 ' + Math.round(acc.dmg)
         + (amp > 1 ? ' ×' + amp.toFixed(2) + ' 증폭' : '') + (gm(t0) < 1 ? ' ×조명 보호' : '')
         + ' → 실제 ' + Math.round(d) + (d === 0 ? ' (막혔다)' : ''));
@@ -345,11 +363,16 @@
         acc.slow ? '둔화 +' + acc.slow : ''].filter(Boolean).join(' · '));
     }
     var kills = alive.length - C.foes.filter(function (f) { return f.hp > 0; }).length;
-    // 처형에 성공하면 태운 피가 절반 돌아온다 — 자해를 「죽이는 데」 쓰게 만든다
-    if (kills > 0 && ctx.ch.selfRefund && acc.selfDmg > 0) {
-      var back = Math.round(acc.selfDmg * ctx.ch.selfRefund);
-      C.hp = Math.min(C.maxHp, C.hp + back);
-      ev.push('🩸 처형 — 태운 피 ' + back + ' 회수');
+    // 처형에 성공하면 태운 피가 즉시 절반 돌아온다 — 자해를 「죽이는 데」 쓰게 만든다.
+    // 실패해도 다음 턴에 돌아온다(bleedBack) — 그래야 계속 태울 수 있다.
+    if (acc.selfDmg > 0 && ctx.ch.selfRefund) {
+      if (kills > 0) {
+        var back = Math.round(acc.selfDmg * ctx.ch.selfRefund);
+        C.hp = Math.min(C.maxHp, C.hp + back);
+        ev.push('🩸 처형 — 태운 피 ' + back + ' 회수');
+      } else if (ctx.ch.bleedBack) {
+        C.bleed = (C.bleed || 0) + acc.selfDmg * ctx.ch.bleedBack;
+      }
     }
     if (!ctx.noCheer) {
       var need = ctx.cheerNeed ? Math.min(ctx.cheerNeed, ctx.cheerMax || T.CHEER.max)
@@ -461,7 +484,7 @@
             var C = { hp: nd.C.hp, maxHp: nd.C.maxHp, block: nd.C.block, thorns: nd.C.thorns,
                       cost: nd.C.cost, gold: nd.C.gold, foes: nd.C.foes.map(cloneFoe), dead: false,
                       cheer: nd.C.cheer, lastPlay: nd.C.lastPlay, repeatN: nd.C.repeatN,
-                      maxPlay: nd.C.maxPlay, usedF: Object.assign({}, nd.C.usedF || {}) };
+                      maxPlay: nd.C.maxPlay, bleed: nd.C.bleed || 0, usedF: Object.assign({}, nd.C.usedF || {}) };
             applyPlay(C, sc, tg, Object.assign({}, ctx, { rnd: function () { return 0.5; } }));
             var n2 = { C: C, seq: nd.seq.concat([{ hi: hi, sc: sc, tgt: tg }]) };
             n2.sc = evaluate(C, C0, ctx.w, ctx);
@@ -858,6 +881,8 @@
       S.cost = maxCost(S);
       S.stats.costMax += S.cost;
       if (relicN(S, 'darkScript')) S.hp -= 2;
+      if (S.bleed > 0) { var bk = Math.round(S.bleed); S.hp = Math.min(S.maxHp, S.hp + bk); S.bleed = 0;
+        if (bk > 0) lg(S, 's', '  🩸 태운 피 ' + bk + ' 이 돌아왔다'); }
       if (S.curser && S.curser.hp > 0) sowCurse(S);
 
       // 난입 — 예고한 턴에 무대로 뛰어든다
@@ -911,11 +936,12 @@
         var aliveBefore = S.foes.filter(function (f) { return f.hp > 0; }).length;
         var C = { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost,
                   gold: S.gold, foes: S.foes, dead: false, ampHit: 0,
-                  cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay,
+                  cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay, bleed: S.bleed || 0,
                   usedF: S.usedF || (S.usedF = {}) };
         var ev = applyPlay(C, a.sc, a.tgt, ctx);
         S.hp = C.hp; S.block = C.block; S.thorns = C.thorns; S.cost = C.cost; S.gold = C.gold;
         S.cheer = C.cheer; S.lastPlay = C.lastPlay; S.repeatN = C.repeatN; S.maxPlay = C.maxPlay;
+        S.bleed = C.bleed || 0;
         S.usedF = C.usedF || S.usedF;
         if (C.ovation) S.stats.ovations = (S.stats.ovations || 0) + 1;
         if (C.ampHit) ampTurn = 1;
@@ -1199,7 +1225,9 @@
     return e.dmg * w.dmg + e.aoe * 1.45 * w.aoe + e.block * 0.62 * w.block + e.heal * 0.72
       + (e.burn * 2.1 + e.poison * 2.4 + e.slow * 4.4) * w.status
       + e.thorns * 1.25 * w.thorns * (S.ch.thornsMul || 1)
-      - e.selfDmg * (S.ch.ignoreSelfDmg ? 0 : 1.3);
+      // 태운 피가 돌아오는 캐릭터는 자해를 절반만 손해로 본다 —
+      // 이걸 반영하지 않아서 봇이 자해 대본을 피했고 코스트 사용이 51% 였다
+      - e.selfDmg * (S.ch.ignoreSelfDmg ? 0 : (S.ch.bleedBack ? 0.55 : 1.3));
   }
 
   function scriptValue(S, w, sc) {
@@ -1712,7 +1740,9 @@
     S.turn++; S.stats.turns++;
     S.cost = maxCost(S); S.stats.costMax += S.cost;
     S.freeReroll = S.ch.freeReroll || 0;
-    if (relicN(S, 'darkScript')) S.hp -= 2;   // 어둠 유물 — 각본이 피를 먹는다
+    if (relicN(S, 'darkScript')) S.hp -= 2;
+      if (S.bleed > 0) { var bk = Math.round(S.bleed); S.hp = Math.min(S.maxHp, S.hp + bk); S.bleed = 0;
+        if (bk > 0) lg(S, 's', '  🩸 태운 피 ' + bk + ' 이 돌아왔다'); }   // 어둠 유물 — 각본이 피를 먹는다
     var ctx = ctxOf(S, S.w);
     if (S.curser && S.curser.hp > 0) sowCurse(S);
     if (S.intrudeQ.length) {
@@ -1750,11 +1780,12 @@
     var aliveBefore = S.foes.filter(function (f) { return f.hp > 0; }).length;
     var C = { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost,
               gold: S.gold, foes: S.foes, dead: false, ampHit: 0,
-              cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay,
+              cheer: S.cheer, lastPlay: S.lastPlay, repeatN: S.repeatN, maxPlay: S.maxPlay, bleed: S.bleed || 0,
                   usedF: S.usedF || (S.usedF = {}) };
     var ev = applyPlay(C, sc, tgt == null ? -1 : tgt, ctx);
     S.hp = C.hp; S.block = C.block; S.thorns = C.thorns; S.cost = C.cost; S.gold = C.gold;
     S.cheer = C.cheer; S.lastPlay = C.lastPlay; S.repeatN = C.repeatN; S.maxPlay = C.maxPlay;
+        S.bleed = C.bleed || 0;
         S.usedF = C.usedF || S.usedF;
     if (C.ovation) S.stats.ovations = (S.stats.ovations || 0) + 1;
     if (C.ampHit) S.ampTurn = 1;
