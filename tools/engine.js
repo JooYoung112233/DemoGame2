@@ -80,88 +80,93 @@
   };
 
   // ── 대본 2종 (36) — 코스트 2. 부가 효과가 붙는다 ───────────
+  // 상연 확률 7.8% 로 1종(44.6%)보다 6배 어려운데 코스트당 값이 더 낮았다. 피해 ×1.25.
   // 키는 카드 두 장을 정렬해 이었다. 같은 카드 2장도 조합이다.
   var S2 = [
-    ['knight', 'shield',  '방패를 든 기사',  { damage: 12, block: 10 }],
-    ['knight', 'sword',   '이도류',          { damage: 9, hits: 2 }],
-    ['knight', 'knight',  '기사의 맹세',     { damage: 22 }],
-    ['knight', 'chain',   '감옥의 심판',     { damage: 18, pierce: true }],
-    ['king',   'rage',    '왕의 처형',       { damage: 20, burn: 3 }],
-    ['king',   'trumpet', '즉위식',          { damage: 16, block: 8 }],
-    ['king',   'crown',   '왕의 초상',       { damage: 14, block: 10, gold: 4 }],
-    ['king',   'king',    '왕의 독백',       { damage: 26 }],
-    ['jester', 'fear',    '인형극',          { damage: 9, aoe: true }],
-    ['jester', 'jester',  '광대의 난무',     { damage: 5, hits: 5 }],
-    ['jester', 'mask',    '가면 바꾸기',     { damage: 6, hits: 3, thorns: 4 }],
-    ['priest', 'rose',    '성스러운 축복',   { heal: 14, block: 10 }],
-    ['priest', 'candle',  '위령',            { heal: 10, burn: 4 }],
-    ['priest', 'priest',  '성무',            { heal: 20, block: 8 }],
-    ['dancer', 'cold',    '얼음 왈츠',       { damage: 9, slow: 3 }],
-    ['dancer', 'drum',    '탭 댄스',         { damage: 6, hits: 3 }],
-    ['dancer', 'curtain', '느린 막',         { block: 8, slow: 4 }],
-    ['cold',   'drum',    '얼음 북',         { damage: 4, aoe: true, slow: 3 }],
-    ['acrobat', 'candle', '불꽃 곡예',       { damage: 3, hits: 4, burn: 1 }],
-    ['acrobat', 'violin', '독무',            { damage: 3, hits: 4, poison: 1 }],
-    ['jester', 'candle',  '불장난',          { damage: 4, hits: 3, burn: 1 }],
-    ['piano',  'candle',  '불타는 건반',     { damage: 6, aoe: true, burn: 3 }],
-    ['acrobat', 'piano',  '곡예 무대',       { damage: 4, hits: 5 }],
-    ['acrobat', 'curtain', '외줄',           { damage: 6, hits: 2, block: 8 }],
-    ['singer', 'joy',     '아리아',          { heal: 14, block: 10 }],
-    ['singer', 'trumpet', '이중창',          { damage: 12, block: 8 }],
-    ['dead',   'tragedy', '망령의 대가',     { damage: 28, selfDamage: 8 }],
-    ['dead',   'candle',  '화장',            { damage: 14, burn: 6, selfDamage: 4 }],
-    ['piano',  'drum',    '행진곡',          { damage: 8, aoe: true, slow: 2 }],
-    ['piano',  'violin',  '실내악',          { damage: 6, aoe: true, poison: 3 }],
-    ['violin', 'tragedy', '비가',            { damage: 14, poison: 5 }],
-    ['drum',   'rage',    '전쟁 북',         { damage: 12, burn: 3 }],
-    ['trumpet', 'rage',   '진군 나팔',       { damage: 16, burn: 2 }],
-    ['rage',   'candle',  '무대에 불이',     { damage: 6, aoe: true, burn: 5 }],
-    ['rage',   'rage',    '불타는 무대',     { damage: 8, aoe: true, burn: 5 }],
-    ['cold',   'curtain', '겨울의 장막',     { block: 14, slow: 3 }],
-    ['cold',   'cold',    '얼어붙은 오페라', { damage: 7, aoe: true, slow: 4 }],
-    ['fear',   'mask',    '괴담',            { damage: 10, thorns: 6 }],
-    ['sword',  'sword',   '칼춤',            { damage: 13, hits: 2 }],
-    ['shield', 'mirror',  '거울의 방',       { block: 16, thorns: 12 }],
-    ['shield', 'shield',  '완전한 방벽',     { block: 26 }],
-    ['mirror', 'mask',    '이면',            { block: 10, thorns: 14 }],
-    ['chain',  'drum',    '사슬 소리',       { damage: 12, pierce: true, slow: 2 }],
-    ['rose',   'joy',     '장미의 정원',     { heal: 16, block: 8 }],
-    ['crown',  'joy',     '개막 축하',       { block: 10, heal: 6, gold: 10 }],
-    ['curtain', 'candle', '무대 화재',       { damage: 5, aoe: true, burn: 6 }]
+    ['knight', 'shield',  '방패를 든 기사',  { damage: 15, block: 12 }],
+    ['knight', 'sword',   '이도류',          { damage: 11, hits: 2 }],
+    ['knight', 'knight',  '기사의 맹세',     { damage: 28 }],
+    ['knight', 'chain',   '감옥의 심판',     { damage: 23, pierce: true }],
+    ['king',   'rage',    '왕의 처형',       { damage: 25, burn: 3 }],
+    ['king',   'trumpet', '즉위식',          { damage: 20, block: 9 }],
+    ['king',   'crown',   '왕의 초상',       { damage: 18, block: 12, gold: 4 }],
+    ['king',   'king',    '왕의 독백',       { damage: 33 }],
+    ['jester', 'fear',    '인형극',          { damage: 11, aoe: true }],
+    ['jester', 'jester',  '광대의 난무',     { damage: 6, hits: 5 }],
+    ['jester', 'mask',    '가면 바꾸기',     { damage: 8, hits: 3, thorns: 4 }],
+    ['priest', 'rose',    '성스러운 축복',   { heal: 16, block: 12 }],
+    ['priest', 'candle',  '위령',            { heal: 12, burn: 4 }],
+    ['priest', 'priest',  '성무',            { heal: 23, block: 9 }],
+    ['dancer', 'cold',    '얼음 왈츠',       { damage: 11, slow: 3 }],
+    ['dancer', 'drum',    '탭 댄스',         { damage: 8, hits: 3 }],
+    ['dancer', 'curtain', '느린 막',         { block: 9, slow: 4 }],
+    ['cold',   'drum',    '얼음 북',         { damage: 5, aoe: true, slow: 3 }],
+    ['acrobat', 'candle', '불꽃 곡예',       { damage: 4, hits: 4, burn: 1 }],
+    ['acrobat', 'violin', '독무',            { damage: 4, hits: 4, poison: 1 }],
+    ['jester', 'candle',  '불장난',          { damage: 5, hits: 3, burn: 1 }],
+    ['piano',  'candle',  '불타는 건반',     { damage: 8, aoe: true, burn: 3 }],
+    ['acrobat', 'piano',  '곡예 무대',       { damage: 5, hits: 5 }],
+    ['acrobat', 'curtain', '외줄',           { damage: 8, hits: 2, block: 9 }],
+    ['singer', 'joy',     '아리아',          { heal: 16, block: 12 }],
+    ['singer', 'trumpet', '이중창',          { damage: 15, block: 9 }],
+    ['dead',   'tragedy', '망령의 대가',     { damage: 35, selfDamage: 8 }],
+    ['dead',   'candle',  '화장',            { damage: 18, burn: 6, selfDamage: 4 }],
+    ['piano',  'drum',    '행진곡',          { damage: 10, aoe: true, slow: 2 }],
+    ['piano',  'violin',  '실내악',          { damage: 8, aoe: true, poison: 3 }],
+    ['violin', 'tragedy', '비가',            { damage: 18, poison: 5 }],
+    ['drum',   'rage',    '전쟁 북',         { damage: 15, burn: 3 }],
+    ['trumpet', 'rage',   '진군 나팔',       { damage: 20, burn: 2 }],
+    ['rage',   'candle',  '무대에 불이',     { damage: 8, aoe: true, burn: 5 }],
+    ['rage',   'rage',    '불타는 무대',     { damage: 10, aoe: true, burn: 5 }],
+    ['cold',   'curtain', '겨울의 장막',     { block: 16, slow: 3 }],
+    ['cold',   'cold',    '얼어붙은 오페라', { damage: 9, aoe: true, slow: 4 }],
+    ['fear',   'mask',    '괴담',            { damage: 13, thorns: 6 }],
+    ['sword',  'sword',   '칼춤',            { damage: 16, hits: 2 }],
+    ['shield', 'mirror',  '거울의 방',       { block: 18, thorns: 12 }],
+    ['shield', 'shield',  '완전한 방벽',     { block: 30 }],
+    ['mirror', 'mask',    '이면',            { block: 12, thorns: 14 }],
+    ['chain',  'drum',    '사슬 소리',       { damage: 15, pierce: true, slow: 2 }],
+    ['rose',   'joy',     '장미의 정원',     { heal: 18, block: 9 }],
+    ['crown',  'joy',     '개막 축하',       { block: 12, heal: 7, gold: 10 }],
+    ['curtain', 'candle', '무대 화재',       { damage: 6, aoe: true, burn: 6 }]
   ];
 
   // ── 대본 3종 (18) — 코스트 3. 판을 바꾼다 ──────────────────
+  // 3칸 무대에서 3종은 상연 확률이 2.1% 다. 1종(44.6%)보다 21배 어려운데
+  // 코스트당 값이 같았다 — 「어려운 조합일수록 파워풀해야 한다」를 어기고 있었다.
+  // 피해 ×1.45 → 다시 ×1.3 (누적 ×1.9). 21배 어려운 조합은 「저거 한번 해보고 싶다」가 되어야 한다.
   var S3 = [
-    ['knight', 'knight', 'knight',  '삼중 기사단',   { damage: 34 }],
-    ['knight', 'sword', 'shield',   '완전 무장',     { damage: 20, block: 16 }],
-    ['knight', 'chain', 'sword',    '처형대',        { damage: 26, pierce: true }],
-    ['king',   'king',  'king',     '삼대의 왕',     { damage: 42 }],
-    ['king',   'crown', 'trumpet',  '대관식',        { damage: 22, block: 14, gold: 8 }],
-    ['jester', 'jester', 'jester',  '광대의 극',     { damage: 6, hits: 7 }],
-    ['jester', 'fear',  'mask',     '악몽 인형극',   { damage: 13, aoe: true, thorns: 6 }],
-    ['priest', 'rose',  'joy',      '대성당',        { heal: 26, block: 16 }],
-    ['acrobat', 'jester', 'dancer', '서커스',        { damage: 5, hits: 8 }],
-    ['dancer', 'cold',  'curtain',  '눈의 무대',     { damage: 10, aoe: true, slow: 4 }],
-    ['dead',   'dead',  'dead',     '망자의 행렬',   { damage: 46, selfDamage: 12 }],
-    ['dead',   'tragedy', 'candle', '장송곡',        { damage: 20, aoe: true, burn: 6, selfDamage: 8 }],
-    ['piano',  'violin', 'trumpet', '관현악',        { damage: 12, aoe: true, poison: 4 }],
-    ['piano',  'drum',  'trumpet',  '대행진',        { damage: 14, aoe: true, slow: 3 }],
-    ['rage',   'rage',  'candle',   '대화재',        { damage: 12, aoe: true, burn: 9 }],
-    ['shield', 'mirror', 'curtain', '난공불락',      { block: 30, thorns: 16 }],
-    ['mirror', 'mirror', 'mask',    '거울 미로',     { block: 16, thorns: 22 }],
-    ['chain',  'chain', 'drum',     '사슬 감옥',     { damage: 22, pierce: true, slow: 4 }],
+    ['knight', 'knight', 'knight',  '삼중 기사단',   { damage: 64 }],
+    ['knight', 'sword', 'shield',   '완전 무장',     { damage: 38, block: 25 }],
+    ['knight', 'chain', 'sword',    '처형대',        { damage: 49, pierce: true }],
+    ['king',   'king',  'king',     '삼대의 왕',     { damage: 79 }],
+    ['king',   'crown', 'trumpet',  '대관식',        { damage: 42, block: 22, gold: 8 }],
+    ['jester', 'jester', 'jester',  '광대의 극',     { damage: 12, hits: 7 }],
+    ['jester', 'fear',  'mask',     '악몽 인형극',   { damage: 25, aoe: true, thorns: 6 }],
+    ['priest', 'rose',  'joy',      '대성당',        { heal: 34, block: 25 }],
+    ['acrobat', 'jester', 'dancer', '서커스',        { damage: 9, hits: 8 }],
+    ['dancer', 'cold',  'curtain',  '눈의 무대',     { damage: 20, aoe: true, slow: 4 }],
+    ['dead',   'dead',  'dead',     '망자의 행렬',   { damage: 87, selfDamage: 12 }],
+    ['dead',   'tragedy', 'candle', '장송곡',        { damage: 38, aoe: true, burn: 6, selfDamage: 8 }],
+    ['piano',  'violin', 'trumpet', '관현악',        { damage: 22, aoe: true, poison: 4 }],
+    ['piano',  'drum',  'trumpet',  '대행진',        { damage: 26, aoe: true, slow: 3 }],
+    ['rage',   'rage',  'candle',   '대화재',        { damage: 22, aoe: true, burn: 9 }],
+    ['shield', 'mirror', 'curtain', '난공불락',      { block: 47, thorns: 16 }],
+    ['mirror', 'mirror', 'mask',    '거울 미로',     { block: 25, thorns: 22 }],
+    ['chain',  'chain', 'drum',     '사슬 감옥',     { damage: 42, pierce: true, slow: 4 }],
     // 증폭을 노리는 3종 — 먼저 걸고 터뜨리는 순서 결정을 만든다
-    ['cold',   'drum',  'curtain',  '한겨울',        { damage: 6, aoe: true, slow: 6 }],
-    ['candle', 'candle', 'piano',   '불바다',        { damage: 10, aoe: true, burn: 4 }],
-    ['violin', 'violin', 'tragedy', '독의 3막',      { damage: 8, poison: 6 }],
-    ['acrobat', 'acrobat', 'candle', '불꽃 서커스',  { damage: 3, hits: 6, burn: 1 }]
+    ['cold',   'drum',  'curtain',  '한겨울',        { damage: 12, aoe: true, slow: 6 }],
+    ['candle', 'candle', 'piano',   '불바다',        { damage: 20, aoe: true, burn: 4 }],
+    ['violin', 'violin', 'tragedy', '독의 3막',      { damage: 16, poison: 6 }],
+    ['acrobat', 'acrobat', 'candle', '불꽃 서커스',  { damage: 5, hits: 6, burn: 1 }]
   ];
 
   // ── 계열 대본 — 세 장이 같은 계열이면. 코스트 2 ─────────────
+  // 상연 확률 22.4% 인데 코스트당 값이 1종의 65% 였다. 어려운데 약했다. ×1.6.
   var SFAM = {
-    cast:  ['배역들',   { damage: 14 }],
-    score: ['합주',     { damage: 7, aoe: true, burn: 2 }],
-    prop:  ['무대장치', { block: 14, thorns: 6 }]
+    cast:  ['배역들',   { damage: 22 }],
+    score: ['합주',     { damage: 11, aoe: true, burn: 2 }],
+    prop:  ['무대장치', { block: 21, thorns: 9 }]
   };
 
   var COST = { one: 1, two: 2, three: 3, fam: 2, free: 1 };
@@ -254,11 +259,25 @@
       deck: { king: 4, jester: 4, singer: 3, trumpet: 3, crown: 2, joy: 2 },
       pool: ['king', 'jester', 'singer', 'trumpet', 'crown', 'joy', 'priest'],
       unlock: '한 판에서 기립 박수를 3회 받는다',
+      openers: [['one', 'king'], ['one', 'trumpet'], ['two', 'singer', 'trumpet']] },
+
+    // 커튼콜 전용 — 같은 대본으로 계속 막을 닫는다.
+    // 환호는 「다양하게」를 요구하고 커튼콜은 「반복」을 요구한다. 두 축이 정면으로 충돌하고,
+    // 그래서 어느 쪽 덱으로 갈지가 선택이 된다.
+    closer: { name: '종막의 배우', maxCost: 4, win: 'encore',
+      curtainSlots: 2, chainPer: 0.4, chainKeep: 0.5,
+      note: '커튼콜 2칸 · 연속 1회마다 +40% (최대 +120%)'
+          + ' · 연속이 끊겨도 절반은 남는다',
+      // 첫 덱이 커튼 위주라 마무리 대본이 없었다 — 커튼콜 캐릭터인데 막을 못 닫았다.
+      // 왕을 축으로 「왕의 명령 → 왕의 독백 → 삼대의 왕」이라는 한 줄이 서게 짰다.
+      deck: { king: 5, sword: 4, curtain: 3, crown: 2, singer: 2, gem: 2 },
+      pool: ['king', 'sword', 'curtain', 'crown', 'trumpet', 'gem'],
+      unlock: '커튼콜 연속을 3회 이어간다',
       openers: [['one', 'king'], ['one', 'trumpet'], ['two', 'singer', 'trumpet']] }
   };
 
   var WIN_KO = { burst: '한 방', sweep: '광역 소각', reflect: '반사·방어', status: '상태이상 증폭',
-                 hits: '다타 누적', cheer: '관중 환호' };
+                 hits: '다타 누적', cheer: '관중 환호', encore: '커튼콜 연속' };
 
   // 캐릭터별 대본 풀 — 요구 배역이 이 캐릭터 풀에 들어 있으면 보상에 더 자주 뜬다
   function scriptWeight(ch, sc) {
@@ -370,13 +389,13 @@
   var DIFFICULTY = {
     // 계획을 안 하는 사람도 넘길 수 있어야 이 난이도가 제 역할을 한다.
     // HP ×1.35 / 공격 ×1.05 로는 무작정형이 24% 였다 — 구제가 아니었다.
-    story:  { name: '스토리', hpMul: 1.0, atkMul: 0.55,
+    story:  { name: '스토리', hpMul: 1.0, atkMul: 0.7,
               note: '이야기를 보러 왔다', sub: '계획 없이 눌러도 막을 넘긴다. 규칙을 익히는 자리다.' },
     // 공격 배율을 2.0 → 2.15 로 올려 봤는데 처음 하는 사람은 26% 에서 그대로였고
     // 익숙·숙련만 6pp·3pp 깎였다. 초보의 죽음은 수치가 아니라 기믹 대응 실패다.
     // 맵 규칙(보스 직전 분장실 보장·소품실 최소 2개)이 승률을 올려서(숙련 44% → 58%)
     // 공격 배율로 되돌렸다. 이 지렛대는 숙련만 깎고 초보는 그대로 둔다 — 27.2 참조.
-    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.8,
+    normal: { name: '보통',   hpMul: 2.55, atkMul: 2.75,
               note: '로그라이크로 한다', sub: '첫 클리어가 사건이다. 죽고 다시 하면서 배운다.' },
     // 승천 1단이 곧 이 난이도다. 3.3 / 2.7 로는 클리어가 15% 라 승천이 거의 올라가지 않았다.
     hard:   { name: '어려움', hpMul: 3.0,  atkMul: 2.05,
@@ -393,7 +412,8 @@
     { id: 'hand',   icon: '📜', name: '대본 창고',  desc: '대본 보유 +2',          max: 2 },
     { id: 'reroll', icon: '🔁', name: '무대 감독',  desc: '턴마다 무료 재굴림 +1', max: 1 },
     { id: 'cheer',  icon: '🙌', name: '단골 관객',  desc: '전투를 환호 25로 시작', max: 2 },
-    { id: 'cast',   icon: '🌟', name: '이중 캐스팅', desc: '주연을 한 명 더 세운다', max: 1 }
+    { id: 'cast',    icon: '🌟', name: '이중 캐스팅', desc: '주연을 한 명 더 세운다',  max: 1 },
+    { id: 'curtain', icon: '🎭', name: '전속 극단',   desc: '커튼콜 칸 +1',           max: 1 }
   ];
 
   // ── 사건 (이벤트 노드) ────────────────────────────────────
@@ -516,6 +536,11 @@
     stageBase: 3, stageMax: 5,
     // 즉석 대본은 기본 1장. 유물과 환호로 늘린다
     tempBase: 1,
+    // ── 커튼콜 ──
+    // 전투를 끝낸 대본이 다음 전투 1턴에 무대 조건·코스트 없이 한 번 오른다.
+    // 전투를 가로지르는 유일한 축이다 — 「무엇으로 끝낼까」가 마지막 턴의 결정이 된다.
+    // 모든 캐릭터에게 기본으로 열려 있다. 일반 플레이에서도 한 번씩 느껴야 하니까.
+    curtain: { slots: 1, chainPer: 0.2, chainMax: 3 },
     blockCapPct: 50, thornCap: 24, overflowConv: 50,
     hpBase: 60, hpPerAct: 42, costPerAct: 1,   // 전투가 6개 → 13개로 늘어 소모전이 누적된다
     // 막이 길어지면 관객이 야유한다 — 답이 없는 조합으로 버티는 교착을 끝낸다.
@@ -788,6 +813,10 @@
                 desc: '쓰러져도 HP 30%로 한 번 부활' },
     // 환호 상한을 늘리면 기립 박수는 늦게 오지만 「달아오른 무대」 구간이 길어진다.
     // 터뜨릴 것인가 유지할 것인가 — 그 저울을 바꾸는 유물들이다.
+    longBow:  { name: '긴 커튼콜',      icon: '🎭', cost: 24,
+                desc: '커튼콜 칸 +1 — 두 장을 들고 시작한다' },
+    encoreCall:{ name: '앙코르 요청',    icon: '👏', cost: 20,
+                desc: '커튼콜 대본을 상연하면 코스트 1을 돌려받는다' },
     bigHouse: { name: '큰 극장',        icon: '🏛', cost: 22,
                 desc: '환호 상한 +40 — 오래 달아오른다' },
     quickBow: { name: '빠른 인사',      icon: '💫', cost: 20,

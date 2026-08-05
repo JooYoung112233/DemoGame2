@@ -256,10 +256,18 @@
 
     C.cost -= costOf(ctx.ch, sc);
     if (sc.tier === 'three' && ctx.encore) C.cost += 1;
+    if (sc.curtain && ctx.encoreCall) C.cost += 1;
 
     // 어둠 유물 — 상태이상 2배 / 회복 절반
     if (ctx.statusMul > 1) { acc.burn *= ctx.statusMul; acc.poison *= ctx.statusMul; acc.slow *= ctx.statusMul; }
     if (ctx.healMul != null && ctx.healMul !== 1) acc.heal *= ctx.healMul;
+    // 커튼콜 연속 — 같은 대본으로 계속 막을 닫으면 그 대본이 커진다.
+    if (ctx.chain > 0 && sc.id === ctx.chainId) {
+      var cm = 1 + ctx.chainPer * ctx.chain;
+      acc.dmg *= cm; acc.aoe *= cm;
+      ev.push('🎭 연속 ' + ctx.chain + '회 — 피해 ×' + cm.toFixed(2));
+    }
+
     // 달아오른 무대 — 환호가 높게 유지되면 모든 대본이 강해진다.
     // 그래서 기립 박수로 터뜨리는 것이 손해일 수도 있다. 그게 결정이다.
     var cb = 0;
@@ -370,6 +378,7 @@
       ev.push('상태 — ' + [acc.burn ? '화상 +' + acc.burn : '', acc.poison ? '독 +' + acc.poison : '',
         acc.slow ? '둔화 +' + acc.slow : ''].filter(Boolean).join(' · '));
     }
+    C.lastId = sc.id;                        // 이 대본이 막을 닫으면 커튼콜에 오른다
     var kills = alive.length - C.foes.filter(function (f) { return f.hp > 0; }).length;
 
     // 이번 턴 누적 — 관객의 요구를 판정하는 데 쓴다
@@ -458,7 +467,9 @@
     if ((sc.effect.hits || 1) >= 3) d += CH.onHits;
     if (kills > 0) d += CH.onKill * kills;
     // 반복 감점 — 「관객의 총아」는 이 감점이 두 배다. 매 턴 다른 것을 해야 한다.
-    if (C.lastPlay === sc.id) { C.repeatN = (C.repeatN || 0) + 1; d += CH.repeat * C.repeatN * (repMul || 1); }
+    // 커튼콜은 반복 감점을 받지 않는다 — 앙코르는 반복이 아니라 요청이다
+    if (sc.curtain) { /* 감점 없음 */ }
+    else if (C.lastPlay === sc.id) { C.repeatN = (C.repeatN || 0) + 1; d += CH.repeat * C.repeatN * (repMul || 1); }
     else { C.lastPlay = sc.id; C.repeatN = 0; }
     C.cheer = Math.max(0, Math.min(hardCap || cap, (C.cheer || 0) + d));
     if (C.cheer >= cap) {
@@ -513,6 +524,12 @@
     if (C.ovation) v += 9 * (ctx.cheerW || 1);
     // 「관객의 총아」는 환호 자체가 화력이다 — 쌓아둔 환호에도 값이 있다
     if (ctx.ch.cheerDmgPer) v += (C.cheer || 0) * 0.10;
+    // 커튼콜 — 연속을 잇는 대본으로 막을 닫으면 다음 무대가 강해진다.
+    // 이걸 안 넣으면 봇이 「이 대본으로 끝내려고 한 턴 기다린다」를 못 한다.
+    if (ctx.chainId && !C.foes.some(function (f) { return f.hp > 0; })) {
+      if (C.lastId === ctx.chainId) v += 14 + (ctx.chain || 0) * 8;
+      else v -= 6;                        // 다른 대본으로 닫으면 연속이 끊긴다
+    }
     v -= C.cost * 2.2;                                          // 코스트를 남기면 손해
     if (C.hp - Math.max(0, inc - C.block) <= 0) v -= 400;       // 이 턴에 죽는 계획은 버린다
     return v;
@@ -531,7 +548,7 @@
         hand.forEach(function (sc, hi) {
           if (costOf(ctx.ch, sc) > nd.C.cost) return;
           if (sc.temp && nd.seq.filter(function (a) { return a.hi === hi; }).length) return;
-          if (!T.canStage(sc, S.stage, ctx.relax)) return;
+          if (!sc.curtain && !T.canStage(sc, S.stage, ctx.relax)) return;
           var eff = T.scriptEffect(sc, ctx.ch);
           var tgts = eff.dmg > 0 ? nd.C.foes.map(function (f, i) { return f.hp > 0 ? i : -9; })
                                              .filter(function (i) { return i >= 0; }) : [-1];
@@ -870,7 +887,7 @@
   function relicN(S, k) { return S.relics.filter(function (r) { return r === k; }).length; }
   function ctxOf(S, w) {
     return { ch: S.ch, w: w, rnd: S.rnd, S: S, relax: relicN(S, 'stand_in'), cheerMax: S.asc.cheerMax,
-      embers: relicN(S, 'embers'), encore: relicN(S, 'encore'), actBurn: S.actBurn || 0,
+      embers: relicN(S, 'embers'), encore: relicN(S, 'encore'), encoreCall: relicN(S, 'encoreCall'), actBurn: S.actBurn || 0,
       thornCap: T.CFG.thornCap * (S.ch.thornsMul || 1) + relicN(S, 'thorns') * 8
                 + relicN(S, 'crackMirror') * 12,
       blockCapPct: T.CFG.blockCapPct * (relicN(S, 'crackMirror') ? 0.8 : 1),
@@ -879,6 +896,8 @@
       ovation: T.CHEER.ovation + relicN(S, 'lastActor') * 2 + (S.ch.ovationBonus || 0),
       cheerNeed: S.ch.cheerNeed || null,
       cheerCap: (S.asc.cheerMax || T.CHEER.max) + relicN(S, 'bigHouse') * 40 - relicN(S, 'quickBow') * 25,
+      chain: S.chain || 0, chainId: S.chainId || null,
+      chainPer: S.ch.chainPer || T.CFG.curtain.chainPer,
       boostMul: relicN(S, 'hotHouse') ? 2 : 1,
       noOvation: relicN(S, 'hotHouse') ? 1 : 0,
       repeatMul: S.ch.repeatMul || 1,
@@ -978,6 +997,8 @@
     // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
     // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
     S.fThorns = 0;
+    S.curtainIn = (S.curtainNext || []).slice();   // 지난 무대를 닫은 대본들
+    S.curtainNext = [];
     S.demand = (nd.type === 'elite' || nd.type === 'boss') ? nextDemand({}, ctxOf(S, S.w)) : null;
     if (S.demand) S.stats.demandOffer = (S.stats.demandOffer || 0) + 1;
     S.lastPlay = null; S.repeatN = 0; S.usedF = {};
@@ -1056,7 +1077,7 @@
       for (var i = 0; i < plan.seq.length; i++) {
         var a = plan.seq[i];
         if (costOf(S.ch, a.sc) > S.cost) continue;
-        if (!T.canStage(a.sc, S.stage, ctx.relax)) continue;
+        if (!a.sc.curtain && !T.canStage(a.sc, S.stage, ctx.relax)) continue;
         if (S.sealed[a.sc.id]) continue;
         var aliveBefore = S.foes.filter(function (f) { return f.hp > 0; }).length;
         var C = { hp: S.hp, maxHp: S.maxHp, block: S.block, thorns: S.thorns, cost: S.cost,
@@ -1070,6 +1091,7 @@
         S.cheer = C.cheer; S.lastPlay = C.lastPlay; S.repeatN = C.repeatN; S.maxPlay = C.maxPlay;
         S.bleed = C.bleed || 0;
         S.tHits = C.tHits; S.tPlays = C.tPlays; S.tBlock = C.tBlock; S.tHeal = C.tHeal; S.tSelf = C.tSelf;
+        S.lastId = C.lastId;
         if (C.demand !== S.demand) {
           lg(S, 's', '  🎯 관객이 만족했다 — 환호 +' + T.DEMAND_CHEER
             + ' · 다음 요구 ' + (C.demand ? C.demand.icon + ' ' + C.demand.name : ''));
@@ -1354,6 +1376,25 @@
       lg(S, 's', '  😱 관객의 요구를 들어줬다 — 아슬아슬하게 · 골드 +' + T.CHEER.thrillGold
         + ' · 환호 +' + T.CHEER.thrillCheer);
     }
+    // 커튼콜 — 막을 닫은 대본이 다음 무대의 1턴에 오른다
+    if (S.lastId) {
+      var slots = (S.ch.curtainSlots || T.CFG.curtain.slots) + (S.growth.curtain || 0)
+                + relicN(S, 'longBow');
+      S.curtainNext = [S.lastId];
+      // 연속 — 지난 무대를 닫은 그 대본으로 또 닫았는가
+      if (S.chainId === S.lastId) {
+        S.chain = Math.min(T.CFG.curtain.chainMax, (S.chain || 0) + 1);
+        S.stats.chainMax = Math.max(S.stats.chainMax || 0, S.chain);
+        lg(S, 's', '  🎭 연속 ' + S.chain + '회 — 「' + (T.SCRIPT_BY_ID[S.lastId] || {}).name + '」');
+        if (S.chain >= 3) S.feat.closer = 1;
+      } else {
+        S.chain = S.chainId ? Math.floor((S.chain || 0) * (S.ch.chainKeep || 0)) : 0;
+        S.chainId = S.lastId;
+      }
+      // 커튼콜 칸이 둘 이상이면 직전 대본도 함께 남는다
+      if (slots > 1 && S.prevId && S.prevId !== S.lastId) S.curtainNext.push(S.prevId);
+      S.prevId = S.lastId;
+    }
     S.gold += g;
     if (!S.feat) S.feat = {};
     if (S.hp <= S.maxHp * 0.25) S.feat.fallen = 1;              // 벼랑에서 이겨낸다
@@ -1597,7 +1638,8 @@
                  // 어둠 유물 — 이득이 크지만 대가가 있다. 봇은 그 대가를 값에 반영한다.
                  darkScript: 26, crackMirror: 14, hungrySeat: 16, tornScript: 12,
                  madBaton: 22, lastActor: 14,
-                 emptyHouse: 18, doubleCast: 20, finalCurtain: 24 };
+                 emptyHouse: 18, doubleCast: 20, finalCurtain: 24,
+                 longBow: 18, encoreCall: 14, bigHouse: 16, quickBow: 12, hotHouse: 20 };
     var v = base[k] || 10;
     if (k === 'thorns' || k === 'mirrorR' || k === 'crackMirror') v *= w.thorns;
     if (k === 'embers' || k === 'madBaton') v *= w.status;
@@ -1935,6 +1977,8 @@
     // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
     // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
     S.fThorns = 0;
+    S.curtainIn = (S.curtainNext || []).slice();   // 지난 무대를 닫은 대본들
+    S.curtainNext = [];
     S.demand = (nd.type === 'elite' || nd.type === 'boss') ? nextDemand({}, ctxOf(S, S.w)) : null;
     if (S.demand) S.stats.demandOffer = (S.stats.demandOffer || 0) + 1;
     S.lastPlay = null; S.repeatN = 0; S.usedF = {};
@@ -2014,6 +2058,14 @@
     var rp = 1 - Math.pow(0.9, relicN(S, 'respin'));
     if (rp > 0 && S.rnd() < rp) { autoSpin(S); lg(S, 'e', '  🔄 무대를 다시 올렸다'); }
     S.temp = instantScripts(S, ctx);
+    if (S.turn === 1 && S.curtainIn.length) {
+      S.curtainIn.forEach(function (id) {
+        var sc = T.SCRIPT_BY_ID[id];
+        if (sc) S.temp.unshift(Object.assign({}, sc, { temp: true, curtain: true, cost: 0 }));
+      });
+      lg(S, 's', '  🎭 커튼콜 — ' + S.curtainIn.map(function (id) {
+        return '「' + (T.SCRIPT_BY_ID[id] || {}).name + '」'; }).join(' '));
+    }
     lg(S, 't', '턴 ' + S.turn + ' 무대 — ' + S.stage.map(function (x) { return T.CARDS[x].name; }).join(' · '));
     S.stats.playable += S.scripts.filter(function (s) {
       return T.canStage(s, S.stage, ctx.relax) && !S.sealed[s.id]; }).length;
@@ -2022,6 +2074,7 @@
 
   function canPlay(S, sc) {
     var ctx = ctxOf(S, S.w);
+    if (sc.curtain) return true;              // 커튼콜은 무대 조건도 코스트도 없다
     return !S.sealed[sc.id] && costOf(S.ch, sc) <= S.cost && T.canStage(sc, S.stage, ctx.relax);
   }
 
@@ -2041,6 +2094,7 @@
     S.cheer = C.cheer; S.lastPlay = C.lastPlay; S.repeatN = C.repeatN; S.maxPlay = C.maxPlay;
         S.bleed = C.bleed || 0;
         S.tHits = C.tHits; S.tPlays = C.tPlays; S.tBlock = C.tBlock; S.tHeal = C.tHeal; S.tSelf = C.tSelf;
+        S.lastId = C.lastId;
         if (C.demand !== S.demand) {
           lg(S, 's', '  🎯 관객이 만족했다 — 환호 +' + T.DEMAND_CHEER
             + ' · 다음 요구 ' + (C.demand ? C.demand.icon + ' ' + C.demand.name : ''));
