@@ -107,7 +107,8 @@
     <option value="career">여정 — 한 사람이 반복한다</option>
   </select>
   <span style="font-size:11px;color:#6b6b78">인원</span>
-  <input id="n" type="number" value="100" min="6" max="1000" style="width:70px">
+  <!-- 168 = 캐릭터 7 × 성향 6 × 숙련 4. 이보다 적으면 조합이 다 안 돈다 -->
+  <input id="n" type="number" value="168" min="6" max="1000" style="width:70px">
   <span style="font-size:11px;color:#6b6b78" id="runsLbl">판/명</span>
   <input id="runsN" type="number" value="25" min="5" max="60" style="width:60px" disabled>
   <span style="font-size:11px;color:#6b6b78">난이도</span>
@@ -237,8 +238,8 @@
     var c = el('mode').value === 'career';
     el('runsN').disabled = !c;
     el('careerWrap').style.display = c ? '' : 'none';
-    el('n').value = c ? 40 : 100;
-    el('run').textContent = c ? '여정 돌린다' : '100명 돌린다';
+    el('n').value = c ? 120 : 168;
+    el('run').textContent = c ? '여정 돌린다' : '돌린다';
     el('skill').disabled = c;                 // 여정은 숙련도가 판마다 자란다
   };
 
@@ -289,9 +290,10 @@
         // 캐릭터 × 성향 × 숙련도를 골고루 — 여기에 개인 편차가 더해져 100명이 100명이 된다
         var ck = CK[i % CK.length], pk = PK[Math.floor(i / CK.length) % PK.length];
         // 숙련도는 캐릭터·성향과 겹치지 않는 주기로 돌린다.
-        // i % 3 은 캐릭터 6종의 i % 6 에 종속돼서 숙련도가 캐릭터에 고정됐다.
+        // 캐릭터 7 · 숙련 4 는 서로소라 i % 4 로 충분하다.
+        // 이전처럼 42명(7×6) 단위로 끊으면 100명을 돌려도 숙련자가 한 명도 안 나온다.
         var sw = el('skill').value;
-        var sk = sw === 'mix' ? SK[Math.floor(i / (CK.length * PK.length)) % SK.length] : sw;
+        var sk = sw === 'mix' ? SK[i % SK.length] : sw;
         var r = Sim.run({ seed: seed0 + i * 7919, charKey: ck, diffKey: diff, policyKey: pk, skillKey: sk });
         r.i = RUNS.length; r.seed = seed0 + i * 7919; r.ck = ck; r.pk = pk; r.sk = sk; r.diff = diff;
         r.log = null;                              // 100판 로그는 안 들고 있는다
