@@ -405,7 +405,8 @@
     if (C.cheer >= cap) {
       var gain = ova || CH.ovation;
       C.cheer = 0; C.cost += gain; C.ovation = 1;
-      if (ev) ev.push('👏 기립 박수 — 코스트 +' + gain);
+      C.gold += CH.ovationGold;
+      if (ev) ev.push('👏 기립 박수 — 코스트 +' + gain + ' · 골드 +' + CH.ovationGold);
     }
   }
 
@@ -528,7 +529,9 @@
 
   // 무대 4장 중 손패에 가장 안 쓰이는 릴을 고른다. 사람이 하는 판단과 같다.
   function worstReel(S, ctx) {
-    var hand = handOf(S), useCnt = [0, 0, 0, 0];
+    var hand = handOf(S), useCnt = [];
+    for (var z = 0; z < S.stage.length; z++)
+      useCnt.push((z === 0 && S.cast) || (z === 1 && S.cast2) ? 1e9 : 0);
     hand.forEach(function (sc) {
       var req = sc.requiresFam ? [] : (sc.requires || []);
       S.stage.forEach(function (id, k) {
@@ -555,7 +558,7 @@
       scripts: T.makeOpeners(ch).map(function (s) {
         return T.SCRIPTS.filter(function (x) { return x.name === s.name; })[0] || s;
       }),
-      log: [], trace: opt.trace ? [] : null, feat: {},
+      log: [], trace: opt.trace ? [] : null, feat: {}, growth: {},
       stats: { nodes: 0, turns: 0, ampTurns: 0, playable: 0, playableOf: 0, temp: 0,
                costUsed: 0, costMax: 0, plays: 0, rerolls: 0, byTier: {}, byScript: {}, fights: 0 }
     };
@@ -824,15 +827,45 @@
       finalCurtain: relicN(S, 'finalCurtain') ? 1 : 0,
       overflowMul: (S.ch.overflowMul || 1) * (relicN(S, 'mirrorR') ? 2 : 1) };
   }
+  // 무대 칸 수 — 3칸에서 시작해 막을 넘길 때마다 넓어진다
+  function stageN(S) {
+    return Math.min(T.CFG.stageMax, T.CFG.stageBase + (S.growth.stage || 0));
+  }
+
+  // 캐스팅 — 이 전투에서 주연으로 세울 배역을 고른다.
+  // 그 배역을 요구하는 보유 대본의 값이 가장 큰 것을 고른다. 적을 보고 정하는 결정이다.
+  function pickCast(S, w, skip) {
+    var best = null, bv = -1e9;
+    Object.keys(S.deck).forEach(function (id) {
+      if (T.CARDS[id].hidden || id === skip) return;
+      var v = 0;
+      S.scripts.forEach(function (sc) {
+        var req = sc.requiresFam ? [] : (sc.requires || []);
+        var need = req.filter(function (x) { return x === id; }).length;
+        if (!need) {
+          if (sc.requiresFam && (T.CARDS[id] || {}).fam === sc.requiresFam) v += scriptRaw(S, w, sc) * 0.35;
+          return;
+        }
+        // 요구 배역 중 하나를 확정으로 채워주면 그 대본의 상연 확률이 크게 오른다
+        var gain = stageProb(sc, S.deck);
+        v += scriptRaw(S, w, sc) * (0.9 - gain * 0.5);
+      });
+      if (T.CARDS[id].wild) v *= 1.25;              // 보석은 어떤 대본에도 들어간다
+      if (v > bv) { bv = v; best = id; }
+    });
+    return best;
+  }
+
   function maxCost(S) {
     // 막이 오르면 극단이 커진다 — 대본 11.6장을 코스트 4로는 못 쓴다.
     // 빌드가 자란 것이 실제 출력이 되어야 한다.
-    return Math.max(1, S.ch.maxCost + (S.act - 1) * T.CFG.costPerAct
+    return Math.max(1, S.ch.maxCost + (S.growth.cost || 0) + (S.act - 1) * T.CFG.costPerAct
                        + relicN(S, 'drumOpen') + relicN(S, 'darkScript')
                        - relicN(S, 'doubleCast'));
   }
   function scriptCap(S) {
-    return T.CFG.scriptBase + (S.ch.handBonus || 0) + relicN(S, 'archive') * 3 + relicN(S, 'tornScript') * 4;
+    return T.CFG.scriptBase + (S.ch.handBonus || 0) + (S.growth.hand || 0) * 2
+         + relicN(S, 'archive') * 3 + relicN(S, 'tornScript') * 4;
   }
 
   function fight(S, w, nd) {
@@ -875,8 +908,11 @@
       else gimSeen[f.gimmick] = 1;
     });
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
-    S.strips = [0, 1, 2, 3].map(function () { return T.buildStrip(S.deck, S.rnd); });
-    S.cheer = S.ch.cheerStart || 0; S.lastPlay = null; S.repeatN = 0; S.usedF = {};
+    S.strips = []; for (var si = 0; si < T.CFG.stageMax; si++) S.strips.push(T.buildStrip(S.deck, S.rnd));
+    S.cast = pickCast(S, S.w);   // 전투 전 캐스팅
+    S.cast2 = S.growth.cast ? pickCast(S, S.w, S.cast) : null;
+    S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
+    S.lastPlay = null; S.repeatN = 0; S.usedF = {};
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     S.ovations = 0;
     if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
@@ -921,10 +957,16 @@
 
       var live = S.scripts.filter(function (s) { return T.canStage(s, S.stage, ctx.relax); }).length;
       S.stats.playable += live; S.stats.playableOf += S.scripts.length; S.stats.temp += S.temp.length;
+      // 이번 턴에 실제로 「고를 수 있는」 것이 몇 개인가 — 1 이면 결정이 아니다.
+      // 재미를 재는 가장 직접적인 숫자라 히스토그램으로 남긴다.
+      var pick = handOf(S).filter(function (sc) { return canPlay(S, sc); }).length;
+      S.stats.optSum = (S.stats.optSum || 0) + pick;
+      var bkt = pick >= 3 ? 'o3' : ('o' + pick);
+      S.stats[bkt] = (S.stats[bkt] || 0) + 1;
 
       // 계획 → 필요하면 재굴림 → 다시 계획
       var plan = planTurn(S, ctx);
-      var rer = 0, free = S.ch.freeReroll || 0;
+      var rer = 0, free = (S.ch.freeReroll || 0) + (S.growth.reroll || 0);
       while (rer < 2 && (free > 0 || S.cost >= 2)) {
         if (S.rnd() > S.sk.useReroll) break;        // 재굴림을 쓸 줄 아는지가 숙련도다
         var k = worstReel(S, ctx), isFree = free > 0;
@@ -987,11 +1029,16 @@
   }
 
   function autoSpin(S) {
-    var idx = [], line = [];
-    for (var k = 0; k < 4; k++) {
+    var idx = [], line = [], N = stageN(S);
+    for (var k = 0; k < N; k++) {
       var st = S.strips[k], i = Math.floor(S.rnd() * st.length);
       idx.push(i); line.push(st[i]);
     }
+    // 캐스팅 — 지명한 주연은 매 턴 무대 첫 칸에 선다.
+    // 릴을 설계한 결실이 무대에 보장되는 지점이고, 이 게임에서 유일하게
+    // 「내가 정한 것이 반드시 나오는」 자리다.
+    if (S.cast) { line[0] = S.cast; idx[0] = -1; }
+    if (S.cast2 && N > 1) { line[1] = S.cast2; idx[1] = -1; }
     // 검열 — 봉인된 배역은 무대에서 검은 칸이 된다
     if (S.censor && S.censor.turns > 0) {
       line = line.map(function (id) { return id === S.censor.id ? 'void' : id; });
@@ -1029,7 +1076,11 @@
         cost: Math.max(1, s.cost - (relicN(S, 'improv') ? 1 : 0)) }));
     });
     out.sort(function (a, b) { return b.cost - a.cost; });
-    return out.slice(0, 3);
+    // 즉석은 기본 1장. 유물이 늘리고, 환호가 절반을 넘으면 한 장 더 —
+    // 관중이 달아오르면 즉흥이 나온다는 그림이다.
+    var tn = T.CFG.tempBase + (S.growth.temp || 0) + relicN(S, 'improv')
+           + ((S.cheer || 0) >= (S.asc.cheerMax || T.CHEER.max) * 0.5 ? 1 : 0);
+    return out.slice(0, Math.max(1, tn));
   }
 
   function sowCurse(S) {
@@ -1273,6 +1324,26 @@
   // 숙련도에 따라 보상 평가가 흔들린다 — 처음 하는 사람은 좋은 걸 알아보지 못한다
   function noisy(S, v) { return v * (1 + (S.rnd() - 0.5) * 2 * S.sk.rewardNoise); }
 
+  // 극단 성장 — 상한에 닿지 않은 것 중 셋
+  function offerGrowth(S) {
+    var pool = T.GROWTH.filter(function (g) { return (S.growth[g.id] || 0) < g.max; });
+    if (!pool.length) return [];
+    return T.pickWeighted(pool, function () { return 1; }, S.rnd, Math.min(3, pool.length));
+  }
+
+  // 무엇이 이 빌드에 값이 큰가 — 지금 부족한 것을 크게 본다
+  function growthValue(S, w, g) {
+    var live = S.scripts.filter(function (s) { return true; }).length;
+    if (g.id === 'stage')  return 26 - stageN(S) * 3;              // 칸이 좁을수록 값이 크다
+    if (g.id === 'cost')   return 22 + (S.stats.costUsed / Math.max(1, S.stats.costMax) > 0.8 ? 8 : 0);
+    if (g.id === 'temp')   return 13 * (S.pol.grab.script || 1);
+    if (g.id === 'hand')   return live >= scriptCap(S) - 1 ? 20 : 9;  // 상한에 닿았을 때만
+    if (g.id === 'reroll') return 15 * (S.sk.useReroll || 0.5) * 1.6;
+    if (g.id === 'cheer')  return S.ch.cheerDmgPer ? 22 : 10;
+    if (g.id === 'cast')   return 24;
+    return 8;
+  }
+
   function doReward(S, w, nd) {
     if (S.bonusScript) {
       S.bonusScript = 0;
@@ -1291,13 +1362,29 @@
       var br = null, brv = -1e9;
       rpool.forEach(function (k) { var v = relicValue(S, w, k); if (v > brv) { brv = v; br = k; } });
       if (br) { takeRelic(S, br); lg(S, 's', '  🏆 유물 ' + T.RELICS[br].name); }
+      // 극단 성장 — 셋 중 하나. 성장을 자동으로 주면 런마다 같아진다.
+      var go = offerGrowth(S), bg = null, bgv = -1e9;
+      go.forEach(function (g) { var v = noisy(S, growthValue(S, w, g)); if (v > bgv) { bgv = v; bg = g; } });
+      if (bg) {
+        S.growth[bg.id] = (S.growth[bg.id] || 0) + 1;
+        lg(S, 's', '  🎪 극단이 자랐다 — ' + bg.icon + ' ' + bg.name + ' (' + bg.desc + ')');
+      }
       return;
     }
     if (nd.type === 'elite') {
-      // 비극 — 대본 3 중 하나 (여기서만 3종이 잘 나온다)
+      // 비극 — 대본을 넓힐지, 극단을 키울지. 둘 중 하나만 가져간다.
+      // 성장이 막 보스 2회뿐이라 후반이 얇았다. 중간 관문에도 성장을 둔다.
       var ss = offerScripts(S, 3), bs = null, bv = 0;
       ss.forEach(function (sc) { var v = noisy(S, scriptValue(S, w, sc)); if (v > bv) { bv = v; bs = sc; } });
-      if (bs) { S.scripts.push(bs); lg(S, 's', '  보상 대본 「' + bs.name + '」'); tr(S, 'reward', '대본 「' + bs.name + '」'); }
+      var eg = offerGrowth(S).slice(0, 2), eb = null, ebv = -1e9;
+      eg.forEach(function (g) { var v = noisy(S, growthValue(S, w, g)); if (v > ebv) { ebv = v; eb = g; } });
+      if (eb && ebv > bv * 0.9) {
+        S.growth[eb.id] = (S.growth[eb.id] || 0) + 1;
+        lg(S, 's', '  🎪 극단이 자랐다 — ' + eb.icon + ' ' + eb.name + ' (' + eb.desc + ')');
+        tr(S, 'reward', eb.name);
+      } else if (bs) {
+        S.scripts.push(bs); lg(S, 's', '  보상 대본 「' + bs.name + '」'); tr(S, 'reward', '대본 「' + bs.name + '」');
+      }
       return;
     }
     // 공연 — 배역 3 · 대본 3 을 함께 내밀고 하나만
@@ -1315,6 +1402,12 @@
   }
 
   function doShop(S, w) {
+    // 상점이 후반에 쓸모없어지는지 재려면 방문마다 기록이 필요하다
+    var rec = { act: S.act, floor: S.at ? S.at.f + 1 : 0, gold0: S.gold,
+                card: 0, script: 0, relic: 0, sold: 0, deck0: deckSize(S) };
+    S.stats.shops = S.stats.shops || [];
+    S.stats.shops.push(rec);
+    S.shopRec = rec;
     sellReels(S, w);                    // 먼저 팔아서 자금을 만든 다음 산다
     var cards = offerCards(S).map(function (id) { return { id: id, cost: 8 + Math.floor(S.rnd() * 6) }; });
     var scripts = offerScripts(S, 3).map(function (sc) { return { sc: sc, cost: 16 + sc.cost * 5 }; });
@@ -1323,8 +1416,14 @@
       var r = T.RELICS[k];
       return !r.dark || (S.asc.level || 0) >= r.asc;
     });
+    // 유물은 막이 오를수록 비싸다 — 후반에 골드가 남는 것을 막는다
+    var rmul = T.CFG.gold.relicActMul[S.act - 1] || 1;
     var relics = T.pickWeighted(pool2, function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2)
-      .map(function (k) { return { k: k, cost: T.RELICS[k].cost }; });
+      .map(function (k) { return { k: k, cost: Math.round(T.RELICS[k].cost * rmul) }; });
+    // 대본 승급 — 보유 대본 하나의 코스트를 1 내린다.
+    // 대본 상한(7장)과 부딪히지 않는 지출처다. 있는 것을 강하게 하니까.
+    var ups = S.scripts.filter(function (sc) { return sc.cost > 1 && !sc.upgraded; })
+      .slice(0, 3).map(function (sc) { return { sc: sc, cost: T.CFG.gold.upgrade[S.act - 1] || 32 }; });
 
     // 유물이 가장 값이 크다 — 규칙을 바꾸니까. 그다음 대본, 배역.
     var guard = 0;
@@ -1339,16 +1438,34 @@
       cards.forEach(function (it, i) {
         if (S.gold >= it.cost) buys.push({ v: cardValue(S, w, it.id) * 0.9, kind: 'c', i: i, it: it });
       });
+      ups.forEach(function (it, i) {
+        if (S.gold < it.cost) return;
+        // 코스트가 1 줄면 그 대본을 더 자주 낼 수 있다 — 값을 그 차이로 본다
+        var raw = scriptRaw(S, w, it.sc), c0 = costOf(S.ch, it.sc);
+        buys.push({ v: (raw / Math.max(1, c0 - 1) - raw / c0) * (0.35 + stageProb(it.sc, S.deck)),
+                    kind: 'u', i: i, it: it });
+      });
       buys.sort(function (a, b) { return b.v - a.v; });
       if (!buys.length || buys[0].v <= 1.5) break;
       // 처음 하는 사람은 계획대로 사지 않는다 — 눈에 띄는 것을 산다
       var b = (S.rnd() < S.sk.shopSmart) ? buys[0] : buys[Math.floor(S.rnd() * buys.length)];
       S.gold -= b.it.cost;
-      if (b.kind === 'r') { takeRelic(S, b.it.k); relics.splice(b.i, 1); lg(S, 'e', '  🏪 유물 ' + T.RELICS[b.it.k].name); }
-      if (b.kind === 's') { S.scripts.push(b.it.sc); scripts.splice(b.i, 1); lg(S, 'e', '  🏪 대본 「' + b.it.sc.name + '」'); }
-      if (b.kind === 'c') { if (deckSize(S) < T.CFG.reelMax) S.deck[b.it.id] = (S.deck[b.it.id] || 0) + 1; cards.splice(b.i, 1); lg(S, 'e', '  🏪 배역 ' + T.CARDS[b.it.id].name); }
+      if (b.kind === 'r') { takeRelic(S, b.it.k); relics.splice(b.i, 1); S.shopRec.relic++; lg(S, 'e', '  🏪 유물 ' + T.RELICS[b.it.k].name); }
+      if (b.kind === 's') { S.scripts.push(b.it.sc); scripts.splice(b.i, 1); S.shopRec.script++; lg(S, 'e', '  🏪 대본 「' + b.it.sc.name + '」'); }
+      if (b.kind === 'c') { if (deckSize(S) < T.CFG.reelMax) S.deck[b.it.id] = (S.deck[b.it.id] || 0) + 1; cards.splice(b.i, 1); S.shopRec.card++; lg(S, 'e', '  🏪 배역 ' + T.CARDS[b.it.id].name); }
+      if (b.kind === 'u') {
+        var ix = S.scripts.indexOf(b.it.sc);
+        // 카탈로그 객체를 그대로 고치면 다른 런까지 오염된다 — 복제해서 바꾼다
+        if (ix >= 0) S.scripts[ix] = Object.assign({}, b.it.sc, { cost: b.it.sc.cost - 1, upgraded: 1 });
+        ups.splice(b.i, 1); S.shopRec.upgrade = (S.shopRec.upgrade || 0) + 1;
+        lg(S, 'e', '  🏪 승급 「' + b.it.sc.name + '」 코스트 ' + b.it.sc.cost + ' → ' + (b.it.sc.cost - 1));
+      }
     }
+    closeShop(S);
   }
+
+  // 상점을 나갈 때의 잔액 — 골드가 남으면 계획의 재미가 준다
+  function closeShop(S) { if (S.shopRec) { S.shopRec.gold1 = S.gold; S.shopRec.deck1 = deckSize(S); S.shopRec = null; } }
 
   // 릴 판매 — 안 쓰는 배역을 팔아 골드를 만든다. 좁히기가 곧 자금이다.
   // 상점마다 상한이 있어서 릴을 통째로 갈아버리지는 못한다.
@@ -1363,7 +1480,7 @@
       // 값이 낮은 칸만 판다. 좁히려는 성향은 더 과감하게 판다.
       if (!worst || wv > 1.6 * S.pol.thin) break;
       S.deck[worst]--; if (!S.deck[worst]) delete S.deck[worst];
-      S.gold += G.sell; sold++;
+      S.gold += G.sell; sold++; if (S.shopRec) S.shopRec.sold++;
       lg(S, 'e', '  🏪 ' + T.CARDS[worst].name + ' 를 팔았다 (+' + G.sell + ' 골드)');
     }
   }
@@ -1690,7 +1807,7 @@
       scripts: T.makeOpeners(ch).map(function (s) {
         return T.SCRIPTS.filter(function (x) { return x.name === s.name; })[0] || s;
       }),
-      log: [], trace: null, human: true, feat: {},
+      log: [], trace: null, human: true, feat: {}, growth: {},
       stats: { nodes: 0, turns: 0, ampTurns: 0, playable: 0, playableOf: 0, temp: 0,
                costUsed: 0, costMax: 0, plays: 0, rerolls: 0, byTier: {}, byScript: {}, fights: 0 }
     };
@@ -1716,7 +1833,8 @@
     S.stats.fights++;
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false; S.over = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
-    S.cheer = S.ch.cheerStart || 0; S.lastPlay = null; S.repeatN = 0; S.usedF = {};
+    S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
+    S.lastPlay = null; S.repeatN = 0; S.usedF = {};
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
     S.foes = pickFoes(S, nd).map(function (b) {
@@ -1753,7 +1871,9 @@
       else gimSeen[f.gimmick] = 1;
     });
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
-    S.strips = [0, 1, 2, 3].map(function () { return T.buildStrip(S.deck, S.rnd); });
+    S.strips = []; for (var si = 0; si < T.CFG.stageMax; si++) S.strips.push(T.buildStrip(S.deck, S.rnd));
+    S.cast = pickCast(S, S.w);   // 전투 전 캐스팅
+    S.cast2 = S.growth.cast ? pickCast(S, S.w, S.cast) : null;
     S.intrudeQ = queueIntruders(S, nd); S.intrudeOn = S.intrudeQ.length ? S.intrudeQ[0].on : 0;
     lg(S, 't', '── ' + S.foes[0].name + (S.foes.length > 1 ? ' ×' + S.foes.length : '')
       + (S.foes[0].demands ? ' (요구: ' + S.foes[0].demands + ')' : '') + ' ──');
@@ -1763,7 +1883,7 @@
   function beginTurn(S) {
     S.turn++; S.stats.turns++;
     S.cost = maxCost(S); S.stats.costMax += S.cost;
-    S.freeReroll = S.ch.freeReroll || 0;
+    S.freeReroll = (S.ch.freeReroll || 0) + (S.growth.reroll || 0);
     if (relicN(S, 'darkScript')) S.hp -= 2;
       if (S.bleed > 0) { var bk = Math.round(S.bleed); S.hp = Math.min(S.maxHp, S.hp + bk); S.bleed = 0;
         if (bk > 0) lg(S, 's', '  🩸 태운 피 ' + bk + ' 이 돌아왔다'); }   // 어둠 유물 — 각본이 피를 먹는다

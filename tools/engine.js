@@ -376,12 +376,25 @@
     // 익숙·숙련만 6pp·3pp 깎였다. 초보의 죽음은 수치가 아니라 기믹 대응 실패다.
     // 맵 규칙(보스 직전 분장실 보장·소품실 최소 2개)이 승률을 올려서(숙련 44% → 58%)
     // 공격 배율로 되돌렸다. 이 지렛대는 숙련만 깎고 초보는 그대로 둔다 — 27.2 참조.
-    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.72,
+    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.55,
               note: '로그라이크로 한다', sub: '첫 클리어가 사건이다. 죽고 다시 하면서 배운다.' },
     // 승천 1단이 곧 이 난이도다. 3.3 / 2.7 로는 클리어가 15% 라 승천이 거의 올라가지 않았다.
     hard:   { name: '어려움', hpMul: 3.0,  atkMul: 2.05,
               note: '이미 이겨본 사람의 자리', sub: '운과 실력이 함께 있어야 한다. 여기서 승천이 열린다.' }
   };
+
+  // ── 극단 성장 ─────────────────────────────────────────────
+  // 막 보스를 넘기면 셋 중 하나를 고른다. 성장을 자동으로 주면 런마다 같아진다 —
+  // 고르게 하면 「이번 판은 무대를 넓혔다」와 「이번 판은 코스트로 갔다」가 갈린다.
+  var GROWTH = [
+    { id: 'stage',  icon: '🎭', name: '무대 확장',  desc: '무대 칸 +1',            max: 2 },
+    { id: 'cost',   icon: '⚡', name: '개막 예산',  desc: '최대 코스트 +1',        max: 2 },
+    { id: 'temp',   icon: '✨', name: '즉흥 극단',  desc: '즉석 대본 +1',          max: 2 },
+    { id: 'hand',   icon: '📜', name: '대본 창고',  desc: '대본 보유 +2',          max: 2 },
+    { id: 'reroll', icon: '🔁', name: '무대 감독',  desc: '턴마다 무료 재굴림 +1', max: 1 },
+    { id: 'cheer',  icon: '🙌', name: '단골 관객',  desc: '전투를 환호 25로 시작', max: 2 },
+    { id: 'cast',   icon: '🌟', name: '이중 캐스팅', desc: '주연을 한 명 더 세운다', max: 1 }
+  ];
 
   // ── 사건 (이벤트 노드) ────────────────────────────────────
   // 전투도 상점도 아닌 칸. 대가를 내고 무언가를 바꾼다.
@@ -496,7 +509,13 @@
     // 적 HP 를 올리면 「벽처럼 느껴진다」로 돌아가니 화력 쪽을 낮춘다.
     dmgMul: 0.8,
     reelSlots: 18, reelMax: 26,
-    handLimit: 7, scriptBase: 10,
+    // 대본을 많이 들면 희소성이 사라지고 코스트 계산만 무거워진다.
+    // 상한 10 일 때 실제 보유가 9.2장이었고 그중 턴당 2.57장만 썼다.
+    handLimit: 7, scriptBase: 7,
+    // 무대는 3칸에서 시작해 막을 넘길 때마다 넓어진다 — 로그라이크의 성장축을 하나 더 만든다
+    stageBase: 3, stageMax: 5,
+    // 즉석 대본은 기본 1장. 유물과 환호로 늘린다
+    tempBase: 1,
     blockCapPct: 50, thornCap: 24, overflowConv: 50,
     hpBase: 60, hpPerAct: 42, costPerAct: 1,   // 전투가 6개 → 13개로 늘어 소모전이 누적된다
     // 막이 길어지면 관객이 야유한다 — 답이 없는 조합으로 버티는 교착을 끝낸다.
@@ -514,8 +533,13 @@
     // 시작 골드는 없다. 골드는 무대에 선 대가로만 들어온다.
     // 릴은 「빼는 데 돈을 내는」 게 아니라 「팔아서 돈을 받는」 것이다 —
     // 릴을 좁히면 확률이 오르고 자금도 생긴다. 대신 대본 요구를 못 채울 위험을 진다.
-    gold: { start: 0, fightBase: 7, fightRand: 7, elite: 10, intruder: 12,
-            sell: 3, sellMax: 2, reelMin: 12 }
+    // 릴 판매가 골드를 주면 후반에 돈이 스스로 불어난다 — 상점마다 1.83칸을 팔았고
+    // 3막 상점 입장 잔액이 125 였다. 파는 것은 칸만 비운다. 좁히기의 이득은 확률이다.
+    gold: { start: 0, fightBase: 4, fightRand: 5, elite: 9, intruder: 11,
+            sell: 0, sellMax: 2, reelMin: 12,
+            // 후반 지출처 — 유물은 막이 오를수록 비싸고, 대본 승급이 새로 열린다
+            // 승급도 막별 물가다 — 초반엔 싸서 살 수 있고 후반엔 비싸서 지출처로 남는다
+            relicActMul: [0.85, 1.35, 1.7], upgrade: [20, 32, 44] }
   };
 
   // ── 관중 ──────────────────────────────────────────────────
@@ -535,12 +559,15 @@
     onFresh: 0,       // 이번 전투에서 처음 쓰는 대본 (캐릭터 고유로만 붙는다)
     repeat: -9,       // 같은 대본을 연속으로 또 쓰면 (반복마다 누적)
     coolPerTurn: -10, // 야유 구간(12턴 이후)부터 매 턴 식는다
-    ovation: 2        // 가득 차면 기립 박수 — 코스트 +2 즉시 회복
+    ovation: 2,       // 가득 차면 기립 박수 — 코스트 +2 즉시 회복
+    // 기립 박수는 골드도 준다. 관객을 달구는 것이 곧 자금이 되면
+    // 「크게·다양하게 간다」가 전투 밖의 계획으로 이어진다.
+    ovationGold: 5
   };
 
   var CHEER_TEXT = [
     ['🙌 환호', '3종·계열 상연 +14 · 적 퇴장 +9 · 증폭 폭발 +11 · 다타 +5'],
-    ['👏 기립 박수', '환호가 가득 차면 즉시 코스트 +2 (환호는 0으로)'],
+    ['👏 기립 박수', '환호가 가득 차면 즉시 코스트 +2 · 골드 +5 (환호는 0으로)'],
     ['😐 반복', '같은 대본을 연속으로 또 쓰면 환호 −9 (반복할수록 누적)'],
     ['😠 야유', '12턴부터 매 턴 적 공격 +10% · 내 HP −3 · 환호 −10']
   ];
@@ -956,6 +983,7 @@
     CHARS: CHARS, ENEMIES: ENEMIES, DIFFICULTY: DIFFICULTY, CFG: CFG, INTENT_KO: INTENT_KO,
     WIN_KO: WIN_KO, scriptWeight: scriptWeight, pickWeighted: pickWeighted,
     GIMMICK_TEXT: GIMMICK_TEXT, INTRUDERS: INTRUDERS, intrudeChance: intrudeChance,
+    GROWTH: GROWTH,
     CHEER: CHEER, CHEER_TEXT: CHEER_TEXT,
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
     PREMIERE: PREMIERE, premiereAt: premiereAt, ARCHIVE_MUL: ARCHIVE_MUL, VAULT_BASE: VAULT_BASE,
