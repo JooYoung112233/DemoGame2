@@ -376,7 +376,7 @@
     // 익숙·숙련만 6pp·3pp 깎였다. 초보의 죽음은 수치가 아니라 기믹 대응 실패다.
     // 맵 규칙(보스 직전 분장실 보장·소품실 최소 2개)이 승률을 올려서(숙련 44% → 58%)
     // 공격 배율로 되돌렸다. 이 지렛대는 숙련만 깎고 초보는 그대로 둔다 — 27.2 참조.
-    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.55,
+    normal: { name: '보통',   hpMul: 2.55, atkMul: 1.8,
               note: '로그라이크로 한다', sub: '첫 클리어가 사건이다. 죽고 다시 하면서 배운다.' },
     // 승천 1단이 곧 이 난이도다. 3.3 / 2.7 로는 클리어가 15% 라 승천이 거의 올라가지 않았다.
     hard:   { name: '어려움', hpMul: 3.0,  atkMul: 2.05,
@@ -535,7 +535,7 @@
     // 릴을 좁히면 확률이 오르고 자금도 생긴다. 대신 대본 요구를 못 채울 위험을 진다.
     // 릴 판매가 골드를 주면 후반에 돈이 스스로 불어난다 — 상점마다 1.83칸을 팔았고
     // 3막 상점 입장 잔액이 125 였다. 파는 것은 칸만 비운다. 좁히기의 이득은 확률이다.
-    gold: { start: 0, fightBase: 4, fightRand: 5, elite: 9, intruder: 11,
+    gold: { start: 0, fightBase: 5, fightRand: 5, elite: 10, intruder: 12,
             sell: 0, sellMax: 2, reelMin: 12,
             // 후반 지출처 — 유물은 막이 오를수록 비싸고, 대본 승급이 새로 열린다
             // 승급도 막별 물가다 — 초반엔 싸서 살 수 있고 후반엔 비싸서 지출처로 남는다
@@ -548,7 +548,16 @@
   // 요구가 100 이고 적립이 느려서 기립 박수가 0.6~0.8 회/판 이었다 —
   // 전투가 4~5턴인데 100 은 닿지 않는다. 요구를 낮추고 적립을 올렸다.
   var CHEER = {
-    max: 80,
+    // 전투마다 0 으로 밀면 쌓는 재미가 없다. 환호는 런 내내 이어지고,
+    // 오직 기립 박수(가득 참)에서만 0 으로 돌아간다.
+    // 그래서 「터뜨릴까 유지할까」가 결정이 된다 — 차오르는 동안 대본이 강해지니까.
+    max: 100,
+    // 환호가 높게 유지되면 모든 대본이 강해진다. 관객이 달아오른 무대다.
+    boost: [[40, 0.10], [75, 0.22]],
+    // 환호가 깎이는 조건이 있어야 「유지」가 덱이 된다.
+    // 크게 맞으면 관객이 등을 돌리고, 무대가 비면 식는다.
+    dropAt: 0.15,     // 한 번에 최대 HP 의 15% 이상을 잃으면 환호가 0 이 된다
+    emptyTurn: -25,   // 대본을 하나도 못 올린 턴
     // 증폭 폭발이 환호의 최대 원천이면 상태이상 캐릭터가 환호까지 독점한다 —
     // 실측에서 악장이 8.1회/판, 환호 캐릭터가 3.9회/판 이었다.
     // 환호는 「크고 다양한 무대」의 보상이어야 한다. 그래서 3종·계열을 최대 원천으로 올렸다.
@@ -562,7 +571,10 @@
     ovation: 2,       // 가득 차면 기립 박수 — 코스트 +2 즉시 회복
     // 기립 박수는 골드도 준다. 관객을 달구는 것이 곧 자금이 되면
     // 「크게·다양하게 간다」가 전투 밖의 계획으로 이어진다.
-    ovationGold: 5
+    ovationGold: 7,
+    // 관객은 안전한 무대를 보러 오지 않는다 —
+    // 벼랑에서 이기면 열광하고, 그 열기가 다음 무대까지 간다.
+    thrillAt: 0.30, thrillGold: 15, thrillCheer: 30
   };
 
   // ── 관객의 요구 ───────────────────────────────────────────
@@ -584,14 +596,20 @@
     { id: 'big',    icon: '🎬', name: '대작을 올려라',  desc: '3종 또는 계열 대본을 상연한다' },
     { id: 'many',   icon: '⚡', name: '쉬지 마라',      desc: '한 턴에 대본 4장 이상 상연' },
     { id: 'self',   icon: '🕯', name: '희생하라',       desc: '한 턴에 자해로 15 이상 잃는다',      win: 'burst' },
-    { id: 'heal',   icon: '🌹', name: '살려라',         desc: '한 턴에 회복 20 이상',              win: 'cheer' }
+    { id: 'heal',   icon: '🌹', name: '살려라',         desc: '한 턴에 회복 20 이상',              win: 'cheer' },
+    // 전투 끝에 판정되는 유일한 요구 — 그래서 보상도 다르다 (환호는 막과 함께 사라지니까)
+    { id: 'thrill', icon: '😱', name: '아슬아슬하게',   desc: 'HP 30% 이하로 이 전투를 이긴다', endOfFight: true }
   ];
   var DEMAND_CHEER = 30;      // 달성하면 환호 +30 — 기립 박수의 절반쯤이 한 번에 온다
 
   var CHEER_TEXT = [
     ['🙌 환호', '3종·계열 상연 +14 · 적 퇴장 +9 · 증폭 폭발 +11 · 다타 +5'],
-    ['👏 기립 박수', '환호가 가득 차면 즉시 코스트 +2 · 골드 +5 (환호는 0으로)'],
+    ['👏 기립 박수', '환호가 가득 차면 즉시 코스트 +2 · 골드 +7 (환호는 0으로)'],
+    ['🎪 이어진다', '환호는 런 내내 남는다 — 기립 박수로 터질 때만 0 이 된다'],
+    ['🔥 달아오른 무대', '환호 40 이상이면 모든 대본 피해 +10% · 75 이상이면 +22%'],
+    ['💔 등을 돌린다', '한 번에 최대 HP 15% 이상을 잃으면 환호가 0 · 빈 턴은 −25'],
     ['🎯 관객의 요구', '요구를 들어주면 환호 +30 · 곧바로 다음 요구가 온다 (실패해도 벌은 없다)'],
+    ['😱 아슬아슬하게', '관객이 요구할 때만 — HP 30% 이하로 이기면 골드 +15 · 환호 +30'],
     ['😐 반복', '같은 대본을 연속으로 또 쓰면 환호 −9 (반복할수록 누적)'],
     ['😠 야유', '12턴부터 매 턴 적 공격 +10% · 내 HP −3 · 환호 −10']
   ];
@@ -768,10 +786,18 @@
                 desc: '적이 퇴장할 때 최대 HP +2 (영구)' },
     phoenix:  { name: '불사조의 깃펜',  icon: '🪶', cost: 30,
                 desc: '쓰러져도 HP 30%로 한 번 부활' },
+    // 환호 상한을 늘리면 기립 박수는 늦게 오지만 「달아오른 무대」 구간이 길어진다.
+    // 터뜨릴 것인가 유지할 것인가 — 그 저울을 바꾸는 유물들이다.
+    bigHouse: { name: '큰 극장',        icon: '🏛', cost: 22,
+                desc: '환호 상한 +40 — 오래 달아오른다' },
+    quickBow: { name: '빠른 인사',      icon: '💫', cost: 20,
+                desc: '환호 상한 −25 — 기립 박수가 자주 온다' },
 
     // ── 어둠 유물 — 이득과 불이득을 함께 준다 ────────────────
     // 승천 단계로 열린다. 승천이 「더 아픈 같은 게임」이 아니라 「새 물건」을 줘야
     // 올라갈 이유가 된다. 도달률이 0.49단에 머문 이유의 절반이 이것이었다.
+    hotHouse: { name: '달아오른 객석',  icon: '🔥', cost: 26, dark: true, asc: 2,
+                desc: '「달아오른 무대」 배율 2배 · 기립 박수가 오지 않는다' },
     darkScript: { name: '검은 각본',    icon: '📕', cost: 22, dark: true, asc: 1,
                 desc: '최대 코스트 +1 · 매 턴 HP −2' },
     crackMirror:{ name: '깨진 거울',    icon: '🔨', cost: 20, dark: true, asc: 1,
@@ -899,6 +925,18 @@
     return e;
   }
 
+  // 적의 다음 대사를 사람 말과 숫자로 — 미리 보여주려면 값이 필요하다.
+  // 「2턴 후 · 공격 24」로는 방어 판단이 자동이 된다. 무엇이 오는지 알아야 퍼즐이 된다.
+  function intentInfo(f, it) {
+    if (it === 'defend')  return { ko: '방어',      n: f.defVal,  kind: 'def' };
+    if (it === 'buff')    return { ko: '강화',      n: f.buffVal, kind: 'buff' };
+    if (it === 'healAll') return { ko: '전체 회복', n: f.healVal, kind: 'heal' };
+    if (it === 'absorb')  return { ko: '방어 흡수', n: 0,         kind: 'absorb' };
+    var n = f.atk * (it === 'doubleStrike' ? 2 : 1);
+    if (it === 'attackBleed' || it === 'attackBurn') n += f.dotVal;
+    return { ko: INTENT_KO[it] || '공격', n: Math.round(n), kind: 'atk' };
+  }
+
   function pickIntent(e, rnd) {
     var tot = e.intents.reduce(function (a, t) { return a + (t[1] || 1); }, 0), r = rnd() * tot;
     for (var i = 0; i < e.intents.length; i++) { r -= (e.intents[i][1] || 1); if (r <= 0) return e.intents[i][0]; }
@@ -1018,6 +1056,6 @@
     AMP: AMP, AMP_TEXT: AMP_TEXT, applySlow: applySlow, ampMul: ampMul, tickDots: tickDots, scriptEffect: scriptEffect, scriptFam: scriptFam,
     effText: effText, cardText: cardText, blank: blank, isWild: isWild,
     buildStrip: buildStrip, makeEnemy: makeEnemy, pickIntent: pickIntent,
-    damageEnemy: damageEnemy, rng32: rng32
+    damageEnemy: damageEnemy, rng32: rng32, intentInfo: intentInfo
   };
 })(typeof window !== 'undefined' ? window : global);

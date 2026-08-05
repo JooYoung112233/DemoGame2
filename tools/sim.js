@@ -199,7 +199,7 @@
     return { name: f.name, hp: f.hp, maxHp: f.maxHp, atk: f.atk, def: f.def, cd: f.cd, t: f.t,
       block: f.block, burn: f.burn, poison: f.poison, slowN: f.slowN || 0,
       dotImmune: f.dotImmune, evadeSingle: f.evadeSingle, defGrow: f.defGrow, defMax: f.defMax,
-      doom: f.doom, doomMax: f.doomMax, curse: f.curse, boss: f.boss,
+      doom: f.doom, doomMax: f.doomMax, curse: f.curse, boss: f.boss, next: f.next,
       role: f.role, guardMul: f.guardMul, gimmick: f.gimmick, gimCd: f.gimCd, gimT: f.gimT,
       seizeCd: f.seizeCd, seizeMax: f.seizeMax, seizeT: f.seizeT,
       phaseAt: f.phaseAt, phased: f.phased, phaseDoom: f.phaseDoom, clock: f.clock,
@@ -260,6 +260,12 @@
     // 어둠 유물 — 상태이상 2배 / 회복 절반
     if (ctx.statusMul > 1) { acc.burn *= ctx.statusMul; acc.poison *= ctx.statusMul; acc.slow *= ctx.statusMul; }
     if (ctx.healMul != null && ctx.healMul !== 1) acc.heal *= ctx.healMul;
+    // 달아오른 무대 — 환호가 높게 유지되면 모든 대본이 강해진다.
+    // 그래서 기립 박수로 터뜨리는 것이 손해일 수도 있다. 그게 결정이다.
+    var cb = 0;
+    T.CHEER.boost.forEach(function (b) { if ((C.cheer || 0) >= b[0]) cb = b[1] * (ctx.boostMul || 1); });
+    if (cb > 0) { acc.dmg *= (1 + cb); acc.aoe *= (1 + cb); }
+
     // 「관객의 총아」 — 환호가 그대로 곱셈이 된다. 무대를 데우고 나서 큰 것을 낸다.
     if (ctx.ch.cheerDmgPer) {
       var cm = 1 + Math.min(ctx.ch.cheerDmgCap || 0.7,
@@ -388,9 +394,9 @@
       }
     }
     if (!ctx.noCheer) {
-      var need = ctx.cheerNeed ? Math.min(ctx.cheerNeed, ctx.cheerMax || T.CHEER.max)
-                               : (ctx.cheerMax || T.CHEER.max);
-      cheerFor(C, sc, kills, ev, need, ctx.ovation, ctx.repeatMul, ctx.ch.freshBonus || 0);
+      var need = Math.max(30, ctx.cheerNeed ? Math.min(ctx.cheerNeed, ctx.cheerCap) : ctx.cheerCap);
+      if (ctx.noOvation) need = 1e9;   // 「달아오른 객석」 — 박수는 오지 않고 열기만 남는다
+      cheerFor(C, sc, kills, ev, need, ctx.ovation, ctx.repeatMul, ctx.ch.freshBonus || 0, ctx.cheerCap);
     }
     return ev;
   }
@@ -438,7 +444,7 @@
     }, ctx.rnd, 1)[0];
   }
 
-  function cheerFor(C, sc, kills, ev, cap, ova, repMul, fresh) {
+  function cheerFor(C, sc, kills, ev, cap, ova, repMul, fresh, hardCap) {
     var CH = T.CHEER, d = 0;
     cap = cap || CH.max;
     // 「관객의 총아」 — 이번 전투에서 처음 올리는 대본마다 환호가 오른다.
@@ -454,7 +460,7 @@
     // 반복 감점 — 「관객의 총아」는 이 감점이 두 배다. 매 턴 다른 것을 해야 한다.
     if (C.lastPlay === sc.id) { C.repeatN = (C.repeatN || 0) + 1; d += CH.repeat * C.repeatN * (repMul || 1); }
     else { C.lastPlay = sc.id; C.repeatN = 0; }
-    C.cheer = Math.max(0, Math.min(cap, (C.cheer || 0) + d));
+    C.cheer = Math.max(0, Math.min(hardCap || cap, (C.cheer || 0) + d));
     if (C.cheer >= cap) {
       var gain = ova || CH.ovation;
       C.cheer = 0; C.cost += gain; C.ovation = 1;
@@ -464,19 +470,15 @@
   }
 
   // ── 이번 턴에 들어올 피해 추정 ────────────────────────────
+  // 이번 턴에 들어올 피해 — 이제 확률 평균이 아니라 예고된 대사를 그대로 읽는다.
+  // 「무엇이 오는지 안다」가 방어·둔화·표적 판단을 전부 살린다.
   function incoming(C) {
     var inc = 0;
     C.foes.forEach(function (f) {
       if (f.hp <= 0) return;
       if (f.t - 1 > 0) return;                 // 이 턴에 행동하지 않는다
-      var atkW = 0, tot = 0;
-      f.intents.forEach(function (it) {
-        var w = it[1] || 1; tot += w;
-        if (it[0] === 'attack') atkW += w * f.atk;
-        else if (it[0] === 'doubleStrike') atkW += w * f.atk * 2;
-        else if (it[0] === 'attackBleed' || it[0] === 'attackBurn') atkW += w * (f.atk + f.dotVal);
-      });
-      inc += tot ? atkW / tot : f.atk;
+      var info = T.intentInfo(f, f.next || 'attack');
+      if (info.kind === 'atk') inc += info.n;
     });
     return inc;
   }
@@ -876,6 +878,9 @@
       healMul: relicN(S, 'madBaton') ? 0.5 : 1,
       ovation: T.CHEER.ovation + relicN(S, 'lastActor') * 2 + (S.ch.ovationBonus || 0),
       cheerNeed: S.ch.cheerNeed || null,
+      cheerCap: (S.asc.cheerMax || T.CHEER.max) + relicN(S, 'bigHouse') * 40 - relicN(S, 'quickBow') * 25,
+      boostMul: relicN(S, 'hotHouse') ? 2 : 1,
+      noOvation: relicN(S, 'hotHouse') ? 1 : 0,
       repeatMul: S.ch.repeatMul || 1,
       cheerW: S.ch.cheerW || 1,
       noCheer: relicN(S, 'emptyHouse') ? 1 : 0,
@@ -962,11 +967,14 @@
       if (gimSeen[f.gimmick]) { f.gimmick = null; f.gimT = null; }
       else gimSeen[f.gimmick] = 1;
     });
+    // 적의 다음 대사를 미리 정한다 — 보여줄 수 있어야 퍼즐이 된다
+    S.foes.forEach(function (f) { if (!f.next) f.next = T.pickIntent(f, S.rnd); });
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
     S.strips = []; for (var si = 0; si < T.CFG.stageMax; si++) S.strips.push(T.buildStrip(S.deck, S.rnd));
     S.cast = pickCast(S, S.w);   // 전투 전 캐스팅
     S.cast2 = S.growth.cast ? pickCast(S, S.w, S.cast) : null;
-    S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
+    // 환호는 런 내내 이어진다. 오직 기립 박수(가득 참)에서만 0 으로 돌아간다.
+    if (S.cheer == null) S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
     // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
     // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
     S.fThorns = 0;
@@ -1003,7 +1011,8 @@
           var iv = T.makeEnemy(Object.assign({ act: S.act }, ent.who), S.diff.hpMul, S.diff.atkMul);
           if (iv.gimCd) iv.gimT = iv.gimCd;
           if (iv.seizeCd) iv.seizeT = iv.seizeCd;
-          S.foes.push(iv); S.intruderIdx = S.foes.length - 1;
+          iv.next = T.pickIntent(iv, S.rnd);
+        S.foes.push(iv); S.intruderIdx = S.foes.length - 1;
           lg(S, 'e', '  ' + (ent.who.icon || '🎩') + ' ' + iv.name + ' 이 난입했다 — ' + (ent.who.demands || ''));
           tr(S, 'intrude', iv.name + ' 난입');
         }
@@ -1085,6 +1094,7 @@
         if (!S.foes.some(function (f) { return f.hp > 0; })) { winFight(S); return { won: true }; }
       }
       if (ampTurn) S.stats.ampTurns++;
+      if (!plan.seq.length) S.cheer = Math.max(0, S.cheer + T.CHEER.emptyTurn);
       S.stats.costUsed += maxCost(S) - S.cost;
 
       var res = endTurn(S, w);
@@ -1219,7 +1229,8 @@
     S.foes.forEach(function (f) {
       if (f.hp <= 0 || f.t > 0) return;
       f.t = f.cd;
-      var it = T.pickIntent(f, S.rnd);
+      var it = f.next || T.pickIntent(f, S.rnd);
+      f.next = T.pickIntent(f, S.rnd);
       if (it === 'defend') { f.block += f.defVal; lg(S, 't', '  ' + f.name + ' 방어 ' + f.defVal); return; }
       if (it === 'buff') { f.atk += f.buffVal; lg(S, 't', '  ' + f.name + ' 강화 +' + f.buffVal); return; }
       if (it === 'healAll') {
@@ -1232,6 +1243,11 @@
       var inc = f.atk * (it === 'doubleStrike' ? 2 : 1);
       if (it === 'attackBleed' || it === 'attackBurn') inc += f.dotVal;
       var ab = Math.min(S.block, inc); S.block -= ab; S.hp -= (inc - ab);
+      // 크게 맞으면 관객이 등을 돌린다 — 이게 있어야 「환호 유지」가 덱이 된다
+      if ((inc - ab) >= S.maxHp * T.CHEER.dropAt && S.cheer > 0) {
+        S.cheer = 0; S.stats.cheerLost = (S.stats.cheerLost || 0) + 1;
+        lg(S, 'e', '    💔 관객이 등을 돌렸다 — 환호 0');
+      }
       lg(S, 'd', '  ' + f.name + ' ' + T.INTENT_KO[it] + ' ' + inc + (ab ? ' (방어 ' + Math.round(ab) + ')' : ''));
       if (S.thorns) {
         var rd = S.ch.thornsIgnoreDef ? S.thorns
@@ -1326,6 +1342,17 @@
       S.intruderIdx = null;
       S.stats.intruderWins = (S.stats.intruderWins || 0) + 1;
       lg(S, 's', '  🎩 난입자를 이겨냈다' + (S.bonusScript ? ' — 대본 한 장 추가' : ' — 골드 +' + G.intruder));
+    }
+    // 관객은 위기를 좋아한다 — 벼랑에서 이기면 열기가 다음 무대까지 간다
+    // 요구 「아슬아슬하게」 — 상시 보너스면 항상 벼랑에서 놀 이유가 되지만,
+    // 요구로 두면 그때만 하는 선택이 된다.
+    if (S.demand && S.demand.id === 'thrill' && S.hp <= S.maxHp * T.CHEER.thrillAt) {
+      g += T.CHEER.thrillGold;
+      S.cheer = Math.min(S.asc.cheerMax || T.CHEER.max, (S.cheer || 0) + T.CHEER.thrillCheer);
+      S.stats.demandDone = (S.stats.demandDone || 0) + 1;
+      S.stats.thrills = (S.stats.thrills || 0) + 1;
+      lg(S, 's', '  😱 관객의 요구를 들어줬다 — 아슬아슬하게 · 골드 +' + T.CHEER.thrillGold
+        + ' · 환호 +' + T.CHEER.thrillCheer);
     }
     S.gold += g;
     if (!S.feat) S.feat = {};
@@ -1903,7 +1930,8 @@
     S.stats.fights++;
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false; S.over = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
-    S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
+    // 환호는 전투가 끝나도 남는다. 막이 바뀔 때만 초기화된다 (goTo 에서).
+    if (S.cheer == null) S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
     // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
     // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
     S.fThorns = 0;
@@ -1945,6 +1973,8 @@
       if (gimSeen[f.gimmick]) { f.gimmick = null; f.gimT = null; }
       else gimSeen[f.gimmick] = 1;
     });
+    // 적의 다음 대사를 미리 정한다 — 보여줄 수 있어야 퍼즐이 된다
+    S.foes.forEach(function (f) { if (!f.next) f.next = T.pickIntent(f, S.rnd); });
     S.curser = S.foes.filter(function (f) { return f.curse; })[0] || null;
     S.strips = []; for (var si = 0; si < T.CFG.stageMax; si++) S.strips.push(T.buildStrip(S.deck, S.rnd));
     S.cast = pickCast(S, S.w);   // 전투 전 캐스팅
@@ -1974,6 +2004,7 @@
           S.diff.atkMul * (T.CFG.actAtk[S.act - 1] || 1));
         if (iv.gimCd) iv.gimT = iv.gimCd;
         if (iv.seizeCd) iv.seizeT = iv.seizeCd;
+        iv.next = T.pickIntent(iv, S.rnd);
         S.foes.push(iv); S.intruderIdx = S.foes.length - 1;
         lg(S, 'e', '  ' + (ent.who.icon || '🎩') + ' ' + iv.name + ' 이 난입했다 — ' + (ent.who.demands || ''));
       }
