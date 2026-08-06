@@ -385,6 +385,9 @@
   // play.html 의 apply() 와 같은 순서다. 계획 탐색과 실제 진행이 같은 코드를 쓴다.
   function applyPlay(C, sc, tgt, ctx) {
     var acc = T.scriptEffect(sc, ctx.ch), ev = [];
+    // 🪄 부서진 지휘봉 — 이번 턴 모든 대본이 광역이 된다
+    if (ctx.propAoe && acc.dmg && !acc.aoe) { acc.aoe = acc.dmg; acc.dmg = 0; }
+
     if (ctx.embers && T.scriptFam(sc) === 'score' && acc.burn) acc.burn += 2 * ctx.embers;
     // 「독이 든 성배」 — 계열을 가리지 않는다. 독 대본이 7종뿐이라 계열까지 걸면 닿지 않는다.
     if (ctx.venom && acc.poison) acc.poison += 2 * ctx.venom;
@@ -456,7 +459,8 @@
     }
     // 타락한 감독 — 태운 피가 그대로 화력이 된다
     if (ctx.ch.selfToDmg && acc.selfDmg > 0) {
-      var burn2 = acc.selfDmg * ctx.ch.selfToDmg;
+      // 🩸 피 묻은 대본 — 이번 턴 전환율이 두 배다 (리스크 없음)
+      var burn2 = acc.selfDmg * ctx.ch.selfToDmg * (ctx.propBlood ? 2 : 1);
       if (acc.aoe > 0) acc.aoe += burn2; else acc.dmg += burn2;
       ev.push('🩸 태운 피 ' + Math.round(acc.selfDmg) + ' → 피해 +' + Math.round(burn2));
     }
@@ -793,6 +797,9 @@
                snap: [] }
     };
     S.useStages = !!opt.stages;
+    S.useProps = !!opt.props;
+    S.prop = opt.props ? T.propOf(opt.charKey) : null;   // 유품은 그 캐릭터 것을 들고 시작한다
+    S.propCharge = opt.props ? T.propCharge() : 0;       // 한 판에 쓸 수 있는 총 횟수
     S.slotMax = T.CFG.stageBase + (opt.slot4 ? 1 : 0);   // 복원 목록을 사면 applyMeta 가 덮는다
     S.tiltKey = null;
     S.hp = S.maxHp;
@@ -1084,8 +1091,104 @@
       cheerW: S.ch.cheerW || 1,
       noCheer: relicN(S, 'emptyHouse') ? 1 : 0,
       finalCurtain: relicN(S, 'finalCurtain') ? 1 : 0,
+      propAoe: S.propAoe || 0, propReflect: S.propReflect || 0, propBlood: S.propBlood || 0,
       overflowMul: (S.ch.overflowMul || 1) * (relicN(S, 'mirrorR') ? 2 : 1) };
   }
+  // ── 유품 — 전투당 한 번의 개입 ────────────────────────────
+  //
+  // 봇은 「좋은 턴을 만들려고 아껴둔다」를 못 한다(커튼콜과 같은 한계 · 50.4).
+  // 그래서 조건이 맞는 첫 턴에 쓴다 — 사람보다 낮게 나온다는 것을 알고 재야 한다.
+  function propReady(S) {
+    return S.useProps && S.prop && (S.propCharge || 0) > 0;
+  }
+  // 이번 턴에 쓸 값어치가 있나 — 유품마다 판정이 다르다
+  function tryProp(S, ctx) {
+    if (!propReady(S)) return;
+    var p = T.PROPS[S.prop], live = S.foes.filter(function (e) { return e.hp > 0; });
+    if (!live.length) return;
+    // 한 판에 세 번뿐이다. 아무 데나 쓰면 정작 필요할 때 없다.
+    // 주연·비극이거나, 몰렸거나, 전투가 길어졌을 때만 꺼낸다.
+    var nd = S.at || {};
+    var worth = nd.type === 'boss' || nd.type === 'elite'
+             || S.hp < S.maxHp * 0.5 || S.turn >= 5 || S.foes.length >= 3;
+    if (!worth) return;
+    var use = false;
+
+    if (p.kind === 'slot') {
+      // 한 칸만 바꾸면 상연할 수 있게 되는 대본이 있나 — 있으면 그 배역으로 바꾼다
+      var hand = handOf(S), bestGain = 0, bestAt = -1, bestId = null;
+      hand.forEach(function (sc) {
+        if (sc.curtain || T.canStage(sc, S.stage, ctx.relax)) return;
+        if (costOf(ctx.ch, sc) > S.cost) return;
+        for (var i = 0; i < S.stage.length; i++) {
+          var keep = S.stage[i], req = sc.requiresFam ? [] : (sc.requires || []);
+          var cand = sc.requiresFam
+            ? Object.keys(T.CARDS).filter(function (id) { return (T.CARDS[id] || {}).fam === sc.requiresFam; })
+            : req;
+          for (var c = 0; c < cand.length; c++) {
+            S.stage[i] = cand[c];
+            if (T.canStage(sc, S.stage, ctx.relax)) {
+              var g = scriptRaw(S, S.w, sc);
+              if (g > bestGain) { bestGain = g; bestAt = i; bestId = cand[c]; }
+            }
+          }
+          S.stage[i] = keep;
+        }
+      });
+      if (bestAt >= 0) {
+        S.stage[bestAt] = bestId; use = true;
+        lg(S, 'e', '  🎬 연출 노트 — 슬롯을 ' + T.CARDS[bestId].name + ' 로 바꿨다');
+      }
+    } else if (p.kind === 'aoe') {
+      if (live.length >= 2) { S.propAoe = 1; ctx.propAoe = 1; use = true; }
+    } else if (p.kind === 'reflect') {
+      // e.next 는 의도 id 문자열이지 객체가 아니다. e.next.dmg 를 읽고 있어서
+      // 480판 동안 한 번도 발동하지 않았다.
+      var incoming = 0;
+      live.forEach(function (e) {
+        var info = T.intentInfo(e, e.next);
+        if (info.kind === 'atk') incoming += info.n;
+      });
+      // 방어로 막고도 남는 피해가 최대 HP 의 12% 를 넘을 때
+      // 적은 1턴에 움직이지 않는다 — 의도를 한 턴 미리 공개하기 때문이다(48장).
+      // 예고를 보고 그 턴에 쓰면 정작 맞을 때는 효과가 꺼져 있다.
+      if (S.turn >= 2 && incoming >= S.maxHp * 0.12) { S.propReflect = 1; ctx.propReflect = 1; use = true; }
+    } else if (p.kind === 'dots') {
+      var dot = live.reduce(function (a, e) { return a + (e.burn || 0) + (e.poison || 0) + (e.slow || 0); }, 0);
+      if (dot >= 8) {
+        live.forEach(function (e) { e.burn = (e.burn || 0) * 2; e.poison = (e.poison || 0) * 2; e.slow = (e.slow || 0) * 2; });
+        use = true;
+      }
+    } else if (p.kind === 'blood') {
+      // 자해 대본을 낼 수 있을 때만 값이 있다
+      // 대본 데이터의 키는 selfDamage 다. selfDmg 로 보고 있어서 한 번도 발동하지 않았다.
+      if (handOf(S).some(function (sc) { return (sc.effect || {}).selfDamage && canPlay(S, sc); })) {
+        S.propBlood = 1; ctx.propBlood = 1; use = true;
+      }
+    } else if (p.kind === 'strip') {
+      var tough = null, td = 0;
+      live.forEach(function (e) { if ((e.def || 0) > td) { td = e.def; tough = e; } });
+      if (tough && td >= 4) { tough.propStripped = tough.def; tough.def = 0; S.propStrip = tough; use = true; }
+    } else if (p.kind === 'hold') {
+      // 환호를 쌓기 시작했을 때 걸어야 값이 있다
+      if ((S.cheer || 0) >= 25) { S.propHold = 1; use = true; }
+    } else if (p.kind === 'curtain') {
+      // 이미 이어가는 연속이 있을 때만 — 지킬 것이 없으면 오히려 더 나쁜 대본을
+      // 다음 커튼콜로 보내게 된다 (22% → 17% 였다)
+      if (S.chainId && handOf(S).some(function (sc) { return sc.id === S.chainId; })) { S.propCurtain = 1; use = true; }
+    }
+    if (use) {
+      S.propCharge--; S.stats.propUses = (S.stats.propUses || 0) + 1;
+      lg(S, 'e', '  ' + p.icon + ' ' + p.name + ' 을 썼다');
+    }
+  }
+  // 턴이 끝나면 이번 턴짜리 효과를 되돌린다
+  function propTurnEnd(S) {
+    if (S.propStrip) { S.propStrip.def = S.propStrip.propStripped; S.propStrip = null; }
+    S.propAoe = 0; S.propReflect = 0; S.propBlood = 0;
+    if (S.ctx) { S.ctx.propAoe = 0; S.ctx.propReflect = 0; S.ctx.propBlood = 0; }
+  }
+
   // 슬롯 수 — 3칸에서 시작해 성장으로 4칸까지. 「무대」는 빌드를 가리키므로(51장) 칸은 슬롯이라 부른다
   function stageN(S) {
     // 4칸은 복원 목록(「넓어진 무대」)으로 열린다. 사기 전에는 3칸이다.
@@ -1178,6 +1281,7 @@
     // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
     // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
     S.fThorns = 0;
+    S.propAoe = 0; S.propReflect = 0; S.propStrip = null; S.propCurtain = 0; S.propHold = 0; S.propBlood = 0; S.fightIds = {};
     S.curtainIn = (S.curtainNext || []).slice();   // 지난 무대를 닫은 대본들
     S.curtainNext = [];
     S.demand = (nd.type === 'elite' || nd.type === 'boss') ? nextDemand({}, ctxOf(S, S.w)) : null;
@@ -1186,7 +1290,7 @@
     S.fightAoeOnly = 1; S.fightAnyDmg = 0; S.fightTempPlays = 0;
     S.ovations = 0;
     if (relicN(S, 'hungrySeat')) S.hp -= 5;   // 어둠 유물 — 무대에 오르는 대가
-    var ctx = ctxOf(S, w);
+    var ctx = ctxOf(S, w); S.ctx = ctx;
     lg(S, 't', '── ' + S.foes[0].name + (S.foes.length > 1 ? ' ×' + S.foes.length : '')
       + (S.foes[0].demands ? ' (요구: ' + S.foes[0].demands + ')' : '') + ' ──');
 
@@ -1236,6 +1340,7 @@
           return '「' + (T.SCRIPT_BY_ID[id] || {}).name + '」';
         }).join(' '));
       }
+      tryProp(S, ctx);   // 유품 — 스핀을 보고 나서, 계획을 세우기 전에
       lg(S, 't', '턴 ' + S.turn + ' 무대 — ' + S.stage.map(function (x) { return T.CARDS[x].name; }).join(' · '));
       tr(S, 'spin', '턴 ' + S.turn + ' 무대');
 
@@ -1301,6 +1406,7 @@
         S.stats.plays++;
         S.stats.byTier[a.sc.tier] = (S.stats.byTier[a.sc.tier] || 0) + 1;
         S.stats.byScript[a.sc.name] = (S.stats.byScript[a.sc.name] || 0) + 1;
+        (S.fightIds = S.fightIds || {})[a.sc.id] = 1;   // 이 전투에 상연한 대본 (🎦 닫힌 막)
         if (a.sc.temp) { var ti = S.temp.indexOf(a.sc); if (ti >= 0) S.temp.splice(ti, 1); }
         lg(S, 's', '  상연 「' + a.sc.name + '」 ' + T.effText(a.sc.effect));
         ev.forEach(function (t) { lg(S, 'a', '    ' + t); });
@@ -1468,6 +1574,15 @@
         lg(S, 'e', '    💔 관객이 등을 돌렸다 — 환호 0');
       }
       lg(S, 'd', '  ' + f.name + ' ' + T.INTENT_KO[it] + ' ' + inc + (ab ? ' (방어 ' + Math.round(ab) + ')' : ''));
+      // 🪞 손거울 — 날아온 공격을 그대로 돌려준다.
+      // 「막고 남은 피해(inc - ab)」로 재고 있었는데 거울의 배우는 방어형이라
+      // 방어가 거의 다 흡수한다 — 판당 반사가 1 이었다. 방어와 무관하게 원본을 돌려준다.
+      if (S.propReflect) {
+        var mr = inc;
+        if (mr > 0) { f.hp -= mr; S.fThorns = (S.fThorns || 0) + mr;
+          S.stats.propRefl = (S.stats.propRefl || 0) + mr;
+          lg(S, 'b', '    🪞 그대로 반사 ' + Math.round(mr)); }
+      }
       if (S.thorns) {
         var rd = S.ch.thornsIgnoreDef ? S.thorns
                : Math.max(0, S.thorns - f.def * T.AMP.thornsDefPart);
@@ -1475,6 +1590,7 @@
         f.hp -= rd; if (rd > 0) { S.fThorns = (S.fThorns || 0) + rd; lg(S, 'b', '    반사 ' + Math.round(rd)); }
       }
     });
+    propTurnEnd(S);                 // 이번 턴짜리 유품 효과를 되돌린다
     tr(S, 'enemy', '적 행동');
     if (S.hp <= 0 && !revive(S)) return { won: false, killedBy: S.foes[0].name };
     if (!S.foes.some(function (f) { return f.hp > 0; })) { winFight(S); return { won: true }; }
@@ -1577,7 +1693,12 @@
     if (S.lastId) {
       var slots = (S.ch.curtainSlots || T.CFG.curtain.slots) + (S.growth.curtain || 0)
                 + relicN(S, 'longBow');
+      // 🎦 닫힌 막 — 무대를 닫은 대본이 아니라 「이어가려던 대본」을 다음 커튼콜로 보낸다.
+      // 종막의 배우가 연속을 잇지 못하고 끊기는 것을 한 번 되돌린다.
       S.curtainNext = [S.lastId];
+      // 🎦 닫힌 막 — 마무리 대본을 덮어쓰지 않고 한 장 더한다
+      if (S.propCurtain && S.chainId && S.chainId !== S.lastId && (S.fightIds || {})[S.chainId])
+        S.curtainNext.push(S.chainId);
       // 연속 — 지난 무대를 닫은 그 대본으로 또 닫았는가
       if (S.chainId === S.lastId) {
         S.chain = Math.min(T.CFG.curtain.chainMax, (S.chain || 0) + 1);
@@ -2471,7 +2592,7 @@
     POLICIES: POLICIES, SKILLS: SKILLS, stageProb: stageProb, NK: NK, mergeW: mergeW,
     STAGES: STAGES, stageProg: stageProg, tiltAt: tiltAt, stageTune: stageTune,
     EPIC: EPIC, epicProg: epicProg, epicTilt: epicTilt,
-    stageNeed: function () { return STAGE_NEED; }, needAt: needAt, epicNeedAt: epicNeedAt,
+    needAt: needAt, epicNeedAt: epicNeedAt,
     // 사람 플레이용
     newRun: newRun, goTo: goTo, openFight: openFight, beginTurn: beginTurn,
     playScript: playScript, canPlay: canPlay, doReroll: doReroll, finishTurn: finishTurn,

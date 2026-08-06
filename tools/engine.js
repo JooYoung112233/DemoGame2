@@ -456,6 +456,45 @@
   // 후반 단계 도달률이 21% · 9% · 3% 였다. 닿지 않는 목표는 이유가 되지 않는다.
   // 층수가 12 → 36 으로 늘었다. 판당 19.3층이 실측이라 그 배수로 잡았다.
   // 마지막 단계는 620 에서 도달률이 4% 라 480 으로 당겼다 — 장기 목표라도 닿아야 목표다.
+  // ── 유품 — 캐릭터 고유 액티브 ─────────────────────────────
+  //
+  // 전투는 전부 스핀에 반응한다. 플레이어가 먼저 움직이는 순간이 없어서 그 한 수를 만든다.
+  // 「소품」은 이미 카드 계열 이름(배역·악상·소품)이라 쓸 수 없다. 극장에 갇힌
+  // 영혼들이 남긴 물건이라 유품이라 부른다.
+  //
+  // 새 자원을 만들지 않는다 — 이미 있는 축(코스트·환호·상태이상·슬롯·커튼콜) 하나를
+  // 건드리는 한 번의 개입이어야 한다. 다섯 번째 숫자를 추가하면 다른 축이 묻힌다.
+  var PROPS = {
+    note:    { icon: '🎬', name: '연출 노트',     of: 'director',
+               desc: '슬롯 한 칸을 원하는 배역으로 바꾼다', kind: 'slot' },
+    baton:   { icon: '🪄', name: '부서진 지휘봉', of: 'frenzy',
+               desc: '이번 턴 모든 대본이 광역이 된다',     kind: 'aoe' },
+    handMir: { icon: '🪞', name: '손거울',        of: 'mirror',
+               desc: '이번 턴 받는 피해를 그대로 반사한다', kind: 'reflect' },
+    score:   { icon: '🎼', name: '미완성 악보',   of: 'maestro',
+               desc: '지금 걸린 화상·독·둔화를 두 배로',    kind: 'dots' },
+    bloody:  { icon: '🩸', name: '피 묻은 대본',  of: 'fallen',
+               // HP 를 태우는 건 유일한 리스크 유품이었고, 켜면 15% → 5% 로 무너졌다.
+               // 리스크를 없애고 이 캐릭터의 자해 전환을 증폭하는 쪽으로 바꾼다.
+               desc: '이번 턴 태운 피가 두 배로 환산된다',   kind: 'blood' },
+    nose:    { icon: '👺', name: '가짜 코',       of: 'harlequin',
+               desc: '이번 턴 적 하나의 방어를 0으로',      kind: 'strip' },
+    bouquet: { icon: '💐', name: '꽃다발',        of: 'darling',
+               // 「환호 +25」 는 쓸모 있는 창이 없었다 — 그 구간에 가면 자연히 기립이 터진다.
+               desc: '이번 전투 동안 환호가 식지 않는다',   kind: 'hold' },
+    closed:  { icon: '🎦', name: '닫힌 막',       of: 'closer',
+               // 마무리 대본을 「덮어쓰면」 더 약한 것이 다음 커튼콜로 간다. 더한다.
+               desc: '이번 턴 상연한 대본을 다음 커튼콜에 더한다', kind: 'curtain' }
+  };
+  // 충전 — 대본을 이만큼 상연하면 한 번 더 쓸 수 있다. 새 자원을 만들지 않는다.
+  // 한 판에 이만큼만 쓴다. 전투당도 층당도 아니다 — 36층 전체에서 세 번이다.
+  // 그래서 효과가 커도 되고, 「지금 쓸까 아껴둘까」가 판 전체에 걸친 결정이 된다.
+  var PROP_CHARGE = 3;
+  function propOf(charKey) {
+    var k = Object.keys(PROPS).filter(function (p) { return PROPS[p].of === charKey; })[0];
+    return k || null;
+  }
+
   // ── 대본 조각 — 판을 거듭하며 「제3막」을 복원한다 ─────────
   //
   // 누적 층수로 자동 지급하던 초연 기록을 흡수했다. 자동 지급은 「하다 보면 열리는 것」이라
@@ -1146,6 +1185,11 @@
     GROWTH: GROWTH,
     CHEER: CHEER, CHEER_TEXT: CHEER_TEXT, DEMANDS: DEMANDS, DEMAND_CHEER: DEMAND_CHEER,
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
+    PROPS: PROPS, propOf: propOf,
+    // 숫자를 그대로 내보내면 복사본이 박혀서 이후 변경이 반영되지 않는다 —
+    // 충전 비용 2·3·4 스윕이 셋 다 같은 결과를 냈다.
+    propCharge: function () { return PROP_CHARGE; },
+    propChargeSet: function (n) { PROP_CHARGE = n; },
     SHARD: SHARD, RESTORE: RESTORE, RESTORE_TOTAL: RESTORE_TOTAL,
     restored: restored, shardsFor: shardsFor, nextRestore: nextRestore,
     ARCHIVE_MUL: ARCHIVE_MUL, VAULT_BASE: VAULT_BASE,
