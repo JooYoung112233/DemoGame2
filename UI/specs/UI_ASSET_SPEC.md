@@ -44,11 +44,19 @@
 2. 대본 제목
 3. 요구 심볼 3칸
 4. 중앙 연출 삽화
-5. 핵심 효과 문장
-6. 대상·계열 태그
-7. 강화/상세 문구
+5. 핵심 효과 아이콘과 수치
 
-- 기본 손패에서는 코스트, 제목, 핵심 수치가 먼저 읽혀야 한다.
-- 요구 조건과 상세 문장은 호버 확대 상태에서 읽는 정보로 취급한다.
+- 기본 손패에서는 코스트 보석, 제목, 요구 심볼, 핵심 효과 아이콘과 수치만 표시한다.
+- 효과 설명, 대상, 계열, 강화 문구는 대본 클릭 후 정보 UI에서 표시한다.
 - 베이스 텍스처에는 게임 데이터를 굽지 않고 모든 콘텐츠를 교체 가능한 별도 레이어로 둔다.
-- 합성 예제: `UI/scripts/examples/cast-cost2-red-sword-monologue-384.png`
+- 합성 예제: `UI/scripts/examples/cast-cost2-red-sword-monologue-icons-v2-384.png`
+
+### 분리 에셋 권장 크기
+
+| 에셋 | 런타임 파일 | 기본 표시 크기 |
+|---|---|---:|
+| 피해 아이콘 | `UI/icons/combat/runtime/damage-sword-impact-128.png` | 36~44px |
+| 환호 아이콘 | `UI/icons/combat/runtime/cheer-applause-128.png` | 36~44px |
+| 코스트 보석 | `UI/icons/resources/runtime/cost-theatre-gem-192.png` | 58~72px |
+
+코스트 보석 중앙 숫자는 이미지가 아닌 폰트 레이어로 표시한다. 한 자리와 `10` 모두 들어오도록 숫자 안전 영역을 보석 안쪽 지름의 55%로 제한한다.
