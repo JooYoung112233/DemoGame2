@@ -369,7 +369,7 @@
       intents: [['attack', 2], ['buff', 1, 4]], demands: '난입 — 매 턴 무대가 타오른다' },
     { name: '검열관',   icon: '✂️', hp: 40, atk: 11, def: 3, cd: 2, intrude: true, gimmick: 'censor', gimCd: 2,
       intents: [['attack', 2], ['attackBleed', 1, 3]], demands: '난입 — 배역을 봉인한다' },
-    // 승천으로 열리는 난입자
+    // 재연으로 열리는 난입자
     { name: '대역 도둑', icon: '🎭', hp: 44, atk: 12, def: 3, cd: 2, intrude: true, asc: 1,
       seizeCd: 3, seizeMax: 2,
       intents: [['attack', 2], ['defend', 1, 8]], demands: '난입 — 대본을 훔친다' },
@@ -397,16 +397,17 @@
     // 공격 배율로 되돌렸다. 이 지렛대는 숙련만 깎고 초보는 그대로 둔다 — 27.2 참조.
     normal: { name: '보통',   hpMul: 2.55, atkMul: 2.75,
               note: '로그라이크로 한다', sub: '첫 클리어가 사건이다. 죽고 다시 하면서 배운다.' },
-    // 승천 1단이 곧 이 난이도다. 3.3 / 2.7 로는 클리어가 15% 라 승천이 거의 올라가지 않았다.
+    // 재연 1단이 곧 이 난이도다. 3.3 / 2.7 로는 클리어가 15% 라 재연이 거의 올라가지 않았다.
     hard:   { name: '어려움', hpMul: 3.0,  atkMul: 2.05,
-              note: '이미 이겨본 사람의 자리', sub: '운과 실력이 함께 있어야 한다. 여기서 승천이 열린다.' }
+              note: '이미 이겨본 사람의 자리', sub: '운과 실력이 함께 있어야 한다. 여기서 재연이 열린다.' }
   };
 
   // ── 극단 성장 ─────────────────────────────────────────────
   // 막 보스를 넘기면 셋 중 하나를 고른다. 성장을 자동으로 주면 런마다 같아진다 —
   // 고르게 하면 「이번 판은 무대를 넓혔다」와 「이번 판은 코스트로 갔다」가 갈린다.
   var GROWTH = [
-    { id: 'stage',  icon: '🎭', name: '무대 확장',  desc: '무대 칸 +1',            max: 2 },
+    // 슬롯 상한이 4칸이라 기본 3 + 1 이면 끝난다. max 2 로 두면 도달할 수 없는 선택지가 된다.
+    { id: 'stage',  icon: '🎭', name: '무대 확장',  desc: '슬롯 +1',               max: 1 },
     { id: 'cost',   icon: '⚡', name: '개막 예산',  desc: '최대 코스트 +1',        max: 2 },
     { id: 'temp',   icon: '✨', name: '즉흥 극단',  desc: '즉석 대본 +1',          max: 2 },
     { id: 'hand',   icon: '📜', name: '대본 창고',  desc: '대본 보유 +2',          max: 2 },
@@ -455,13 +456,59 @@
   // 후반 단계 도달률이 21% · 9% · 3% 였다. 닿지 않는 목표는 이유가 되지 않는다.
   // 층수가 12 → 36 으로 늘었다. 판당 19.3층이 실측이라 그 배수로 잡았다.
   // 마지막 단계는 620 에서 도달률이 4% 라 480 으로 당겼다 — 장기 목표라도 닿아야 목표다.
-  var PREMIERE = [
-    { at: 40,  kind: 'swap',   n: 1, name: '연습실',     desc: '시작 릴의 배역 1칸을 원하는 것으로 바꾼다' },
-    { at: 110,  kind: 'script', n: 1, name: '초고',       desc: '시작 대본 +1' },
-    { at: 220, kind: 'swap',   n: 3, name: '전속 배우',   desc: '시작 릴을 3칸까지 바꾼다' },
-    { at: 380, kind: 'vault',  n: 1, name: '극장 창고',   desc: '계승 유물 슬롯 +1' },
-    { at: 480, kind: 'script', n: 2, name: '개정판',     desc: '시작 대본 +1 (누적 2)' }
+  // ── 대본 조각 — 판을 거듭하며 「제3막」을 복원한다 ─────────
+  //
+  // 누적 층수로 자동 지급하던 초연 기록을 흡수했다. 자동 지급은 「하다 보면 열리는 것」이라
+  // 플레이어가 고를 게 없었다. 조각은 성과로 벌고 목록에서 골라 쓴다.
+  //
+  // 목록에는 끝이 있다. 무한 통화로 두면 「런이 재미없어도 조각 때문에 돈다」가 되고
+  // 그건 그라인드다.
+  var SHARD = {
+    perFloor: 1,        // 도달한 층마다
+    boss: 10,           // 보스 처치
+    stage: 15,          // 무대 완성
+    epic: 30,           // 에픽 완성
+    soul: 40            // 그 영혼의 첫 구출 (캐릭터별 첫 클리어)
+  };
+
+  var RESTORE = [
+    { id: 'slot',   cost: 120, icon: '🎭', name: '넓어진 무대',   desc: '슬롯 4칸' },
+    { id: 'swap1',  cost: 100, icon: '🎬', name: '연습실',       desc: '시작 릴 1칸을 바꾼다' },
+    { id: 'script1',cost: 140, icon: '📖', name: '초고',         desc: '시작 대본 +1' },
+    { id: 'vault1', cost: 180, icon: '🏛', name: '극장 창고',     desc: '계승 유물 슬롯 +1' },
+    { id: 'prop',   cost: 160, icon: '🎫', name: '분장대',       desc: '소품 슬롯 +1' },
+    { id: 'peek',   cost: 130, icon: '🔍', name: '남은 페이지',   desc: '무대 조건을 처음부터 본다' },
+    { id: 'swap3',  cost: 220, icon: '🎬', name: '전속 배우',     desc: '시작 릴을 3칸까지 바꾼다', needs: 'swap1' },
+    { id: 'vault2', cost: 320, icon: '🏛', name: '깊은 창고',     desc: '계승 유물 슬롯 +1 (누적 2)', needs: 'vault1' },
+    { id: 'script2',cost: 260, icon: '📖', name: '개정판',       desc: '시작 대본 +1 (누적 2)', needs: 'script1' }
   ];
+  var RESTORE_TOTAL = RESTORE.reduce(function (a, r) { return a + r.cost; }, 0);
+
+  // 산 것들을 하나의 수정자로 접는다
+  function restored(owned) {
+    var o = { swap: 0, script: 0, vault: VAULT_BASE, slot: 0, prop: 0, peek: 0 };
+    (owned || []).forEach(function (id) {
+      if (id === 'swap1') o.swap = Math.max(o.swap, 1);
+      if (id === 'swap3') o.swap = Math.max(o.swap, 3);
+      if (id === 'script1') o.script = Math.max(o.script, 1);
+      if (id === 'script2') o.script = Math.max(o.script, 2);
+      if (id === 'vault1' || id === 'vault2') o.vault += 1;
+      if (id === 'slot') o.slot = 1;
+      if (id === 'prop') o.prop = 1;
+      if (id === 'peek') o.peek = 1;
+    });
+    return o;
+  }
+
+  // 한 판이 남기는 조각
+  function shardsFor(r) {
+    var n = (r.floor || 0) * SHARD.perFloor;
+    n += (r.bossKills || 0) * SHARD.boss;
+    if (r.stageDone) n += SHARD.stage;
+    if (r.epicDone) n += SHARD.epic;
+    if (r.firstSoul) n += SHARD.soul;
+    return n;
+  }
 
   // ② 유물 계승 — 런이 끝나면 그 판의 유물 하나가 창고에 남는다.
   //    다음 런은 창고에서 하나를 들고 시작한다. 골드로 사는 게 아니라 저번 판에서 가져온다.
@@ -471,33 +518,51 @@
   //    「내 덱을 만들어간다」는 감각이 여기서 나온다.
   var ARCHIVE_MUL = 2.2;
 
-  function premiereAt(floors) {
-    var o = { swap: 0, script: 0, vault: VAULT_BASE, next: null };
-    PREMIERE.forEach(function (p) {
-      if (floors >= p.at) {
-        if (p.kind === 'swap') o.swap = Math.max(o.swap, p.n);
-        if (p.kind === 'script') o.script = Math.max(o.script, p.n);
-        if (p.kind === 'vault') o.vault += p.n;
-      } else if (!o.next) o.next = p;
+  // 다음에 살 수 있는 것 — 「눈앞에 목표가 있는가」를 재려면 필요하다
+  function nextRestore(owned, shards) {
+    var have = {}; (owned || []).forEach(function (k) { have[k] = 1; });
+    var best = null;
+    RESTORE.forEach(function (r) {
+      if (have[r.id]) return;
+      if (r.needs && !have[r.needs]) return;
+      if (!best || r.cost < best.cost) best = r;
     });
-    return o;
+    return best;
   }
 
-  // ── 승천 — 저주받은 대본 ──────────────────────────────────
+  // ── 재연 — 저주받은 대본 ──────────────────────────────────
   // 반복 성장의 뼈대다. 수치를 올리지 않고 규칙을 하나씩 더한다.
   // 축은 셋이다 — 보스 기믹 / 난입 / 관중.
+  // 재연을 거듭할수록 객석에 하나씩 더 앉는다 — 구하지 못한 영혼들이다.
+  // 볼수록 더 알고, 알수록 더 요구한다. 단계가 숫자가 아니라 「누가 왔는가」다.
   var ASCENSION = [
-    { n: 1, name: '난입이 흔해진다',       desc: '난입 확률 2배',                    intrudeMul: 2 },
-    { n: 2, name: '관객이 성급해진다',     desc: '야유가 8턴부터 시작된다',           stallDelta: -4 },
-    { n: 3, name: '무대감독이 검열을 배운다', desc: '1막 보스가 기믹을 하나 더 얻는다', bossExtra: 1 },
-    { n: 4, name: '난입자가 둘 온다',      desc: '한 전투에 난입자가 둘까지 들어온다', intrudeMax: 2 },
-    { n: 5, name: '박수가 인색해진다',     desc: '기립 박수 요구가 130으로 오른다',    cheerMax: 130 },
-    { n: 6, name: '새 난입자가 나타난다',  desc: '난입자 종류가 늘어난다',            intrudeNew: 1 },
-    { n: 7, name: '모든 보스가 배운다',    desc: '보스마다 기믹을 하나 더 얻는다',     bossExtra: 2 },
-    { n: 8, name: '관객이 등을 돌린다',    desc: '야유가 6턴부터 · 매 턴 HP −5',      stallDelta: -6, stallDmg: 5 }
+    { n: 1, icon: '🦗', name: '베짱이가 앉았다',
+      flavor: '여름내 노래만 한 자다. 무대가 부럽다 못해 자꾸 뛰어오른다',
+      desc: '난입 확률 2배',                    intrudeMul: 2 },
+    { n: 2, icon: '⏳', name: '시계를 든 손님',
+      flavor: '자기 차례를 센다',
+      desc: '야유가 8턴부터 시작된다',           stallDelta: -4 },
+    { n: 3, icon: '✂️', name: '검열관',
+      flavor: '대본에 빨간 줄을 긋는다',
+      desc: '1막 보스가 기믹을 하나 더 얻는다',   bossExtra: 1 },
+    { n: 4, icon: '🎩', name: '초대받지 않은 일행',
+      flavor: '한 명이 아니라 둘씩 온다',
+      desc: '한 전투에 난입자가 둘까지 들어온다', intrudeMax: 2 },
+    { n: 5, icon: '🧤', name: '장갑 낀 손',
+      flavor: '웬만해선 손뼉을 치지 않는다',
+      desc: '기립 박수 요구가 130으로 오른다',    cheerMax: 130 },
+    { n: 6, icon: '🚪', name: '열린 뒷문',
+      flavor: '누가 들어왔는지 아무도 모른다',
+      desc: '난입자 종류가 늘어난다',            intrudeNew: 1 },
+    { n: 7, icon: '📖', name: '모두가 대본을 읽었다',
+      flavor: '객석이 다음 장면을 안다. 배우들도 안다',
+      desc: '보스마다 기믹을 하나 더 얻는다',     bossExtra: 2 },
+    { n: 8, icon: '🕯', name: '마지막 손님',
+      flavor: '막이 내려도 자리를 뜨지 않는다',
+      desc: '야유가 6턴부터 · 매 턴 HP −5',      stallDelta: -6, stallDmg: 5 }
   ];
 
-  // 승천으로 보스가 추가로 얻는 기믹 — 각 보스가 「배우는」 순서
+  // 재연으로 보스가 추가로 얻는 기믹 — 각 보스가 「배우는」 순서
   var BOSS_LEARN = {
     무대감독:    [{ gimmick: 'censor', gimCd: 4 }, { seizeCd: 6, seizeMax: 1 }],
     폭군:        [{ guardMul: 0.5, adds: [{ name: '검열 조수', hp: 18, atk: 7, def: 1, cd: 2, role: 'guard',
@@ -505,7 +570,7 @@
     '초대 감독': [{ seizeCd: 5, seizeMax: 2 }, { gimCd: 3 }]
   };
 
-  // 승천 단계를 하나의 수정자로 접는다
+  // 재연 단계를 하나의 수정자로 접는다
   function ascend(level) {
     var m = { intrudeMul: 1, intrudeMax: 1, stallDelta: 0, stallDmg: CFG.stallDmg,
               cheerMax: CHEER.max, bossExtra: 0, intrudeNew: 0, level: level || 0 };
@@ -533,7 +598,7 @@
     // 상한 10 일 때 실제 보유가 9.2장이었고 그중 턴당 2.57장만 썼다.
     handLimit: 7, scriptBase: 7,
     // 무대는 3칸에서 시작해 막을 넘길 때마다 넓어진다 — 로그라이크의 성장축을 하나 더 만든다
-    stageBase: 3, stageMax: 5,
+    stageBase: 3, stageMax: 4,          // UI 폭을 4칸으로 고정한다 (59장). 5칸이면 세로 화면에서 심볼이 너무 작다
     // 즉석 대본은 기본 1장. 유물과 환호로 늘린다
     tempBase: 1,
     // ── 커튼콜 ──
@@ -799,6 +864,10 @@
                 desc: '릴에 4장 이상인 카드의 개별 효과 +2' },
     embers:   { name: '불씨 상자',      icon: '🧯', cost: 15,
                 desc: '악상 대본의 화상 +2' },
+    // 독은 유물이 「광인의 지휘봉」(재연 3) 하나뿐이라, 재연 0 에서는
+    // 독을 축으로 하는 덱을 완성할 수가 없었다. 불씨 상자의 짝이다.
+    venom:    { name: '독이 든 성배',   icon: '🍷', cost: 15,
+                desc: '독을 거는 대본의 독 +2' },
     thorns:   { name: '가시 의상',      icon: '🪡', cost: 12,
                 desc: '반사 상한 +8' },
     mirrorR:  { name: '무대 거울',      icon: '🪞', cost: 20,
@@ -823,7 +892,7 @@
                 desc: '환호 상한 −25 — 기립 박수가 자주 온다' },
 
     // ── 어둠 유물 — 이득과 불이득을 함께 준다 ────────────────
-    // 승천 단계로 열린다. 승천이 「더 아픈 같은 게임」이 아니라 「새 물건」을 줘야
+    // 재연 단계로 열린다. 재연이 「더 아픈 같은 게임」이 아니라 「새 물건」을 줘야
     // 올라갈 이유가 된다. 도달률이 0.49단에 머문 이유의 절반이 이것이었다.
     hotHouse: { name: '달아오른 객석',  icon: '🔥', cost: 26, dark: true, asc: 2,
                 desc: '「달아오른 무대」 배율 2배 · 기립 박수가 오지 않는다' },
@@ -839,7 +908,7 @@
                 desc: '화상·독·둔화 2배 · 회복 효과 절반' },
     lastActor:  { name: '마지막 배우',   icon: '🕴', cost: 30, dark: true, asc: 4,
                 desc: '기립 박수가 코스트 +4 · 최대 HP −20%' },
-    // 승천 5단 이상에 아무것도 없어서 올라갈 이유가 끊겼다 — 2단 이상 도달이 20% 였다
+    // 재연 5단 이상에 아무것도 없어서 올라갈 이유가 끊겼다 — 2단 이상 도달이 20% 였다
     emptyHouse: { name: '텅 빈 객석',   icon: '🕳', cost: 26, dark: true, asc: 5,
                 desc: '야유가 오지 않는다 · 환호도 쌓이지 않는다' },
     doubleCast: { name: '더블 캐스팅',  icon: '👥', cost: 32, dark: true, asc: 6,
@@ -1077,7 +1146,9 @@
     GROWTH: GROWTH,
     CHEER: CHEER, CHEER_TEXT: CHEER_TEXT, DEMANDS: DEMANDS, DEMAND_CHEER: DEMAND_CHEER,
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
-    PREMIERE: PREMIERE, premiereAt: premiereAt, ARCHIVE_MUL: ARCHIVE_MUL, VAULT_BASE: VAULT_BASE,
+    SHARD: SHARD, RESTORE: RESTORE, RESTORE_TOTAL: RESTORE_TOTAL,
+    restored: restored, shardsFor: shardsFor, nextRestore: nextRestore,
+    ARCHIVE_MUL: ARCHIVE_MUL, VAULT_BASE: VAULT_BASE,
     EVENTS: EVENTS,
     makeOpeners: makeOpeners, scriptOptions: scriptOptions,
     SCRIPTS: SCRIPTS, SCRIPT_BY_ID: SCRIPT_BY_ID, allScripts: allScripts,

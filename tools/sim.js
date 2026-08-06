@@ -11,6 +11,159 @@
   'use strict';
   var T = root.Theater;
 
+  // ── 무대(빌드) 시제품 ─────────────────────────────────────
+  // 아직 확정 규칙이 아니다. 「조건이 실제로 채워지는가」를 재려고 붙였다.
+  // opt.stages 로만 켜진다 — 기존 밸런스 측정은 건드리지 않는다.
+  //
+  // 계열(배역·악상·소품)이 아니라 카드로 조건을 건다. 계열은 시작 릴이 이미
+  // 정해버려서(악장 100% 악상, 거울의 배우 89% 소품) 조건이 아니라 라벨이 된다.
+  var STAGES = {
+    // 반사만 보면 해당 대본이 10종뿐이라 대본 진행도가 0.35/3 에서 멈춘다.
+    // 깨진 거울 조각은 꿰뚫는다 — 관통까지 세면 15종으로 가면·다타와 같은 대역이 된다.
+    mirror: { name: '거울의 무대', icon: '🪞',
+              // 릴 후보가 두 장뿐이면 4장을 못 채운다 — 쇠약을 세 장으로 넓히자 0%→4% 였다.
+              reel: ['mirror', 'mask', 'chain'], relic: ['thorns', 'mirrorR', 'crackMirror'],
+              script: function (e) { return !!e.thorns || !!e.pierce; } },
+    burn:   { name: '화형의 무대', icon: '🔥',
+              reel: ['rage', 'candle'], relic: ['embers', 'madBaton'],
+              script: function (e) { return !!e.burn; } },
+    king:   { name: '왕정의 무대', icon: '👑',
+              reel: ['king', 'crown'], relic: ['drumOpen', 'darkScript', 'encore'],
+              script: function (e, sc) { var r = sc.requires || [];
+                return r.indexOf('king') >= 0 || r.indexOf('crown') >= 0; } },
+    mask:   { name: '가면의 무대', icon: '🎭',
+              reel: ['jester', 'acrobat'], relic: ['stand_in', 'glass'],
+              script: function (e) { return (e.hits || 1) >= 2; } },
+    curtain:{ name: '막의 무대',   icon: '🎪',
+              reel: ['curtain', 'rose', 'shield'], relic: ['longBow', 'encoreCall'],
+              // 방어+둔화 두 조건을 다 요구하니 해당 대본이 97종 중 3종뿐이라
+              // 480판 동안 한 번도 열리지 않았다. 방어만 본다.
+              script: function (e) { return !!e.block; } },
+    // 독 대본이 97종 중 7종뿐이라, 기울기를 816층분 받고도 대본이 0.30/3 에서 멈췄다.
+    // 독과 둔화를 하나로 묶으면 23종이 되고, 정체성도 선명해진다 —
+    // 화형은 태우고 쇠약은 굳힌다.
+    poison: { name: '쇠약의 무대', icon: '🩸',
+              reel: ['violin', 'tragedy', 'cold'], relic: ['venom', 'glass', 'madBaton'],
+              script: function (e) { return !!e.poison || !!e.slow; } }
+  };
+  // 에픽 무대 — 물건이 아니라 「그렇게 플레이했다」가 조건이다.
+  // 일반 무대는 효과를 축으로, 에픽은 시스템을 축으로 삼는다.
+  var EPIC = {
+    encore: { name: '앙코르의 무대', icon: '🎪',
+              relic: ['longBow', 'encoreCall'], relicN: 2,
+              // 상위 10% 지점(15회)으로 잡았더니 중앙 31층에 열렸다 — 다섯 층 쓰고 끝난다.
+              // 누적 지표는 판이 진행돼야 쌓이므로 구조적으로 늦다. 상위 25% 로 내린다.
+              need: { curtainPlays: 13, chainMax: 3 },
+              gain: '커튼콜이 매 턴 온다' },
+    frenzy: { name: '광란의 객석', icon: '👏',
+              // 재연 0 의 환호 유물은 「큰 극장」(+40) 과 「빠른 인사」(−25) 뿐이라
+              // 서로 정반대다. 2개를 요구하면 상충하는 유물을 둘 다 사게 만든다.
+              relic: ['bigHouse', 'quickBow', 'hotHouse', 'emptyHouse'], relicN: 1,
+              need: { ovations: 16, hotWins: 4 },
+              gain: '「달아오른 무대」가 꺼지지 않는다' }
+  };
+  function epicProg(S, key) {
+    var e = EPIC[key], st = S.stats, need = epicNeedAt(S, key);
+    var relic = S.relics.filter(function (k) { return e.relic.indexOf(k) >= 0; }).length;
+    var parts = [Math.min(1, relic / e.relicN)], done = relic >= e.relicN;
+    Object.keys(need).forEach(function (k) {
+      var have = st[k] || 0;
+      parts.push(Math.min(1, have / need[k]));
+      if (have < need[k]) done = false;
+    });
+    return { relic: relic, done: done,
+             p: parts.reduce(function (a, b) { return a + b; }, 0) / parts.length,
+             have: Object.keys(e.need).map(function (k) { return st[k] || 0; }) };
+  }
+
+  var EPIC_AT = 0.15;             // 에픽 기울기 발동선
+  var STAGE_NEED = { reel: 4, relic: 1, script: 2 };
+  // 재연은 숙련의 증명이다 — 오를수록 무대 조건이 한 칸씩 풀린다.
+  //
+  // 실측(재연 고정 240판씩): 5단부터 무대 완성이 23% → 17% 로 꺾인다. 원인은
+  // 어둠 유물의 슬롯 잠식이 아니다(3단에서 0.39 로 포화되고 그 뒤 안 늘어난다).
+  // 판이 짧아지는 것이다 — 8단 평균 도달 15.4층인데 무대는 중앙 15층에 열린다.
+  // 평균적인 판이 무대가 열리기 직전에 끝난다. 재연이 「저거 해보고 싶다」의
+  // 사다리인데 오를수록 무대가 멀어지면 방향이 반대다.
+  var STAGE_RELIEF = 3;           // 몇 단마다 조건이 한 칸 풀리나
+  var EPIC_RELIEF = 0.12;         // 에픽 누적 조건이 한 칸마다 몇 % 줄어드나
+  function reliefOf(S) {
+    return Math.floor(((S.asc && S.asc.level) || 0) / STAGE_RELIEF);
+  }
+  function needAt(S) {
+    var n = { reel: STAGE_NEED.reel, relic: STAGE_NEED.relic, script: STAGE_NEED.script };
+    // 릴과 대본을 번갈아 푼다. 유물은 건드리지 않는다 — 1 아래로는 축이 사라진다.
+    for (var i = 0, r = reliefOf(S); i < r; i++) {
+      if (i % 2 === 0) n.reel = Math.max(2, n.reel - 1);
+      else n.script = Math.max(2, n.script - 1);
+    }
+    return n;
+  }
+  function epicNeedAt(S, key) {
+    var e = EPIC[key], cut = 1 - EPIC_RELIEF * reliefOf(S), o = {};
+    Object.keys(e.need).forEach(function (k) { o[k] = Math.max(2, Math.round(e.need[k] * cut)); });
+    return o;
+  }
+  var TILT_AT = 0.25;             // 이만큼 차면 상점·보상이 그 무대 쪽으로 기운다
+  // 기울기가 매번 확정으로 자리를 채우면 무대가 9층에 완성된다.
+  // 확률로 채워야 「모아가는 시간」이 생긴다.
+  var TILT_P = { card: 1, relic: 1, script: 1 };
+  function stageTune(o) {
+    if (o.need) STAGE_NEED = o.need;
+    if (o.tiltAt != null) TILT_AT = o.tiltAt;
+    if (o.keep != null) TILT_KEEP = o.keep;
+    if (o.w != null) TILT_W = o.w;
+    if (o.epicAt != null) EPIC_AT = o.epicAt;
+    if (o.relief != null) STAGE_RELIEF = o.relief;
+    if (o.p) TILT_P = o.p;
+  }
+  // 무대를 노리는 사람은 릴 카드를 대본보다 우선한다. 봇이 그러지 않아서
+  // 유물 1/1 · 대본 2/2 를 채우고도 릴이 0.3/3 에서 멈췄다.
+  var TILT_W = 1;
+
+  // 릴 진행도는 「지금 몇 장인가」가 아니라 「이 판에 몇 장을 넣었는가」다.
+  // 시작 릴로 세면 거울의 배우는 거울 8장을 갖고 시작해서 거울의 무대가 92% 열리고,
+  // 연출가는 아무 축도 없어서 0% 다 — 무대가 캐릭터 라벨이 되어버린다.
+  function stageProg(S, key) {
+    var st = STAGES[key], reel = 0;
+    st.reel.forEach(function (id) {
+      reel += Math.max(0, (S.deck[id] || 0) - ((S.deck0 || {})[id] || 0));
+    });
+    var relic = S.relics.filter(function (k) { return st.relic.indexOf(k) >= 0; }).length;
+    // 대본도 릴과 같게 「이 판에 얻은 것」만 센다. 시작 대본으로 세면
+    // 연출가는 시작 대본 셋 중 둘이 방어 대본이라 1층에 막의 무대로 잠긴다 —
+    // 릴을 뗐더니 시작 대본이 똑같이 무대를 정해버렸다.
+    var script = S.scripts.filter(function (sc) {
+      return !(S.script0 || {})[sc.id] && st.script(sc.effect || {}, sc);
+    }).length;
+    var need = needAt(S);
+    var p = 0.4 * Math.min(1, reel / need.reel)
+          + 0.3 * Math.min(1, relic / need.relic)
+          + 0.3 * Math.min(1, script / need.script);
+    return { reel: reel, relic: relic, script: script, p: p,
+             done: reel >= need.reel && relic >= need.relic && script >= need.script };
+  }
+  // 기울기가 향한 무대 — 가장 많이 찬 것 하나. 플레이어가 선포하지 않는다.
+  //
+  // 관성이 있다. 매번 1등을 다시 뽑으면, 두 무대가 엇비슷한 캐릭터는 층마다
+  // 기울기가 왔다 갔다 하면서 양쪽을 절반씩만 채우고 끝난다 — 연출가가 0% 였다.
+  var TILT_KEEP = 0.12;           // 이만큼 앞서야 갈아탄다
+  function tiltAt(S) {
+    if (!S.useStages) return null;
+    var cur = S.tiltKey, curP = -1;
+    if (cur) { var cg = stageProg(S, cur); if (cg.done) cur = null; else curP = cg.p; }
+    var best = cur, bv = cur ? curP + TILT_KEEP : TILT_AT;
+    Object.keys(STAGES).forEach(function (k) {
+      if (k === cur) return;
+      var g = stageProg(S, k);
+      if (g.done) return;                       // 이미 완성됐으면 더 기울 필요가 없다
+      if (g.p > bv) { bv = g.p; best = k; }
+    });
+    if (best && curP < 0 && stageProg(S, best).p < TILT_AT) best = null;
+    S.tiltKey = best;
+    return best;
+  }
+
   // ── 플레이어 성향 ─────────────────────────────────────────
   // w      : 전투 중 가치 판단 가중치
   // route  : 맵 노드 선호
@@ -233,6 +386,8 @@
   function applyPlay(C, sc, tgt, ctx) {
     var acc = T.scriptEffect(sc, ctx.ch), ev = [];
     if (ctx.embers && T.scriptFam(sc) === 'score' && acc.burn) acc.burn += 2 * ctx.embers;
+    // 「독이 든 성배」 — 계열을 가리지 않는다. 독 대본이 7종뿐이라 계열까지 걸면 닿지 않는다.
+    if (ctx.venom && acc.poison) acc.poison += 2 * ctx.venom;
     // 「악장」 — 주 계열 대본의 상태이상이 한 칸 더 깊어진다
     if (ctx.ch.famStatusPlus) {
       var sf = T.scriptFam(sc), plus = sf ? (ctx.ch.famStatusPlus[sf] || 0) : 0;
@@ -634,14 +789,21 @@
       }),
       log: [], trace: opt.trace ? [] : null, feat: {}, growth: {},
       stats: { nodes: 0, turns: 0, ampTurns: 0, playable: 0, playableOf: 0, temp: 0,
-               costUsed: 0, costMax: 0, plays: 0, rerolls: 0, byTier: {}, byScript: {}, fights: 0 }
+               costUsed: 0, costMax: 0, plays: 0, rerolls: 0, byTier: {}, byScript: {}, fights: 0,
+               snap: [] }
     };
+    S.useStages = !!opt.stages;
+    S.slotMax = T.CFG.stageBase + (opt.slot4 ? 1 : 0);   // 복원 목록을 사면 applyMeta 가 덮는다
+    S.tiltKey = null;
     S.hp = S.maxHp;
     S.map = makeMap(rnd);
     S.w = makePlayer(pol, ch, sk, rnd);
     var w = S.w;
     S.meta = opt.meta || null;
     applyMeta(S, w);
+    // 초연 기록이 시작 릴·시작 대본을 바꾸므로 그 뒤에 찍는다
+    S.deck0 = Object.assign({}, S.deck);
+    S.script0 = {}; S.scripts.forEach(function (sc) { S.script0[sc.id] = 1; });
 
     var guard = 0;
     while (guard++ < 400) {
@@ -657,6 +819,20 @@
       }
       S.act = act2;
       S.stats.nodes++;
+      // 무대(빌드) 조건을 설계하려면 「층마다 릴·유물·대본이 어디까지 모였나」를 알아야 한다.
+      // 최종 상태만 봐서는 15층에 조건이 찼는지 34층에 찼는지 구분할 수 없다.
+      if (opt.snap) {
+        var sp = null;
+        if (S.useStages) {
+          sp = {}; Object.keys(STAGES).forEach(function (k) { sp[k] = stageProg(S, k); });
+          sp._tilt = tiltAt(S);
+          sp._epic = {}; Object.keys(EPIC).forEach(function (k) { sp._epic[k] = epicProg(S, k); });
+        }
+        S.stats.snap.push({
+          f: nd.f, deck: Object.assign({}, S.deck), relics: S.relics.slice(),
+          scripts: S.scripts.map(function (s) { return s.id; }), stages: sp
+        });
+      }
       tr(S, 'node', NK[nd.type] + ' (' + (nd.f + 1) + '층)');
       if (nd.type === 'shop') { doShop(S, w); drift(S); continue; }
       if (nd.type === 'rest') { doRest(S); continue; }
@@ -666,6 +842,7 @@
       if (!r.won) return finish(S, false, r.killedBy);
       // 보스가 막마다 있다. 마지막 막의 보스만 런을 끝낸다 —
       // 이 구분이 없어서 1막 보스를 잡으면 판이 클리어로 종료됐다.
+      if (nd.type === 'boss') S.stats.bossKills = (S.stats.bossKills || 0) + 1;
       if (nd.type === 'boss' && nd.f >= T.CFG.floors - 1) return finish(S, true, null);
       doReward(S, w, nd);
       drift(S);
@@ -691,8 +868,10 @@
   function applyMeta(S, w) {
     var m = S.meta;
     if (!m) return;
-    var p = T.premiereAt(m.floors || 0);
+    var p = T.restored(m.owned || []);
     S.premiere = p;
+    // 슬롯 4칸은 복원 목록에서 산다. 사기 전에는 3칸으로 판을 돈다.
+    S.slotMax = T.CFG.stageBase + (p.slot ? 1 : 0);
 
     // 시작 릴 교체 — 가장 값이 낮은 칸을 이 캐릭터 풀의 가장 값 높은 배역으로 바꾼다
     for (var i = 0; i < p.swap; i++) {
@@ -866,7 +1045,7 @@
     if (S.foes.some(function (f) { return f.hp > 0 && T.ampMul(f, {}) >= 1.35; })) S.feat.maestro = 1;
   }
 
-  // 난입 예약 — 비극은 반드시 하나, 공연은 확률. 승천이 확률과 인원을 올린다.
+  // 난입 예약 — 비극은 반드시 하나, 공연은 확률. 재연이 확률과 인원을 올린다.
   function queueIntruders(S, nd) {
     if (nd.type === 'boss') return [];
     var pool = T.INTRUDERS.filter(function (x) { return !x.asc || S.asc.intrudeNew >= x.asc; });
@@ -887,7 +1066,8 @@
   function relicN(S, k) { return S.relics.filter(function (r) { return r === k; }).length; }
   function ctxOf(S, w) {
     return { ch: S.ch, w: w, rnd: S.rnd, S: S, relax: relicN(S, 'stand_in'), cheerMax: S.asc.cheerMax,
-      embers: relicN(S, 'embers'), encore: relicN(S, 'encore'), encoreCall: relicN(S, 'encoreCall'), actBurn: S.actBurn || 0,
+      embers: relicN(S, 'embers'), venom: relicN(S, 'venom'),
+      encore: relicN(S, 'encore'), encoreCall: relicN(S, 'encoreCall'), actBurn: S.actBurn || 0,
       thornCap: T.CFG.thornCap * (S.ch.thornsMul || 1) + relicN(S, 'thorns') * 8
                 + relicN(S, 'crackMirror') * 12,
       blockCapPct: T.CFG.blockCapPct * (relicN(S, 'crackMirror') ? 0.8 : 1),
@@ -906,9 +1086,10 @@
       finalCurtain: relicN(S, 'finalCurtain') ? 1 : 0,
       overflowMul: (S.ch.overflowMul || 1) * (relicN(S, 'mirrorR') ? 2 : 1) };
   }
-  // 무대 칸 수 — 3칸에서 시작해 막을 넘길 때마다 넓어진다
+  // 슬롯 수 — 3칸에서 시작해 성장으로 4칸까지. 「무대」는 빌드를 가리키므로(51장) 칸은 슬롯이라 부른다
   function stageN(S) {
-    return Math.min(T.CFG.stageMax, T.CFG.stageBase + (S.growth.stage || 0));
+    // 4칸은 복원 목록(「넓어진 무대」)으로 열린다. 사기 전에는 3칸이다.
+    return Math.min(T.CFG.stageMax, S.slotMax || T.CFG.stageBase);
   }
 
   // 캐스팅 — 이 전투에서 주연으로 세울 배역을 고른다.
@@ -952,7 +1133,7 @@
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
     S.foes = pickFoes(S, nd).map(function (b) {
-      // 승천 — 보스가 기믹을 하나씩 더 배운다. 수치가 아니라 규칙이 늘어난다.
+      // 재연 — 보스가 기믹을 하나씩 더 배운다. 수치가 아니라 규칙이 늘어난다.
       if (b.boss && S.asc.bossExtra) {
         var learn = (T.BOSS_LEARN[b.name] || []).slice(0, S.asc.bossExtra);
         if (learn.length) {
@@ -1043,6 +1224,18 @@
       var rp = 1 - Math.pow(0.9, relicN(S, 'respin'));
       if (rp > 0 && S.rnd() < rp) { autoSpin(S); lg(S, 'e', '  🔄 무대를 다시 올렸다'); }
       S.temp = instantScripts(S, ctx);
+      // 커튼콜 — 지난 무대를 닫은 대본이 1턴에 무료로 손패에 온다.
+      // 이 주입이 사람 플레이 경로(beginTurn)에만 있어서 봇은 커튼콜을 한 번도
+      // 쓴 적이 없다. 이번 세션의 밸런스 측정은 전부 커튼콜 없이 돌아갔다.
+      if (S.turn === 1 && S.curtainIn && S.curtainIn.length) {
+        S.curtainIn.forEach(function (id) {
+          var csc = T.SCRIPT_BY_ID[id];
+          if (csc) S.temp.unshift(Object.assign({}, csc, { temp: true, curtain: true, cost: 0 }));
+        });
+        lg(S, 's', '  🎭 커튼콜 — ' + S.curtainIn.map(function (id) {
+          return '「' + (T.SCRIPT_BY_ID[id] || {}).name + '」';
+        }).join(' '));
+      }
       lg(S, 't', '턴 ' + S.turn + ' 무대 — ' + S.stage.map(function (x) { return T.CARDS[x].name; }).join(' · '));
       tr(S, 'spin', '턴 ' + S.turn + ' 무대');
 
@@ -1101,6 +1294,10 @@
         S.usedF = C.usedF || S.usedF;
         if (C.ovation) S.stats.ovations = (S.stats.ovations || 0) + 1;
         if (C.ampHit) ampTurn = 1;
+        // 에픽 무대는 물건이 아니라 「그렇게 플레이했다」를 조건으로 삼는다.
+        // 그러려면 시스템을 실제로 몇 번 썼는지를 세어야 한다.
+        if (a.sc.curtain) S.stats.curtainPlays = (S.stats.curtainPlays || 0) + 1;
+        S.stats.cheerPeak = Math.max(S.stats.cheerPeak || 0, C.cheer || 0);
         S.stats.plays++;
         S.stats.byTier[a.sc.tier] = (S.stats.byTier[a.sc.tier] || 0) + 1;
         S.stats.byScript[a.sc.name] = (S.stats.byScript[a.sc.name] || 0) + 1;
@@ -1399,6 +1596,9 @@
     if (!S.feat) S.feat = {};
     if (S.hp <= S.maxHp * 0.25) S.feat.fallen = 1;              // 벼랑에서 이겨낸다
     if (S.fightAoeOnly && S.fightAnyDmg) S.feat.frenzy = 1;     // 광역만으로 끝낸다
+    // 환호를 높게 유지한 채 전투를 끝냈나 — 「달아오른 무대」를 지켰다는 증명
+    if ((S.cheer || 0) >= (S.asc.cheerMax || T.CHEER.max) * 0.75)
+      S.stats.hotWins = (S.stats.hotWins || 0) + 1;
     lg(S, 's', '── 통과 · ' + S.turn + '턴 · HP ' + Math.round(S.hp) + ' · 골드 +' + g + ' ──');
   }
 
@@ -1418,6 +1618,7 @@
     if (d.wild) v += 6;
     if ((S.ch.pool || []).indexOf(id) >= 0) v += 3;
     v += (d.dmg || 0) * 0.12 + (d.block || 0) * 0.08 * w.block;
+    v += tiltBonus(S, 'card', id);
     if (deckSize(S) >= T.CFG.reelMax) v = -1;
     return v;
   }
@@ -1439,24 +1640,111 @@
     var p = stageProb(sc, S.deck);
     var v = raw * (0.35 + p);                     // 상연 확률이 낮으면 값이 깎인다
     v *= T.scriptWeight(S.ch, sc) >= 4 ? 1.15 : 1;
+    v += tiltBonus(S, 'script', sc);
     if (S.scripts.length >= scriptCap(S)) v = -1;
     return v;
   }
 
   function offerCards(S) {
     var pool = Object.keys(T.CARDS).filter(function (id) { return !T.CARDS[id].hidden; });
-    return T.pickWeighted(pool, function (id) {
+    var out = T.pickWeighted(pool, function (id) {
       return (S.ch.pool || []).indexOf(id) >= 0 ? 3 : 1;
     }, S.rnd, 3);
+    // 조용한 기울기 — 후보 셋 중 한 자리를 그 무대의 카드로 채운다.
+    // 이게 없으면 특정 카드가 뜰 기대값이 판당 0.25장이라 무엇도 못 모은다.
+    var tk = tiltAt(S);
+    if (tk && S.rnd() < TILT_P.card && stageProg(S, tk).reel < needAt(S).reel) {
+      var want = STAGES[tk].reel[Math.floor(S.rnd() * STAGES[tk].reel.length)];
+      if (out.indexOf(want) < 0) out[out.length - 1] = want;
+    }
+    if (tk) {
+      var st0 = STAGES[tk];
+      if (out.some(function (id) { return st0.reel.indexOf(id) >= 0; }))
+        S.stats.tiltOffer = (S.stats.tiltOffer || 0) + 1;
+      S.stats.tiltChance = (S.stats.tiltChance || 0) + 1;
+    }
+    return out;
   }
   function offerScripts(S, n) {
     var owned = {}; S.scripts.forEach(function (s) { owned[s.id] = 1; });
     var pool = T.SCRIPTS.filter(function (s) { return !owned[s.id] && s.tier !== 'one'; });
     var seen = (S.meta && S.meta.seen) || {};
+    var tk = tiltAt(S);
+    var tst = (tk && S.rnd() < TILT_P.script && stageProg(S, tk).script < needAt(S).script) ? STAGES[tk] : null;
     // 대본 서고 — 예전 판에서 상연해 본 대본이 더 자주 뜬다. 덱을 이어서 만들어가는 감각.
     return T.pickWeighted(pool, function (sc) {
-      return T.scriptWeight(S.ch, sc) * (seen[sc.id] ? T.ARCHIVE_MUL : 1);
+      var v = T.scriptWeight(S.ch, sc) * (seen[sc.id] ? T.ARCHIVE_MUL : 1);
+      if (tst && tst.script(sc.effect || {}, sc)) v *= 3;
+      return v;
     }, S.rnd, n);
+  }
+  // 유물 후보 두 자리 중 하나를 그 무대의 유물로 바꾼다.
+  // 판당 유물 획득이 2.1개뿐이라, 이게 없으면 특정 유물 1개도 15% 밖에 안 나온다.
+  function tiltRelics(S, list) {
+    if (!S.useStages || S.rnd() >= TILT_P.relic) return list;
+    // 자리가 둘이다 — 하나는 노리는 일반 무대, 하나는 진행 중인 에픽 무대.
+    // 한쪽이 두 자리를 다 먹으면 다른 쪽이 영원히 못 찬다.
+    var slot = 0;
+    function put(want) {
+      if (!want.length || slot >= list.length) return;
+      var pick = want[Math.floor(S.rnd() * want.length)];
+      if (list.indexOf(pick) < 0) list[slot] = pick;
+      slot++;
+    }
+    function open(ks) {
+      return ks.filter(function (k) {
+        var r = T.RELICS[k];
+        return !relicN(S, k) && (!r.dark || (S.asc.level || 0) >= r.asc);
+      });
+    }
+    var tk = tiltAt(S);
+    if (tk && stageProg(S, tk).relic < needAt(S).relic) put(open(STAGES[tk].relic));
+    var ek = epicTilt(S);
+    if (ek) put(open(EPIC[ek].relic));
+    return list;
+  }
+
+  // 에픽은 「그렇게 플레이하고 있다」가 보일 때부터 유물이 따라온다.
+  // 특정 유물 2개는 판당 획득 2.1개로는 우연히 모이지 않는다.
+  function epicTilt(S) {
+    if (!S.useStages) return null;
+    // 0.30 이면 기립 박수 6.7/20 인 판이 발동선에 못 닿아 환호 유물을 영영 안 산다.
+    var best = null, bv = EPIC_AT;
+    Object.keys(EPIC).forEach(function (k) {
+      var g = epicProg(S, k);
+      if (g.done || g.relic >= EPIC[k].relicN) return;
+      if (g.p > bv) { bv = g.p; best = k; }
+    });
+    return best;
+  }
+
+  // 팔지 말아야 할 릴 카드 — 노리는 무대뿐 아니라 이미 쌓아둔 무대까지.
+  // 기울기가 옮겨가는 순간 이전 무대의 카드가 판매 대상으로 풀려서,
+  // 8층에 3/3 이던 릴이 18층에 1/3 으로 줄어드는 일이 벌어졌다.
+  function protectedReel(S) {
+    if (!S.useStages) return [];
+    var out = [], tk = tiltAt(S);
+    Object.keys(STAGES).forEach(function (k) {
+      var g = stageProg(S, k);
+      if (k === tk || g.reel > 0) out = out.concat(STAGES[k].reel);
+    });
+    return out;
+  }
+
+  // 무대 진행이 걸린 물건은 값이 오른다 — 사람이 조준한다는 뜻이다
+  function tiltBonus(S, kind, x) {
+    // 에픽은 일반 무대와 별개로 굴러간다 — 일반 무대에 기울지 않은 판에서도
+    // 커튼콜·환호는 쌓이므로, 여기서 먼저 빠져나가면 에픽 유물을 영영 안 산다.
+    if (kind === 'relic') {
+      var ek = epicTilt(S);
+      if (ek && EPIC[ek].relic.indexOf(x) >= 0) return 14 + 14 * epicProg(S, ek).p;
+    }
+    var tk = tiltAt(S); if (!tk) return 0;
+    var st = STAGES[tk], g = stageProg(S, tk);
+    if (kind === 'card' && g.reel < needAt(S).reel && st.reel.indexOf(x) >= 0) return (5 + 5 * g.p) * TILT_W;
+    if (kind === 'relic' && g.relic < needAt(S).relic && st.relic.indexOf(x) >= 0) return 14 + 14 * g.p;
+    if (kind === 'script' && g.script < needAt(S).script && st.script(x.effect || {}, x)) return 4 + 4 * g.p;
+    return 0;
   }
 
   // 숙련도에 따라 보상 평가가 흔들린다 — 처음 하는 사람은 좋은 걸 알아보지 못한다
@@ -1494,9 +1782,9 @@
       var bss = offerScripts(S, 3), bp = null, bpv = 0;
       bss.forEach(function (sc) { var v = noisy(S, scriptValue(S, w, sc)); if (v > bpv) { bpv = v; bp = sc; } });
       if (bp) { S.scripts.push(bp); lg(S, 's', '  🏆 막을 넘겼다 — 대본 「' + bp.name + '」'); }
-      var rpool = T.pickWeighted(Object.keys(T.RELICS).filter(function (k) {
+      var rpool = tiltRelics(S, T.pickWeighted(Object.keys(T.RELICS).filter(function (k) {
         var r2 = T.RELICS[k]; return !r2.dark || (S.asc.level || 0) >= r2.asc;
-      }), function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2);
+      }), function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2));
       var br = null, brv = -1e9;
       rpool.forEach(function (k) { var v = relicValue(S, w, k); if (v > brv) { brv = v; br = k; } });
       if (br) { takeRelic(S, br); lg(S, 's', '  🏆 유물 ' + T.RELICS[br].name); }
@@ -1534,9 +1822,15 @@
     if (bs2 && bsv * 0.55 >= bcv) {
       S.scripts.push(bs2); lg(S, 's', '  보상 대본 「' + bs2.name + '」'); tr(S, 'reward', '대본 「' + bs2.name + '」');
     } else if (bc) {
-      S.deck[bc] = (S.deck[bc] || 0) + 1;
+      S.deck[bc] = (S.deck[bc] || 0) + 1; noteTake(S, bc, 'reward');
       lg(S, 's', '  보상 배역 ' + T.CARDS[bc].name); tr(S, 'reward', '배역 ' + T.CARDS[bc].name);
-    }
+    } else S.stats.tookNeither = (S.stats.tookNeither || 0) + 1;
+  }
+  // 무대 카드가 「나왔는데 안 집었나」 「집었는데 딴 데서 빠졌나」를 가른다
+  function noteTake(S, id, where) {
+    var tk = tiltAt(S); if (!tk) return;
+    if (STAGES[tk].reel.indexOf(id) >= 0) S.stats.tiltTake = (S.stats.tiltTake || 0) + 1;
+    else S.stats['pass_' + where] = (S.stats['pass_' + where] || 0) + 1;
   }
 
   function doShop(S, w) {
@@ -1549,14 +1843,14 @@
     sellReels(S, w);                    // 먼저 팔아서 자금을 만든 다음 산다
     var cards = offerCards(S).map(function (id) { return { id: id, cost: 8 + Math.floor(S.rnd() * 6) }; });
     var scripts = offerScripts(S, 3).map(function (sc) { return { sc: sc, cost: 16 + sc.cost * 5 }; });
-    // 어둠 유물은 승천 단계로 열린다 — 승천이 새 물건을 준다
+    // 어둠 유물은 재연 단계로 열린다 — 재연이 새 물건을 준다
     var pool2 = Object.keys(T.RELICS).filter(function (k) {
       var r = T.RELICS[k];
       return !r.dark || (S.asc.level || 0) >= r.asc;
     });
     // 유물은 막이 오를수록 비싸다 — 후반에 골드가 남는 것을 막는다
     var rmul = T.CFG.gold.relicActMul[S.act - 1] || 1;
-    var relics = T.pickWeighted(pool2, function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2)
+    var relics = tiltRelics(S, T.pickWeighted(pool2, function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2))
       .map(function (k) { return { k: k, cost: Math.round(T.RELICS[k].cost * rmul) }; });
     // 대본 승급 — 보유 대본 하나의 코스트를 1 내린다.
     // 대본 상한(7장)과 부딪히지 않는 지출처다. 있는 것을 강하게 하니까.
@@ -1590,7 +1884,7 @@
       S.gold -= b.it.cost;
       if (b.kind === 'r') { takeRelic(S, b.it.k); relics.splice(b.i, 1); S.shopRec.relic++; lg(S, 'e', '  🏪 유물 ' + T.RELICS[b.it.k].name); }
       if (b.kind === 's') { S.scripts.push(b.it.sc); scripts.splice(b.i, 1); S.shopRec.script++; lg(S, 'e', '  🏪 대본 「' + b.it.sc.name + '」'); }
-      if (b.kind === 'c') { if (deckSize(S) < T.CFG.reelMax) S.deck[b.it.id] = (S.deck[b.it.id] || 0) + 1; cards.splice(b.i, 1); S.shopRec.card++; lg(S, 'e', '  🏪 배역 ' + T.CARDS[b.it.id].name); }
+      if (b.kind === 'c') { if (deckSize(S) < T.CFG.reelMax) { S.deck[b.it.id] = (S.deck[b.it.id] || 0) + 1; noteTake(S, b.it.id, 'shop'); } else S.stats.reelFull = (S.stats.reelFull || 0) + 1; cards.splice(b.i, 1); S.shopRec.card++; lg(S, 'e', '  🏪 배역 ' + T.CARDS[b.it.id].name); }
       if (b.kind === 'u') {
         var ix = S.scripts.indexOf(b.it.sc);
         // 카탈로그 객체를 그대로 고치면 다른 런까지 오염된다 — 복제해서 바꾼다
@@ -1609,9 +1903,11 @@
   // 상점마다 상한이 있어서 릴을 통째로 갈아버리지는 못한다.
   function sellReels(S, w) {
     var G = T.CFG.gold, sold = 0;
+    var keep = protectedReel(S);
     while (sold < G.sellMax && deckSize(S) > G.reelMin) {
       var worst = null, wv = 1e9;
       Object.keys(S.deck).forEach(function (id) {
+        if (keep.indexOf(id) >= 0) return;
         var v = cardValueDrop(S, w, id);
         if (v < wv) { wv = v; worst = id; }
       });
@@ -1633,7 +1929,7 @@
   }
 
   function relicValue(S, w, k) {
-    var base = { drumOpen: 30, stand_in: 24, archive: 10, respin: 14, glass: 12, embers: 12,
+    var base = { drumOpen: 30, stand_in: 24, archive: 10, respin: 14, glass: 12, embers: 12, venom: 12,
                  thorns: 8, mirrorR: 10, improv: 14, encore: 16, candleR: 12, phoenix: 26,
                  // 어둠 유물 — 이득이 크지만 대가가 있다. 봇은 그 대가를 값에 반영한다.
                  darkScript: 26, crackMirror: 14, hungrySeat: 16, tornScript: 12,
@@ -1642,7 +1938,7 @@
                  longBow: 18, encoreCall: 14, bigHouse: 16, quickBow: 12, hotHouse: 20 };
     var v = base[k] || 10;
     if (k === 'thorns' || k === 'mirrorR' || k === 'crackMirror') v *= w.thorns;
-    if (k === 'embers' || k === 'madBaton') v *= w.status;
+    if (k === 'embers' || k === 'madBaton' || k === 'venom') v *= w.status;
     if (k === 'archive' || k === 'tornScript') v *= (S.pol.grab.script || 1);
     if (k === 'madBaton') v *= (w.heal > 0.8 ? 0.6 : 1);        // 회복에 의존하면 손해다
     if (k === 'tornScript') v *= 0.7;                            // 즉석 대본을 잃는다
@@ -1650,6 +1946,7 @@
     if (k === 'doubleCast') v *= (S.ch.maxCost >= 5 ? 1.3 : 0.8);// 코스트가 넉넉해야 낸다
     if (k === 'finalCurtain') v *= (w.dmg > 1 ? 1.2 : 0.7);      // 빨리 끝낼 수 있어야 낸다
     if (relicN(S, k)) v *= 0.5;
+    v += tiltBonus(S, 'relic', k);
     return v;
   }
 
@@ -1739,8 +2036,12 @@
     if (id === 'merge') {
       var cands = Object.keys(S.deck).filter(function (k) { return S.deck[k] >= 2; });
       if (!cands.length) return;
+      var dkeep = protectedReel(S);
       var worst2 = null, wv2 = 1e9;
-      cands.forEach(function (k) { var v = cardValueDrop(S, w, k); if (v < wv2) { wv2 = v; worst2 = k; } });
+      cands.forEach(function (k) {
+        if (dkeep.indexOf(k) >= 0) return;
+        var v = cardValueDrop(S, w, k); if (v < wv2) { wv2 = v; worst2 = k; }
+      });
       var best2 = null, bv2 = -1e9;
       (S.ch.pool || []).forEach(function (k) {
         if (T.CARDS[k].hidden) return;
@@ -1769,7 +2070,10 @@
   }
 
   function doForge(S, w) {
-    var cands = Object.keys(S.deck).filter(function (id) { return S.deck[id] >= 2; });
+    var fkeep = protectedReel(S);
+    var cands = Object.keys(S.deck).filter(function (id) {
+      return S.deck[id] >= 2 && fkeep.indexOf(id) < 0;
+    });
     if (!cands.length) return;
     var worst = null, wv = 1e9;
     cands.forEach(function (id) { var v = cardValueDrop(S, w, id); if (v < wv) { wv = v; worst = id; } });
@@ -1805,7 +2109,7 @@
 
   // ── 여정 — 한 사람이 여러 판을 반복한다 ───────────────────
   // 로그라이크의 진짜 지표는 한 판의 승률이 아니라 「몇 판째에 처음 이겼나」다.
-  // 판 사이에 늘어나는 것: 숙련도 · 해금된 캐릭터 · 승천 단계.
+  // 판 사이에 늘어나는 것: 숙련도 · 해금된 캐릭터 · 재연 단계.
   function career(opt) {
     var rnd = T.rng32((opt.seed | 0) || 1);
     var runsN = opt.runs || 30;
@@ -1813,7 +2117,7 @@
     // 학습 속도는 실측 근거가 없는 가정이다. 0.65~1.6 으로 뒀을 때 5판 만에
     // 숙련도가 22% → 65% 로 뛰어서 사람보다 훨씬 빨랐다. 절반으로 낮췄다.
     var ceiling = 0.55 + rnd() * 0.45, learn = 0.3 + rnd() * 0.55;
-    // 사람은 그만둔다. 계속 지면 포기하고, 엔딩을 보면 만족하거나 승천을 올린다.
+    // 사람은 그만둔다. 계속 지면 포기하고, 엔딩을 보면 만족하거나 재연을 올린다.
     //   patience    — 연속 패배를 몇 번까지 버티나
     //   persistence — 첫 클리어 뒤에도 계속할 성향
     // 이게 없으면 모두가 관측 창을 끝까지 채워서 「몇 판 만에 떠나는가」를 잴 수 없다.
@@ -1826,7 +2130,7 @@
     var asc = 0, diff = startsOnStory ? 'story' : 'normal', firstClear = null, clears = 0;
     var streak = 0, stopAt = null, stopWhy = null, firstNormal = null, droppedAt = null;
     // 판 사이에 남는 것 — 이게 「다음 판을 할 이유」다
-    var meta = { floors: 0, seen: {}, vault: [] };
+    var meta = { floors: 0, seen: {}, vault: [], shards: 0, owned: [], souls: {} };
     Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) unlocked[k] = 1; });
     var PKs = Object.keys(POLICIES), fav = PKs[Math.floor(rnd() * PKs.length)];
 
@@ -1842,18 +2146,35 @@
       var playedDiff = diff, playedAsc = asc;   // 기록은 실제로 플레이한 난이도로 남긴다
       var runSeed = ((opt.seed | 0) + i * 104729) | 0;
       var r = run({ seed: runSeed, charKey: ck, diffKey: diff,
-                    policyKey: pk, skillObj: sk, asc: asc, meta: meta });
+                    policyKey: pk, skillObj: sk, asc: asc, meta: meta,
+                    stages: opt.stages, snap: opt.snap });
       var newUnlock = 0;
       Object.keys(r.feat || {}).forEach(function (k) {
         if (T.CHARS[k] && !unlocked[k]) { unlocked[k] = 1; newUnlock++; }
       });
 
-      // 이 판의 흔적을 남긴다 — 층수 · 상연한 대본 · 유물
-      var beforeP = T.premiereAt(meta.floors);
+      // 이 판이 남기는 대본 조각 — 죽어도 남는다
+      var stageDone = false, epicDone = false;
+      (r.stats.snap || []).forEach(function (sn) {
+        if (!sn.stages) return;
+        Object.keys(STAGES).forEach(function (k) { if (sn.stages[k].done) stageDone = true; });
+        if (sn.stages._epic) Object.keys(EPIC).forEach(function (k) { if (sn.stages._epic[k].done) epicDone = true; });
+      });
+      var firstSoul = r.won && !meta.souls[ck];
+      if (firstSoul) meta.souls[ck] = 1;
+      var gained = T.shardsFor({ floor: r.floor, bossKills: r.stats.bossKills || 0,
+                                 stageDone: stageDone, epicDone: epicDone, firstSoul: firstSoul });
+      meta.shards += gained;
       meta.floors += r.floor;
-      var afterP = T.premiereAt(meta.floors);
-      var newPremiere = (afterP.swap > beforeP.swap || afterP.script > beforeP.script
-                      || afterP.vault > beforeP.vault) ? 1 : 0;
+
+      // 살 수 있는 것이 있으면 산다 — 싼 것부터. 사람은 눈앞의 것을 먼저 연다.
+      var newPremiere = 0, guard2 = 0;
+      while (guard2++ < 10) {
+        var nx = T.nextRestore(meta.owned, meta.shards);
+        if (!nx || meta.shards < nx.cost) break;
+        meta.shards -= nx.cost; meta.owned.push(nx.id); newPremiere = 1;
+      }
+      var afterP = T.restored(meta.owned);
       Object.keys(r.seenIds || {}).forEach(function (k) { meta.seen[k] = 1; });
       if (r.relics.length) {
         // 그 판에서 가장 값이 큰 유물 하나가 창고에 남는다
@@ -1870,8 +2191,8 @@
         if (!firstClear) firstClear = i;
         if (playedDiff === 'story') diff = 'normal';          // 이야기를 봤으니 로그라이크로
         else if (playedDiff === 'normal') {
-          // 보통을 넘기면 곧바로 승천 1단이 열린다. 「어려움을 또 이겨야 승천」이었을 때
-          // 승천 도달이 0.49단에 머물렀다 — 관문이 두 개였다.
+          // 보통을 넘기면 곧바로 재연 1단이 열린다. 「어려움을 또 이겨야 재연」이었을 때
+          // 재연 도달이 0.49단에 머물렀다 — 관문이 두 개였다.
           if (!firstNormal) firstNormal = i;
           diff = 'hard'; asc = Math.max(1, asc);
         } else asc = Math.min(T.ASCENSION.length, asc + 1);
@@ -1901,7 +2222,7 @@
         if (need <= 12) novelty += 0.14;
       }
       if (meta.vault.length) novelty += 0.08;                          // 계승할 유물이 있다
-      // 다음 승천 단에서 어둠 유물이 열린다 — 이게 승천을 올릴 이유다.
+      // 다음 재연 단에서 어둠 유물이 열린다 — 이게 재연을 올릴 이유다.
       // 이걸 빼두면 「더 아픈 같은 게임」이라 2단 이상 도달이 18% 에서 멈췄다.
       if (firstNormal && Object.keys(T.RELICS).some(function (k) {
         return T.RELICS[k].dark && T.RELICS[k].asc === asc + 1; })) novelty += 0.22;
@@ -1916,7 +2237,7 @@
       } else {
         // 첫 클리어 후 — 만족하고 떠나거나 계속 올린다.
         // 스토리를 넘긴 것과 보통을 넘긴 것을 같게 보면 안 된다.
-        var keep = firstNormal ? 0.45 + persistence * 0.5    // 로그라이크를 이겼다 — 승천이 남았다
+        var keep = firstNormal ? 0.45 + persistence * 0.5    // 로그라이크를 이겼다 — 재연이 남았다
                               : 0.72 + persistence * 0.25;   // 이야기만 봤다 — 아직 본편이 남았다
         keep = keep + (1 - keep) * novelty;                  // 새 것이 있으면 남는다
         if (rnd() > keep) { stopAt = i; stopWhy = '만족'; break; }
@@ -1928,8 +2249,10 @@
              patience: patience, persistence: persistence,
              ceiling: ceiling, learn: learn, endSkill: Math.min(ceiling, e),
              unlocked: Object.keys(unlocked), maxAsc: asc,
-             meta: { floors: meta.floors, seen: Object.keys(meta.seen).length, vault: meta.vault.slice() },
-             premiere: T.premiereAt(meta.floors) };
+             meta: { floors: meta.floors, seen: Object.keys(meta.seen).length, vault: meta.vault.slice(),
+                     shards: meta.shards, owned: meta.owned.slice() },
+             shards: meta.shards, owned: meta.owned.slice(),
+             premiere: T.restored(meta.owned) };
   }
 
   // ── 사람이 플레이할 때 쓰는 문 ────────────────────────────
@@ -2146,6 +2469,9 @@
   root.Sim = {
     run: run, career: career, skillMix: skillMix,
     POLICIES: POLICIES, SKILLS: SKILLS, stageProb: stageProb, NK: NK, mergeW: mergeW,
+    STAGES: STAGES, stageProg: stageProg, tiltAt: tiltAt, stageTune: stageTune,
+    EPIC: EPIC, epicProg: epicProg, epicTilt: epicTilt,
+    stageNeed: function () { return STAGE_NEED; }, needAt: needAt, epicNeedAt: epicNeedAt,
     // 사람 플레이용
     newRun: newRun, goTo: goTo, openFight: openFight, beginTurn: beginTurn,
     playScript: playScript, canPlay: canPlay, doReroll: doReroll, finishTurn: finishTurn,

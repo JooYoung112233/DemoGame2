@@ -126,9 +126,9 @@
     <option value="mid">익숙한 사람만</option>
     <option value="expert">숙련자만</option>
   </select>
-  <!-- 승천 단계 — 어둠 유물은 여기서만 열린다. 이게 없어서 단판 모드는 어둠 유물 11종을
+  <!-- 재연 단계 — 어둠 유물은 여기서만 열린다. 이게 없어서 단판 모드는 어둠 유물 11종을
        한 번도 보지 못했다 (채용률 전부 0). 여정 모드는 판마다 스스로 올라간다. -->
-  <span style="font-size:11px;color:#6b6b78">승천</span>
+  <span style="font-size:11px;color:#6b6b78">재연</span>
   <select id="asc">
     <option value="0" selected>없음</option>
     <option value="1">1단</option><option value="2">2단</option><option value="3">3단</option>
@@ -156,7 +156,7 @@
       <h2 style="margin-top:10px">판 사이에 쌓인 것 — 다음 판을 할 이유</h2>
       <table id="metaTbl"><tbody></tbody></table>
       <p class="note" id="metaNote">—</p>
-      <h2 style="margin-top:10px">승천 도달 — 반복의 끝이 어디까지 가나</h2>
+      <h2 style="margin-top:10px">재연 도달 — 반복의 끝이 어디까지 가나</h2>
       <table id="ascTbl"><tbody></tbody></table>
       <h2 style="margin-top:10px">캐릭터 해금률</h2>
       <table id="unTbl"><tbody></tbody></table>
@@ -239,7 +239,7 @@
     + ' · 유물 ' + Object.keys(T.RELICS).length + '종'
     + ' · 막 HP ' + T.CFG.actHp.join('/') + ' · 막 공격 ' + (T.CFG.actAtk || []).join('/')
     + ' · 보통 공격 ×' + T.DIFFICULTY.normal.atkMul
-    + ' · 초연 기록 ' + T.PREMIERE.map(function (p) { return p.at; }).join('·');
+    + ' · 복원 ' + T.RESTORE.length + '종 ' + T.RESTORE_TOTAL + '조각';
 
   el('cheerTbl').tBodies[0].innerHTML = T.CHEER_TEXT.map(function (r) {
     return '<tr class="amprow"><td style="color:#c49a6a;white-space:nowrap;padding-right:6px">'
@@ -442,7 +442,7 @@
           + '<td class="n">숙련 ' + Math.round(avg(rs, function (r) { return r.skillT; }) * 100) + '%</td>'
           + '<td class="n">' + avg(rs, function (r) { return r.floor; }).toFixed(1) + '층</td>'
           + '<td class="n" style="color:#a8c49a">보통 ' + (norm.length ? pct(norm.filter(function (r) { return r.won; }).length, norm.length) : '—') + '</td>'
-          + '<td class="n">승천 ' + avg(rs, function (r) { return r.asc; }).toFixed(1) + '단</td>'
+          + '<td class="n">재연 ' + avg(rs, function (r) { return r.asc; }).toFixed(1) + '단</td>'
           + '<td style="width:70px"><div class="bar2"><i style="width:'
             + (norm.length ? norm.filter(function (r) { return r.won; }).length / norm.length * 100 : 0) + '%"></i></div></td>'
           + '<td class="n" style="color:#56545e">' + rs.length + '판</td></tr>';
@@ -479,11 +479,11 @@
       + ' · 총 클리어 ' + avg(C, function (c) { return c.clears; }).toFixed(1) + '회'
       + '<br><b style="color:#c6bd95;font-weight:400">보통을 넘긴 사람 ' + pct(fn.length, C.length) + '</b>'
       + (fn.length ? ' (중위 ' + med(fn) + '판째)' : '')
-      + ' · 승천 도달 ' + avg(C, function (c) { return c.maxAsc; }).toFixed(1) + '단'
+      + ' · 재연 도달 ' + avg(C, function (c) { return c.maxAsc; }).toFixed(1) + '단'
       + '<br>계속 지다가 스토리로 내려간 사람 ' + pct(dropped.length, C.length)
       + (dropped.length ? ' (중위 ' + med(dropped.map(function (c) { return c.droppedAt; })) + '판째)' : '');
 
-    // 승천 도달 분포 — 각 단에 새로 열리는 어둠 유물을 같이 보여준다
+    // 재연 도달 분포 — 각 단에 새로 열리는 어둠 유물을 같이 보여준다
     el('ascTbl').tBodies[0].innerHTML = T.ASCENSION.map(function (a) {
       var n = C.filter(function (c) { return c.maxAsc >= a.n; }).length;
       var opens = Object.keys(T.RELICS).filter(function (k) {
@@ -495,20 +495,20 @@
         + '<td style="width:70px"><div class="bar2"><i style="width:' + (n / Math.max(1, C.length) * 100) + '%"></i></div></td>'
         + '<td class="n">' + pct(n, C.length) + '</td></tr>';
     }).join('')
-      + '<tr><td colspan="4" class="note">승천 평균 '
+      + '<tr><td colspan="4" class="note">재연 평균 '
       + avg(C, function (c) { return c.maxAsc; }).toFixed(2) + '단 · 보통을 넘긴 사람 중 2단 이상 '
       + pct(C.filter(function (c) { return c.maxAsc >= 2; }).length,
             Math.max(1, C.filter(function (c) { return c.firstNormal; }).length)) + '</td></tr>';
 
-    // 판 사이에 쌓인 것 — 초연 기록 단계별 도달률
-    el('metaTbl').tBodies[0].innerHTML = T.PREMIERE.map(function (p) {
-      var n = C.filter(function (c) { return c.meta.floors >= p.at; }).length;
-      return '<tr><td class="n" style="color:#c49a6a">누적 ' + p.at + '층</td>'
-        + '<td>' + p.name + '<br><span style="color:#56545e">' + p.desc + '</span></td>'
+    // 판 사이에 쌓인 것 — 복원 목록 항목별 구매율
+    el('metaTbl').tBodies[0].innerHTML = T.RESTORE.map(function (p) {
+      var n = C.filter(function (c) { return (c.owned || []).indexOf(p.id) >= 0; }).length;
+      return '<tr><td class="n" style="color:#c49a6a">' + p.cost + '조각</td>'
+        + '<td>' + p.icon + ' ' + p.name + '<br><span style="color:#56545e">' + p.desc + '</span></td>'
         + '<td style="width:70px"><div class="bar2"><i style="width:' + (n / Math.max(1, C.length) * 100) + '%"></i></div></td>'
         + '<td class="n">' + pct(n, C.length) + '</td></tr>';
     }).join('');
-    el('metaNote').innerHTML = '누적 층수 중위 ' + med(C.map(function (c) { return c.meta.floors; }))
+    el('metaNote').innerHTML = '조각 잔액 중위 ' + med(C.map(function (c) { return c.meta.shards; })) + ' · 누적 층수 중위 ' + med(C.map(function (c) { return c.meta.floors; }))
       + ' · 대본 서고 ' + avg(C, function (c) { return c.meta.seen; }).toFixed(0) + '종'
       + ' · 계승 창고 ' + avg(C, function (c) { return c.meta.vault.length; }).toFixed(1) + '개'
       + '<br>시작 릴 교체 ' + avg(C, function (c) { return c.premiere.swap; }).toFixed(1) + '칸'

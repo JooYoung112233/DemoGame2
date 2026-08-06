@@ -246,12 +246,12 @@
   function pickAsc(ck) {
     var o = ov();
     o.innerHTML = '<h3>저주받은 대본</h3>'
-      + '<div class="sub">승천은 수치를 올리지 않는다. 규칙을 하나씩 더한다.</div>';
+      + '<div class="sub">재연은 수치를 올리지 않는다. 규칙을 하나씩 더한다.</div>';
     var d = document.createElement('div'); d.className = 'cardpick';
     [0].concat(T.ASCENSION.map(function (a) { return a.n; })).forEach(function (lv) {
       var a = lv ? T.ASCENSION[lv - 1] : null, n = document.createElement('div');
       n.className = 'cp'; n.style.width = '186px';
-      n.innerHTML = '<div class="n">' + (lv ? lv + '단 — ' + a.name : '승천 없음') + '</div>'
+      n.innerHTML = '<div class="n">' + (lv ? lv + '단 — ' + a.name : '재연 없음') + '</div>'
         + '<div class="e">' + (lv ? a.desc : '어려움 그대로') + '</div>'
         + (lv > 1 ? '<div class="x">' + (lv - 1) + '단까지 전부 포함</div>' : '');
       n.onclick = function () { startRun(ck, 'hard', lv); };
@@ -469,7 +469,7 @@
       S.stock = {
         cards: Sim.offerCards(S).map(function (id) { return { id: id, cost: 8 + Math.floor(S.rnd() * 6) }; }),
         scripts: Sim.offerScripts(S, 3).map(function (sc) { return { sc: sc, cost: 16 + sc.cost * 5 }; }),
-        // 어둠 유물은 승천 단계로 열린다
+        // 어둠 유물은 재연 단계로 열린다
         relics: T.pickWeighted(Object.keys(T.RELICS).filter(function (k) {
           var r = T.RELICS[k]; return !r.dark || (S.asc.level || 0) >= r.asc;
         }), function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2)
@@ -723,7 +723,7 @@
     document.title = 'The Last Theater — ' + T.CFG.floors + '층 · 캐릭터 '
       + Object.keys(T.CHARS).length + '종 · 공격 ×' + S.diff.atkMul;
     el('tAct').textContent = '제' + S.act + '막 · ' + S.ch.name
-      + ' · ' + S.diff.name + (S.asc.level ? ' 승천 ' + S.asc.level + '단' : '');
+      + ' · ' + S.diff.name + (S.asc.level ? ' 재연 ' + S.asc.level + '단' : '');
     el('tHp').textContent = Math.max(0, Math.round(S.hp)) + '/' + S.maxHp;
     el('tBlock').textContent = Math.round(S.block || 0);
     el('tThorns').textContent = Math.round(S.thorns || 0);
