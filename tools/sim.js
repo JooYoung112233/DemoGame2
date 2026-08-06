@@ -2246,12 +2246,13 @@
     // 첫 난이도 선택 — 선택창이 「무엇을 하러 왔는가」를 묻고 스토리를 권한다.
     // 전원이 보통에서 시작한다고 두면 83% 가 4판째에 내려갔다. 그건 밸런스가 아니라
     // 기본값 문제였다 — 신규에게 로그라이크 난이도를 기본으로 주고 있었던 것이다.
+    // 난이도는 시작할 때 한 번 고르고 여정 내내 바뀌지 않는다 — 세이브가 다르다.
     var startsOnStory = rnd() < (opt.storyFirst == null ? 0.6 : opt.storyFirst);
     var e = 0, unlocked = {}, tried = {}, out = [];
-    var asc = 0, diff = startsOnStory ? 'story' : 'normal', firstClear = null, clears = 0;
+    var asc = 0, diff = opt.diffKey || (startsOnStory ? 'story' : 'normal'), firstClear = null, clears = 0;
     var streak = 0, stopAt = null, stopWhy = null, firstNormal = null, droppedAt = null;
     // 판 사이에 남는 것 — 이게 「다음 판을 할 이유」다
-    var meta = { floors: 0, seen: {}, vault: [], shards: 0, owned: [], souls: {} };
+    var meta = { floors: 0, seen: {}, vault: [], shards: 0, owned: [], souls: {}, codex: {} };
     Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) unlocked[k] = 1; });
     var PKs = Object.keys(POLICIES), fav = PKs[Math.floor(rnd() * PKs.length)];
 
@@ -2275,11 +2276,19 @@
       });
 
       // 이 판이 남기는 대본 조각 — 죽어도 남는다
-      var stageDone = false, epicDone = false;
+      var stageDone = false, epicDone = false, newStage = 0, newEpic = 0;
       (r.stats.snap || []).forEach(function (sn) {
         if (!sn.stages) return;
-        Object.keys(STAGES).forEach(function (k) { if (sn.stages[k].done) stageDone = true; });
-        if (sn.stages._epic) Object.keys(EPIC).forEach(function (k) { if (sn.stages._epic[k].done) epicDone = true; });
+        Object.keys(STAGES).forEach(function (k) {
+          if (!sn.stages[k].done) return;
+          stageDone = true;
+          if (!meta.codex[k]) { meta.codex[k] = 1; newStage = 1; }   // 도감에 처음 들어온다
+        });
+        if (sn.stages._epic) Object.keys(EPIC).forEach(function (k) {
+          if (!sn.stages._epic[k].done) return;
+          epicDone = true;
+          if (!meta.codex['e:' + k]) { meta.codex['e:' + k] = 1; newEpic = 1; }
+        });
       });
       var firstSoul = r.won && !meta.souls[ck];
       if (firstSoul) meta.souls[ck] = 1;
@@ -2310,16 +2319,14 @@
       if (r.won) {
         clears++;
         if (!firstClear) firstClear = i;
-        if (playedDiff === 'story') diff = 'normal';          // 이야기를 봤으니 로그라이크로
-        else if (playedDiff === 'normal') {
-          // 보통을 넘기면 곧바로 재연 1단이 열린다. 「어려움을 또 이겨야 재연」이었을 때
-          // 재연 도달이 0.49단에 머물렀다 — 관문이 두 개였다.
-          if (!firstNormal) firstNormal = i;
-          diff = 'hard'; asc = Math.max(1, asc);
-        } else asc = Math.min(T.ASCENSION.length, asc + 1);
-      } else if (!firstClear && diff === 'normal' && streak >= 2 && rnd() < 0.45) {
-        // 계속 지면 난이도를 내린다. 이 행동이 없으면 스토리 난이도가 아무 역할도 하지 않는다.
-        diff = 'story'; if (!droppedAt) droppedAt = i;
+        // 난이도는 여정 내내 고정이다 — 이야기·보통·어려움이 **세이브가 다르다**.
+        // 개입 이벤트와 서사가 난이도마다 달라서 중간에 바꿀 수 없다.
+        // 예전에는 이야기를 깨면 보통으로 넘어가고, 계속 지면 이야기로 내려갔다.
+        // 그건 하나의 진행으로 본 모델이라 지금 구조와 맞지 않는다.
+        if (playedDiff === 'normal' && !firstNormal) firstNormal = i;
+        // 그 난이도 안에서 재연이 오른다. 보통을 처음 넘기면 재연 1단이 열린다.
+        if (playedDiff === 'story') { /* 이야기에는 재연이 없다 — 결말을 보러 온 자리다 */ }
+        else asc = Math.min(T.ASCENSION.length, Math.max(playedDiff === 'normal' ? 1 : 0, asc + 1));
       }
       // 관전을 위해 이 판을 재현할 수 있는 값을 전부 남긴다
       out.push({ i: i, char: r.char, charKey: ck, policy: r.policy, policyKey: pk, skill: sk.t,
@@ -2338,10 +2345,13 @@
       if (newUnlock) novelty += 0.30;                                  // 이번 판에 캐릭터가 열렸다
       if (newPremiere) novelty += 0.22;                                // 시작 조건이 자랐다
       if (Object.keys(unlocked).filter(function (k) { return !tried[k]; }).length) novelty += 0.16;
-      if (afterP.next) {                                               // 다음 기록이 눈앞이다
-        var need = afterP.next.at - meta.floors;
-        if (need <= 12) novelty += 0.14;
-      }
+      // 다음 복원이 눈앞이다 — 초연 기록을 조각으로 흡수하면서(61장) afterP.next 가
+      // 죽은 분기로 남아 있었다. restored() 에는 next 가 없다.
+      var nx2 = T.nextRestore(meta.owned, meta.shards);
+      if (nx2 && meta.shards >= nx2.cost * 0.6) novelty += 0.16;
+      // 이번 판에 무대나 에픽을 처음 열었다 — 도감에 새 항목이 들어온다
+      if (newStage) novelty += 0.26;
+      if (newEpic) novelty += 0.30;
       if (meta.vault.length) novelty += 0.08;                          // 계승할 유물이 있다
       // 다음 재연 단에서 어둠 유물이 열린다 — 이게 재연을 올릴 이유다.
       // 이걸 빼두면 「더 아픈 같은 게임」이라 2단 이상 도달이 18% 에서 멈췄다.
@@ -2372,7 +2382,7 @@
              unlocked: Object.keys(unlocked), maxAsc: asc,
              meta: { floors: meta.floors, seen: Object.keys(meta.seen).length, vault: meta.vault.slice(),
                      shards: meta.shards, owned: meta.owned.slice() },
-             shards: meta.shards, owned: meta.owned.slice(),
+             shards: meta.shards, owned: meta.owned.slice(), codex: Object.keys(meta.codex),
              premiere: T.restored(meta.owned) };
   }
 
