@@ -590,31 +590,39 @@
   // 축은 셋이다 — 보스 기믹 / 난입 / 관중.
   // 재연을 거듭할수록 객석에 하나씩 더 앉는다 — 구하지 못한 영혼들이다.
   // 볼수록 더 알고, 알수록 더 요구한다. 단계가 숫자가 아니라 「누가 왔는가」다.
+  // 재연 축을 다시 짰다.
+  //
+  // 예전 표는 여덟 중 다섯이 「전투가 길어야」 작동했다(난입·야유). 어릿광대는
+  // 전투당 2.4턴에 끝내서 재연 0단 33% → 6단 34% 로 **아무 영향도 받지 않았고**,
+  // 거울의 배우는 6.4턴이라 20% → 2% 로 무너졌다. 재연이 「느린 덱만 골라 때리는
+  // 사다리」였다. 이제 단마다 겨냥하는 덱이 다르다.
+  //   [긴]  전투가 길수록 아프다   [빠]  빠른 덱을 직접 때린다
+  //   [전]  덱을 가리지 않는다     [보]  보스전에서만
   var ASCENSION = [
-    { n: 1, icon: '🦗', name: '베짱이가 앉았다',
+    { n: 1, icon: '🦗', name: '베짱이가 앉았다', hits: '긴',
       flavor: '여름내 노래만 한 자다. 무대가 부럽다 못해 자꾸 뛰어오른다',
-      desc: '난입 확률 2배',                    intrudeMul: 2 },
-    { n: 2, icon: '⏳', name: '시계를 든 손님',
-      flavor: '자기 차례를 센다',
-      desc: '야유가 8턴부터 시작된다',           stallDelta: -4 },
-    { n: 3, icon: '✂️', name: '검열관',
+      desc: '난입 확률 2배',                       intrudeMul: 2 },
+    { n: 2, icon: '⏳', name: '시계를 든 손님', hits: '빠',
+      flavor: '기다려주지 않는다. 첫 장면부터 팔짱을 낀다',
+      desc: '적이 방어 4 를 두르고 등장한다',        startBlock: 4 },
+    { n: 3, icon: '✂️', name: '검열관', hits: '전',
       flavor: '대본에 빨간 줄을 긋는다',
-      desc: '1막 보스가 기믹을 하나 더 얻는다',   bossExtra: 1 },
-    { n: 4, icon: '🎩', name: '초대받지 않은 일행',
+      desc: '전투 시작 시 릴의 한 배역이 검열된다',  censorStart: 1 },
+    { n: 4, icon: '🎩', name: '초대받지 않은 일행', hits: '긴·보',
       flavor: '한 명이 아니라 둘씩 온다',
-      desc: '한 전투에 난입자가 둘까지 들어온다', intrudeMax: 2 },
-    { n: 5, icon: '🧤', name: '장갑 낀 손',
-      flavor: '웬만해선 손뼉을 치지 않는다',
-      desc: '기립 박수 요구가 130으로 오른다',    cheerMax: 130 },
-    { n: 6, icon: '🚪', name: '열린 뒷문',
+      desc: '난입자가 둘까지 · 1막 보스가 기믹을 하나 더', intrudeMax: 2, bossExtra: 1 },
+    { n: 5, icon: '🧤', name: '장갑 낀 손', hits: '전',
+      flavor: '박수에도 지갑에도 인색하다',
+      desc: '기립 박수 요구 130 · 상점 가격 +15%',  cheerMax: 130, shopMul: 1.15 },
+    { n: 6, icon: '🚪', name: '열린 뒷문', hits: '긴',
       flavor: '누가 들어왔는지 아무도 모른다',
-      desc: '난입자 종류가 늘어난다',            intrudeNew: 1 },
-    { n: 7, icon: '📖', name: '모두가 대본을 읽었다',
+      desc: '난입자 종류가 늘어난다 · 야유가 8턴부터', intrudeNew: 1, stallDelta: -2 },
+    { n: 7, icon: '📖', name: '모두가 대본을 읽었다', hits: '전·보',
       flavor: '객석이 다음 장면을 안다. 배우들도 안다',
-      desc: '보스마다 기믹을 하나 더 얻는다',     bossExtra: 2 },
-    { n: 8, icon: '🕯', name: '마지막 손님',
+      desc: '보스마다 기믹 하나 더 · 전투 시작 시 대본 하나가 봉인된다', bossExtra: 2, sealStart: 1 },
+    { n: 8, icon: '🕯', name: '마지막 손님', hits: '긴',
       flavor: '막이 내려도 자리를 뜨지 않는다',
-      desc: '야유가 6턴부터 · 매 턴 HP −5',      stallDelta: -6, stallDmg: 5 }
+      desc: '야유가 6턴부터 · 매 턴 HP −5',        stallDelta: -4, stallDmg: 5 }
   ];
 
   // 재연으로 보스가 추가로 얻는 기믹 — 각 보스가 「배우는」 순서
@@ -628,7 +636,8 @@
   // 재연 단계를 하나의 수정자로 접는다
   function ascend(level) {
     var m = { intrudeMul: 1, intrudeMax: 1, stallDelta: 0, stallDmg: CFG.stallDmg,
-              cheerMax: CHEER.max, bossExtra: 0, intrudeNew: 0, level: level || 0 };
+              cheerMax: CHEER.max, bossExtra: 0, intrudeNew: 0, level: level || 0,
+              startBlock: 0, censorStart: 0, sealStart: 0, shopMul: 1 };
     ASCENSION.slice(0, level || 0).forEach(function (a) {
       if (a.intrudeMul) m.intrudeMul *= a.intrudeMul;
       if (a.intrudeMax) m.intrudeMax = Math.max(m.intrudeMax, a.intrudeMax);
@@ -637,6 +646,10 @@
       if (a.cheerMax) m.cheerMax = a.cheerMax;
       if (a.bossExtra) m.bossExtra = Math.max(m.bossExtra, a.bossExtra);
       if (a.intrudeNew) m.intrudeNew += a.intrudeNew;
+      if (a.startBlock) m.startBlock = a.startBlock;
+      if (a.censorStart) m.censorStart = 1;
+      if (a.sealStart) m.sealStart = 1;
+      if (a.shopMul) m.shopMul = a.shopMul;
     });
     return m;
   }
@@ -662,6 +675,10 @@
     // 모든 캐릭터에게 기본으로 열려 있다. 일반 플레이에서도 한 번씩 느껴야 하니까.
     curtain: { slots: 1, chainPer: 0.2, chainMax: 3 },
     blockCapPct: 50, thornCap: 24, overflowConv: 50,
+    // 반사만 고정 상한에 갇혀 있었다. 적 HP 는 막마다 커지는데(actHp 0.6→1.0→1.3)
+    // 반사는 24 에서 멈추니, 거울의 배우의 전투 길이가 1막 4.6턴 → 2막 7.7턴으로 뛰고
+    // 거기서 야유에 매 전투 걸렸다. 다른 빌드는 대본 티어가 오르며 화력이 자란다.
+    thornActMul: [1.0, 1.4, 1.8],
     hpBase: 60, hpPerAct: 42, costPerAct: 1,   // 전투가 6개 → 13개로 늘어 소모전이 누적된다
     // 막이 길어지면 관객이 야유한다 — 답이 없는 조합으로 버티는 교착을 끝낸다.
     // 이게 없으면 「죽지도 못하고 60턴」이 전체의 7% 였다. 12턴이면 루즈해지기 전에 조인다.

@@ -23,28 +23,37 @@
     mirror: { name: '거울의 무대', icon: '🪞',
               // 릴 후보가 두 장뿐이면 4장을 못 채운다 — 쇠약을 세 장으로 넓히자 0%→4% 였다.
               reel: ['mirror', 'mask', 'chain'], relic: ['thorns', 'mirrorR', 'crackMirror'],
-              script: function (e) { return !!e.thorns || !!e.pierce; } },
+              script: function (e) { return !!e.thorns || !!e.pierce; },
+              // 반사는 「맞아야 나가는 피해」라 내가 조절할 수 없다 — 거울의 배우는
+              // 화력의 89% 가 반사이고 턴당 대본 피해가 2.5(어릿광대 85.5)다.
+              // 완성하면 쌓아둔 반사가 스스로 나간다. 수동이 능동이 된다.
+              gain: '매 턴 시작 시 쌓인 반사의 절반을 적 전체에게 쏜다' },
     burn:   { name: '화형의 무대', icon: '🔥',
               reel: ['rage', 'candle'], relic: ['embers', 'madBaton'],
-              script: function (e) { return !!e.burn; } },
+              script: function (e) { return !!e.burn; },
+              gain: '화상이 매 턴 인접한 적에게 절반씩 번진다' },
     king:   { name: '왕정의 무대', icon: '👑',
               reel: ['king', 'crown'], relic: ['drumOpen', 'darkScript', 'encore'],
               script: function (e, sc) { var r = sc.requires || [];
-                return r.indexOf('king') >= 0 || r.indexOf('crown') >= 0; } },
+                return r.indexOf('king') >= 0 || r.indexOf('crown') >= 0; },
+              gain: '왕·왕관을 요구하는 대본의 코스트 −1' },
     mask:   { name: '가면의 무대', icon: '🎭',
               reel: ['jester', 'acrobat'], relic: ['stand_in', 'glass'],
-              script: function (e) { return (e.hits || 1) >= 2; } },
+              script: function (e) { return (e.hits || 1) >= 2; },
+              gain: '다타의 타격마다 증폭이 따로 적용된다' },
     curtain:{ name: '막의 무대',   icon: '🎪',
               reel: ['curtain', 'rose', 'shield'], relic: ['longBow', 'encoreCall'],
               // 방어+둔화 두 조건을 다 요구하니 해당 대본이 97종 중 3종뿐이라
               // 480판 동안 한 번도 열리지 않았다. 방어만 본다.
-              script: function (e) { return !!e.block; } },
+              script: function (e) { return !!e.block; },
+              gain: '커튼콜 칸 +1' },
     // 독 대본이 97종 중 7종뿐이라, 기울기를 816층분 받고도 대본이 0.30/3 에서 멈췄다.
     // 독과 둔화를 하나로 묶으면 23종이 되고, 정체성도 선명해진다 —
     // 화형은 태우고 쇠약은 굳힌다.
     poison: { name: '쇠약의 무대', icon: '🩸',
               reel: ['violin', 'tragedy', 'cold'], relic: ['venom', 'glass', 'madBaton'],
-              script: function (e) { return !!e.poison || !!e.slow; } }
+              script: function (e) { return !!e.poison || !!e.slow; },
+              gain: '화상·독·둔화가 매 턴 1씩 깊어진다' }
   };
   // 에픽 무대 — 물건이 아니라 「그렇게 플레이했다」가 조건이다.
   // 일반 무대는 효과를 축으로, 에픽은 시스템을 축으로 삼는다.
@@ -53,26 +62,26 @@
               relic: ['longBow', 'encoreCall'], relicN: 2,
               // 상위 10% 지점(15회)으로 잡았더니 중앙 31층에 열렸다 — 다섯 층 쓰고 끝난다.
               // 누적 지표는 판이 진행돼야 쌓이므로 구조적으로 늦다. 상위 25% 로 내린다.
-              need: { curtainPlays: 13, chainMax: 3 }, known: 18,
+              // 상위 10% 지점으로 다시 잡았다. 52.1 에서 잡을 때는 13 이 상위 25% 였는데
+              // 유품·무대·조용한 기울기가 붙으면서 상위 30% 로 헐거워졌다.
+              need: { curtainPlays: 22, chainMax: 4 },
               gain: '커튼콜이 매 턴 온다' },
     frenzy: { name: '광란의 객석', icon: '👏',
               // 재연 0 의 환호 유물은 「큰 극장」(+40) 과 「빠른 인사」(−25) 뿐이라
               // 서로 정반대다. 2개를 요구하면 상충하는 유물을 둘 다 사게 만든다.
               relic: ['bigHouse', 'quickBow', 'hotHouse', 'emptyHouse'], relicN: 1,
-              need: { ovations: 16, hotWins: 4 }, known: 20,
+              need: { ovations: 17, hotWins: 7 },
               gain: '「달아오른 무대」가 꺼지지 않는다' }
   };
   function epicProg(S, key) {
     var e = EPIC[key], st = S.stats, need = epicNeedAt(S, key);
+    // 에픽은 재연에서만 열린다(69장). 본편은 「끝내는 것」, 재연은 「올라가는 것」.
+    if (!(S.asc && S.asc.level > 0)) return { relic: 0, done: false, p: 0, have: [] };
     var relic = S.relics.filter(function (k) { return e.relic.indexOf(k) >= 0; }).length;
     var parts = [Math.min(1, relic / e.relicN)], done = relic >= e.relicN;
-    // 판을 거듭한 사람의 것이다 — 아는 카드가 이만큼 쌓여야 열린다(67장).
-    // 에픽 조건이 「이 판에 잘했나」뿐이면 첫 판에도 열려버린다.
-    if (e.known) {
-      var kn = S.known ? Object.keys(S.known).length : 26;
-      parts.push(Math.min(1, kn / e.known));
-      if (kn < e.known) done = false;
-    }
+    // 「아는 카드」 조건은 뺐다 — 3판이면 포화돼서 관문 노릇을 못 하고,
+    // 재연 단수로 바꾸면 목표가 아니라 타이머가 된다.
+    // 에픽은 「그 시스템으로 판을 짰다」는 증명이어야 한다(52장).
     Object.keys(need).forEach(function (k) {
       var have = st[k] || 0;
       parts.push(Math.min(1, have / need[k]));
@@ -149,6 +158,14 @@
           + 0.3 * Math.min(1, script / need.script);
     return { reel: reel, relic: relic, script: script, p: p,
              done: reel >= need.reel && relic >= need.relic && script >= need.script };
+  }
+  // 완성된 무대 — 규칙이 실제로 바뀌는 지점(51.2 「부분은 수치, 완성은 규칙」)
+  function stageOn(S, key) {
+    if (!S.useStages) return false;
+    if (S.stageDoneCache && S.stageDoneCache[key] != null) return S.stageDoneCache[key];
+    var d = stageProg(S, key).done;
+    (S.stageDoneCache = S.stageDoneCache || {})[key] = d;
+    return d;
   }
   // 기울기가 향한 무대 — 가장 많이 찬 것 하나. 플레이어가 선포하지 않는다.
   //
@@ -379,7 +396,14 @@
   // ── 코스트 ────────────────────────────────────────────────
   // 캐릭터가 코스트를 바꿀 수 있으니 한 곳에서만 계산한다.
   // 「악장」은 악상이 아닌 대본에 +1 을 낸다 — 전문화의 대가다.
-  function costOf(ch, sc) {
+  function costOf(ch, sc, S) {
+    if (S && stageOn(S, 'king')) {
+      var rq = sc.requires || [];
+      if (rq.indexOf('king') >= 0 || rq.indexOf('crown') >= 0) return Math.max(1, costOf0(ch, sc) - 1);
+    }
+    return costOf0(ch, sc);
+  }
+  function costOf0(ch, sc) {
     var c = sc.cost;
     if (ch && ch.offFamCost && ch.mainFam) {
       var f = T.scriptFam(sc);
@@ -1101,7 +1125,7 @@
     return { ch: S.ch, w: w, rnd: S.rnd, S: S, relax: relicN(S, 'stand_in'), cheerMax: S.asc.cheerMax,
       embers: relicN(S, 'embers'), venom: relicN(S, 'venom'),
       encore: relicN(S, 'encore'), encoreCall: relicN(S, 'encoreCall'), actBurn: S.actBurn || 0,
-      thornCap: T.CFG.thornCap * (S.ch.thornsMul || 1) + relicN(S, 'thorns') * 8
+      thornCap: T.CFG.thornCap * (T.CFG.thornActMul[S.act - 1] || 1) * (S.ch.thornsMul || 1) + relicN(S, 'thorns') * 8
                 + relicN(S, 'crackMirror') * 12,
       blockCapPct: T.CFG.blockCapPct * (relicN(S, 'crackMirror') ? 0.8 : 1),
       statusMul: relicN(S, 'madBaton') ? 2 : 1,
@@ -1120,6 +1144,37 @@
       propAoe: S.propAoe || 0, propReflect: S.propReflect || 0, propBlood: S.propBlood || 0,
       overflowMul: (S.ch.overflowMul || 1) * (relicN(S, 'mirrorR') ? 2 : 1) };
   }
+  // 완성된 무대가 매 턴 하는 일. 51.2 「완성은 규칙」이 여기서 실제로 일어난다.
+  // 이 함수가 없던 동안 무대는 「조건을 채운 비율」일 뿐 게임을 바꾸지 않았다 —
+  // 거울의 배우가 무대 완성 1위(55%)인데 클리어 최하위였던 이유다.
+  function stageTurn(S, ctx) {
+    if (!S.useStages) return;
+    var live = S.foes.filter(function (e) { return e.hp > 0; });
+    if (!live.length) return;
+    // 🪞 쌓인 반사의 절반이 스스로 나간다 — 맞기를 기다리지 않아도 된다
+    if (stageOn(S, 'mirror') && S.thorns > 0) {
+      var shot = Math.round(S.thorns * 0.5);
+      live.forEach(function (e) { T.damageEnemy(S, e, shot, { aoe: 1, rnd: S.rnd }); });
+      S.stats.mirrorShot = (S.stats.mirrorShot || 0) + shot * live.length;
+      lg(S, 'b', '  🪞 거울의 무대 — 반사 ' + shot + ' 이 쏟아진다');
+    }
+    // 🔥 화상이 인접한 적에게 번진다
+    if (stageOn(S, 'burn')) {
+      var burning = live.filter(function (e) { return (e.burn || 0) > 0; });
+      burning.forEach(function (e) {
+        live.forEach(function (o) { if (o !== e) o.burn = Math.max(o.burn || 0, Math.floor(e.burn / 2)); });
+      });
+    }
+    // 🩸 상태이상이 매 턴 깊어진다
+    if (stageOn(S, 'poison')) {
+      live.forEach(function (e) {
+        if (e.burn) e.burn++;
+        if (e.poison) e.poison++;
+        if (e.slow) e.slow++;
+      });
+    }
+  }
+
   // ── 유품 — 전투당 한 번의 개입 ────────────────────────────
   //
   // 봇은 「좋은 턴을 만들려고 아껴둔다」를 못 한다(커튼콜과 같은 한계 · 50.4).
@@ -1259,8 +1314,33 @@
 
   function fight(S, w, nd) {
     S.stats.fights++;
+    S.fightTurn0 = S.stats.turns;
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
+    S.stageDoneCache = null;      // 무대 완성 여부는 전투마다 다시 본다 —
+                                  // 판 초반에 한 번 캐시되면 완성해도 영영 false 로 남는다
+    // ✂️ 검열관 — 릴에서 배역 하나가 두 턴 동안 검열된다.
+    //
+    // 「가장 많은 배역」으로 잡았더니 이 축 하나가 4단 승률을 14% → 7% 로 반토막 냈다.
+    // 우리 게임은 릴을 좁혀 특정 대본을 노리는 구조라, 최다 배역을 빼는 것은
+    // 덱의 심장을 정확히 겨냥하는 일이다. 지속을 3턴 → 2턴으로 줄여도 꿈쩍하지 않았다.
+    // 무작위로 뽑으면 좁힌 덱은 여전히 맞을 확률이 높고 넓은 덱은 덜 맞는다 —
+    // 「집중 빌드를 때린다」는 의도는 남고 세기만 내려간다.
+    if (S.asc.censorStart) {
+      var ids = Object.keys(S.deck);
+      if (ids.length) {
+        var pickC = ids[Math.floor(S.rnd() * ids.length)];
+        S.censor = { id: pickC, turns: 2 };
+        lg(S, 'e', '  ✂️ ' + T.CARDS[pickC].name + ' 이 두 턴 동안 검열됐다');
+      }
+    }
+    // 📖 모두가 대본을 읽었다 — 가장 값이 큰 대본 하나가 봉인된 채 시작한다
+    if (S.asc.sealStart && S.scripts.length) {
+      var best = null, bv = -1e9;
+      S.scripts.forEach(function (sc) { var v = scriptRaw(S, S.w, sc); if (v > bv) { bv = v; best = sc; } });
+      if (best) { S.sealed[best.id] = 1; S.sealTurns = 1;   // 첫 턴만
+        lg(S, 'e', '  📖 「' + best.name + '」 이 한 턴 봉인됐다'); }
+    }
     S.foes = pickFoes(S, nd).map(function (b) {
       // 재연 — 보스가 기믹을 하나씩 더 배운다. 수치가 아니라 규칙이 늘어난다.
       if (b.boss && S.asc.bossExtra) {
@@ -1306,7 +1386,7 @@
     if (S.cheer == null) S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
     // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
     // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
-    S.fThorns = 0;
+    S.fThorns = 0; S.thornsMark = 0; S.stallSkip = 0;
     S.propAoe = 0; S.propReflect = 0; S.propStrip = null; S.propCurtain = 0; S.propHold = 0; S.propBlood = 0; S.fightIds = {};
     S.curtainIn = (S.curtainNext || []).slice();   // 지난 무대를 닫은 대본들
     S.curtainNext = [];
@@ -1319,6 +1399,14 @@
     var ctx = ctxOf(S, w); S.ctx = ctx;
     lg(S, 't', '── ' + S.foes[0].name + (S.foes.length > 1 ? ' ×' + S.foes.length : '')
       + (S.foes[0].demands ? ' (요구: ' + S.foes[0].demands + ')' : '') + ' ──');
+
+    // ⏳ 시계를 든 손님 — 적이 방어를 두르고 등장한다.
+    //
+    // 처음에는 「적이 첫 턴부터 움직인다」로 잡았는데 27% → 7% 로 무너졌다.
+    // 하나만 걸어도 마찬가지였다(→10%) — 그건 행동을 앞당기는 게 아니라
+    // 「죽기 전에 못 때리던 적이 반드시 한 번 때린다」가 되기 때문이다.
+    // 방어는 한 번 뚫으면 끝이라 빠른 덱의 첫 타를 흡수하되 누적되지 않는다.
+    if (S.asc.startBlock) S.foes.forEach(function (f) { f.block = (f.block || 0) + S.asc.startBlock; });
 
     // 난입 — 공연에서는 확률로, 비극에서는 확정으로. 한 턴 미리 예고한다.
     S.intrudeQ = queueIntruders(S, nd);
@@ -1350,6 +1438,7 @@
         }
         S.intrudeOn = S.intrudeQ.length ? S.intrudeQ[0].on : 0;
       }
+      if (S.sealTurns > 0 && --S.sealTurns === 0) S.sealed = {};   // 📖 봉인이 풀린다
       autoSpin(S);
       var rp = 1 - Math.pow(0.9, relicN(S, 'respin'));
       if (rp > 0 && S.rnd() < rp) { autoSpin(S); lg(S, 'e', '  🔄 무대를 다시 올렸다'); }
@@ -1366,6 +1455,7 @@
           return '「' + (T.SCRIPT_BY_ID[id] || {}).name + '」';
         }).join(' '));
       }
+      stageTurn(S, ctx);   // 완성된 무대의 규칙 — 매 턴 시작
       tryProp(S, ctx);   // 유품 — 스핀을 보고 나서, 계획을 세우기 전에
       lg(S, 't', '턴 ' + S.turn + ' 무대 — ' + S.stage.map(function (x) { return T.CARDS[x].name; }).join(' · '));
       tr(S, 'spin', '턴 ' + S.turn + ' 무대');
@@ -1429,6 +1519,10 @@
         // 그러려면 시스템을 실제로 몇 번 썼는지를 세어야 한다.
         if (a.sc.curtain) S.stats.curtainPlays = (S.stats.curtainPlays || 0) + 1;
         S.stats.cheerPeak = Math.max(S.stats.cheerPeak || 0, C.cheer || 0);
+        // 실제로 상연한 것만 센다 — applyPlay 는 계획 탐색 안에서도 불린다
+        var _e = T.scriptEffect(a.sc, S.ch);
+        S.stats.scrDmg = (S.stats.scrDmg || 0) + (_e.dmg || 0) + (_e.aoe || 0);
+        S.stats.thornAdd = (S.stats.thornAdd || 0) + (_e.thorns || 0) * (S.ch.thornsMul || 1);
         S.stats.plays++;
         S.stats.byTier[a.sc.tier] = (S.stats.byTier[a.sc.tier] || 0) + 1;
         S.stats.byScript[a.sc.name] = (S.stats.byScript[a.sc.name] || 0) + 1;
@@ -1560,11 +1654,16 @@
     var stallAt = Math.max(4, T.CFG.stallTurn + S.asc.stallDelta)
       + (S.foes.some(function (f) { return f.boss; }) ? 6 : 0);
     if (relicN(S, 'emptyHouse')) stallAt = 1e9;      // 어둠 유물 — 야유가 오지 않는다
-    if (S.turn >= stallAt) {
+    // 반사는 맞아야 나가는 피해라 구조적으로 느리다 — 거울의 배우가 전투당 6.4턴,
+    // 어릿광대가 2.4턴이었다. 그런데 재연은 야유만 앞당긴다(2단 8턴 · 8단 6턴).
+    // 그래서 재연이 「느린 덱만 골라 때리는 사다리」가 됐다 — 거울의 배우 20% → 2%.
+    // 되돌려주고 있으면 관객은 지루해하지 않는다. 그 턴은 정체로 세지 않는다.
+    if (S.fThorns > (S.thornsMark || 0)) { S.thornsMark = S.fThorns; S.stallSkip = (S.stallSkip || 0) + 1; }
+    if (S.turn - (S.stallSkip || 0) >= stallAt) {
       S.foes.forEach(function (f) { if (f.hp > 0) f.atk = Math.ceil(f.atk * (1 + T.CFG.stallAtkPer)); });
       S.hp -= S.asc.stallDmg;
       S.cheer = Math.max(0, S.cheer + T.CHEER.coolPerTurn);
-      if (S.turn === stallAt) lg(S, 'e', '  😠 관객이 야유한다 — 이제 매 턴 적이 세진다');
+      if (S.turn - (S.stallSkip || 0) === stallAt) lg(S, 'e', '  😠 관객이 야유한다 — 이제 매 턴 적이 세진다');
     }
     var gr = gimmicks(S);
     if (gr) return gr;
@@ -1718,6 +1817,7 @@
     // 커튼콜 — 막을 닫은 대본이 다음 무대의 1턴에 오른다
     if (S.lastId) {
       var slots = (S.ch.curtainSlots || T.CFG.curtain.slots) + (S.growth.curtain || 0)
+        + (stageOn(S, 'curtain') ? 1 : 0)
                 + relicN(S, 'longBow');
       // 🎦 닫힌 막 — 무대를 닫은 대본이 아니라 「이어가려던 대본」을 다음 커튼콜로 보낸다.
       // 종막의 배우가 연속을 잇지 못하고 끊기는 것을 한 번 되돌린다.
@@ -1746,6 +1846,11 @@
     // 환호를 높게 유지한 채 전투를 끝냈나 — 「달아오른 무대」를 지켰다는 증명
     if ((S.cheer || 0) >= (S.asc.cheerMax || T.CHEER.max) * 0.75)
       S.stats.hotWins = (S.stats.hotWins || 0) + 1;
+    var _a = S.act;
+    S.stats.actTurns = S.stats.actTurns || {1:0,2:0,3:0};
+    S.stats.actFights = S.stats.actFights || {1:0,2:0,3:0};
+    S.stats.actTurns[_a] += S.turn; S.stats.actFights[_a]++;
+    S.stats.thornDmg = (S.stats.thornDmg || 0) + (S.fThorns || 0);
     lg(S, 's', '── 통과 · ' + S.turn + '턴 · HP ' + Math.round(S.hp) + ' · 골드 +' + g + ' ──');
   }
 
@@ -2001,7 +2106,7 @@
     S.stats.shops.push(rec);
     S.shopRec = rec;
     sellReels(S, w);                    // 먼저 팔아서 자금을 만든 다음 산다
-    var cards = offerCards(S).map(function (id) { return { id: id, cost: 8 + Math.floor(S.rnd() * 6) }; });
+    var cards = offerCards(S).map(function (id) { return { id: id, cost: Math.round((8 + Math.floor(S.rnd() * 6)) * (S.asc.shopMul || 1)) }; });
     // 1종은 값싼 재료다 — 10골드. 세 칸 전부에서 뽑는다.
     //
     // 「한 칸으로 제한하면 상점의 질문이 살아난다」고 보고 조여봤는데 대가가 컸다:
@@ -2009,7 +2114,7 @@
     // 노출을 절반으로 줄이면 1종 26종 중 특정 대본이 뜰 기대값이 거의 0 이 된다.
     // 그리고 3칸이 랜덤이라 실제로는 평균 1칸쯤만 1종이다 — 도배되지 않는다.
     var scripts = offerScripts(S, 3, true).map(function (sc) {
-      return { sc: sc, cost: sc.tier === 'one' ? 10 : 16 + sc.cost * 5 };
+      return { sc: sc, cost: Math.round((sc.tier === 'one' ? 10 : 16 + sc.cost * 5) * (S.asc.shopMul || 1)) };
     });
     // 어둠 유물은 재연 단계로 열린다 — 재연이 새 물건을 준다
     var pool2 = Object.keys(T.RELICS).filter(function (k) {
@@ -2019,7 +2124,7 @@
     // 유물은 막이 오를수록 비싸다 — 후반에 골드가 남는 것을 막는다
     var rmul = T.CFG.gold.relicActMul[S.act - 1] || 1;
     var relics = tiltRelics(S, T.pickWeighted(pool2, function (k) { return T.RELICS[k].dark ? 1.8 : 1; }, S.rnd, 2))
-      .map(function (k) { return { k: k, cost: Math.round(T.RELICS[k].cost * rmul) }; });
+      .map(function (k) { return { k: k, cost: Math.round(T.RELICS[k].cost * rmul * (S.asc.shopMul || 1)) }; });
     // 대본 승급 — 보유 대본 하나의 코스트를 1 내린다.
     // 대본 상한(7장)과 부딪히지 않는 지출처다. 있는 것을 강하게 하니까.
     var ups = S.scripts.filter(function (sc) { return sc.cost > 1 && !sc.upgraded; })
@@ -2515,6 +2620,8 @@
     S.stats.fights++;
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false; S.over = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
+    S.stageDoneCache = null;      // 무대 완성 여부는 전투마다 다시 본다 —
+                                  // 판 초반에 한 번 캐시되면 완성해도 영영 false 로 남는다
     // 환호는 전투가 끝나도 남는다. 막이 바뀔 때만 초기화된다 (goTo 에서).
     if (S.cheer == null) S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
     // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
