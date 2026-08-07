@@ -796,6 +796,8 @@
                costUsed: 0, costMax: 0, plays: 0, rerolls: 0, byTier: {}, byScript: {}, fights: 0,
                snap: [] }
     };
+    // 대본 해금 — 써본 카드의 조합만 풀에 들어온다. opt.known 이 없으면 전부 열린 상태.
+    S.known = opt.known || null;
     S.useStages = !!opt.stages;
     S.useProps = !!opt.props;
     S.prop = opt.props ? T.propOf(opt.charKey) : null;   // 유품은 그 캐릭터 것을 들고 시작한다
@@ -860,7 +862,7 @@
   function finish(S, won, killedBy) {
     var st = S.stats;
     return { won: won, killedBy: killedBy, char: S.ch.name, charKey: keyOf(T.CHARS, S.ch),
-      policy: S.pol.name, skill: S.sk.name, w: S.w, feat: S.feat, seenIds: S.seenIds || {},
+      policy: S.pol.name, skill: S.sk.name, w: S.w, feat: S.feat, seenIds: S.seenIds || {}, knownCards: S.knownCards || {},
       floor: S.at ? S.at.f + 1 : 0, nodes: st.nodes, turns: st.turns,
       hp: Math.max(0, Math.round(S.hp)), maxHp: S.maxHp, gold: S.gold,
       deck: Object.assign({}, S.deck), scripts: S.scripts.map(function (s) { return s.name; }),
@@ -1040,7 +1042,14 @@
   function watchFeats(S, sc, aliveBefore) {
     if (!S.feat) S.feat = {};
     if (!S.seenIds) S.seenIds = {};
-    S.seenIds[sc.id] = 1;                       // 대본 서고에 남는다
+    S.seenIds[sc.id] = 1;                       // 대본 서고에 남는다 (가중치)
+    // 써본 카드를 기억한다 — 이 카드들의 조합이 다음 판 풀에 들어온다.
+    // 97종을 첫 판부터 다 만나면 조합을 배울 수가 없다.
+    if (!S.knownCards) S.knownCards = {};
+    (sc.requires || []).forEach(function (c) { S.knownCards[c] = 1; });
+    if (sc.requiresFam) S.stage.forEach(function (id) {
+      if ((T.CARDS[id] || {}).fam === sc.requiresFam) S.knownCards[id] = 1;
+    });
     var eff = sc.effect || {};
     var aoe = !!eff.aoe || ((S.ch.aoeFams || []).length && T.scriptFam(sc)
               && S.ch.aoeFams.indexOf(T.scriptFam(sc)) >= 0);
@@ -1786,9 +1795,22 @@
     }
     return out;
   }
-  function offerScripts(S, n) {
+  // shop 이면 1종도 낸다. 보상에서 1종을 뺀 것은 「1종 반복이 정답이 되면 안 된다」였고
+  // 그 원칙은 코스트당 값(1종 11.0 / 3종 17.5 · 49장)으로 이미 지켜진다. 그런데 그 여파로
+  // 1종 26종 중 15종이 도달 불가가 됐다 — 시작 대본으로만 들어오기 때문이다(64.2).
+  // 상점에만 싸게 두면 「무대 조건을 채우는 값싼 재료」가 되고 스팸은 손패 상한이 막는다.
+  // 그 대본의 재료를 전부 써봤는가. 계열 대본은 그 계열 카드를 하나라도 알면 된다.
+  function knownScript(S, sc) {
+    var K = S.known; if (!K) return true;
+    if (sc.requiresFam) return Object.keys(K).some(function (c) { return (T.CARDS[c] || {}).fam === sc.requiresFam; });
+    return (sc.requires || []).every(function (c) { return K[c]; });
+  }
+  function offerScripts(S, n, shop) {
     var owned = {}; S.scripts.forEach(function (s) { owned[s.id] = 1; });
-    var pool = T.SCRIPTS.filter(function (s) { return !owned[s.id] && s.tier !== 'one'; });
+    var pool = T.SCRIPTS.filter(function (sc) {
+      if (owned[sc.id] || (!shop && sc.tier === 'one')) return false;
+      return knownScript(S, sc);
+    });
     var seen = (S.meta && S.meta.seen) || {};
     var tk = tiltAt(S);
     var tst = (tk && S.rnd() < TILT_P.script && stageProg(S, tk).script < needAt(S).script) ? STAGES[tk] : null;
@@ -1963,7 +1985,15 @@
     S.shopRec = rec;
     sellReels(S, w);                    // 먼저 팔아서 자금을 만든 다음 산다
     var cards = offerCards(S).map(function (id) { return { id: id, cost: 8 + Math.floor(S.rnd() * 6) }; });
-    var scripts = offerScripts(S, 3).map(function (sc) { return { sc: sc, cost: 16 + sc.cost * 5 }; });
+    // 1종은 값싼 재료다 — 10골드. 세 칸 전부에서 뽑는다.
+    //
+    // 「한 칸으로 제한하면 상점의 질문이 살아난다」고 보고 조여봤는데 대가가 컸다:
+    // 살아나는 대본이 14/15 → 4/15 로 돌아갔다. 상점 방문이 판당 2.15회뿐이라
+    // 노출을 절반으로 줄이면 1종 26종 중 특정 대본이 뜰 기대값이 거의 0 이 된다.
+    // 그리고 3칸이 랜덤이라 실제로는 평균 1칸쯤만 1종이다 — 도배되지 않는다.
+    var scripts = offerScripts(S, 3, true).map(function (sc) {
+      return { sc: sc, cost: sc.tier === 'one' ? 10 : 16 + sc.cost * 5 };
+    });
     // 어둠 유물은 재연 단계로 열린다 — 재연이 새 물건을 준다
     var pool2 = Object.keys(T.RELICS).filter(function (k) {
       var r = T.RELICS[k];
@@ -2255,7 +2285,7 @@
     // 도감만은 계정 공유다. 조각·복원·재연·해금은 난이도 세이브 안에 갇히지만,
     // 도감은 「이 무대가 존재한다는 지식」이지 능력치가 아니다(65.5).
     var meta = { floors: 0, seen: {}, vault: [], shards: 0, owned: [], souls: {},
-                 codex: opt.codex || {} };
+                 codex: opt.codex || {}, known: opt.known || {} };
     Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) unlocked[k] = 1; });
     var PKs = Object.keys(POLICIES), fav = PKs[Math.floor(rnd() * PKs.length)];
 
@@ -2270,7 +2300,9 @@
       var pk = rnd() < 0.28 ? PKs[Math.floor(rnd() * PKs.length)] : fav;
       var playedDiff = diff, playedAsc = asc;   // 기록은 실제로 플레이한 난이도로 남긴다
       var runSeed = ((opt.seed | 0) + i * 104729) | 0;
-      var r = run({ seed: runSeed, charKey: ck, diffKey: diff,
+      // 시작 릴의 카드는 이미 손에 쥐고 시작하므로 아는 것으로 친다
+      Object.keys(T.CHARS[ck].deck).forEach(function (c) { meta.known[c] = 1; });
+      var r = run({ seed: runSeed, charKey: ck, diffKey: diff, known: meta.known,
                     policyKey: pk, skillObj: sk, asc: asc, meta: meta,
                     stages: opt.stages, snap: opt.snap });
       var newUnlock = 0;
@@ -2309,6 +2341,7 @@
       }
       var afterP = T.restored(meta.owned);
       Object.keys(r.seenIds || {}).forEach(function (k) { meta.seen[k] = 1; });
+      Object.keys(r.knownCards || {}).forEach(function (k) { meta.known[k] = 1; });
       if (r.relics.length) {
         // 그 판에서 가장 값이 큰 유물 하나가 창고에 남는다
         var keep = r.relics[0];
@@ -2385,7 +2418,7 @@
              unlocked: Object.keys(unlocked), maxAsc: asc,
              meta: { floors: meta.floors, seen: Object.keys(meta.seen).length, vault: meta.vault.slice(),
                      shards: meta.shards, owned: meta.owned.slice() },
-             shards: meta.shards, owned: meta.owned.slice(), codex: Object.keys(meta.codex),
+             shards: meta.shards, owned: meta.owned.slice(), codex: Object.keys(meta.codex), known: Object.keys(meta.known),
              premiere: T.restored(meta.owned) };
   }
 
