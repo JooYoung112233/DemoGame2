@@ -2252,7 +2252,10 @@
     var asc = 0, diff = opt.diffKey || (startsOnStory ? 'story' : 'normal'), firstClear = null, clears = 0;
     var streak = 0, stopAt = null, stopWhy = null, firstNormal = null, droppedAt = null;
     // 판 사이에 남는 것 — 이게 「다음 판을 할 이유」다
-    var meta = { floors: 0, seen: {}, vault: [], shards: 0, owned: [], souls: {}, codex: {} };
+    // 도감만은 계정 공유다. 조각·복원·재연·해금은 난이도 세이브 안에 갇히지만,
+    // 도감은 「이 무대가 존재한다는 지식」이지 능력치가 아니다(65.5).
+    var meta = { floors: 0, seen: {}, vault: [], shards: 0, owned: [], souls: {},
+                 codex: opt.codex || {} };
     Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) unlocked[k] = 1; });
     var PKs = Object.keys(POLICIES), fav = PKs[Math.floor(rnd() * PKs.length)];
 
