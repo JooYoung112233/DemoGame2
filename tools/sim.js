@@ -53,19 +53,26 @@
               relic: ['longBow', 'encoreCall'], relicN: 2,
               // 상위 10% 지점(15회)으로 잡았더니 중앙 31층에 열렸다 — 다섯 층 쓰고 끝난다.
               // 누적 지표는 판이 진행돼야 쌓이므로 구조적으로 늦다. 상위 25% 로 내린다.
-              need: { curtainPlays: 13, chainMax: 3 },
+              need: { curtainPlays: 13, chainMax: 3 }, known: 18,
               gain: '커튼콜이 매 턴 온다' },
     frenzy: { name: '광란의 객석', icon: '👏',
               // 재연 0 의 환호 유물은 「큰 극장」(+40) 과 「빠른 인사」(−25) 뿐이라
               // 서로 정반대다. 2개를 요구하면 상충하는 유물을 둘 다 사게 만든다.
               relic: ['bigHouse', 'quickBow', 'hotHouse', 'emptyHouse'], relicN: 1,
-              need: { ovations: 16, hotWins: 4 },
+              need: { ovations: 16, hotWins: 4 }, known: 20,
               gain: '「달아오른 무대」가 꺼지지 않는다' }
   };
   function epicProg(S, key) {
     var e = EPIC[key], st = S.stats, need = epicNeedAt(S, key);
     var relic = S.relics.filter(function (k) { return e.relic.indexOf(k) >= 0; }).length;
     var parts = [Math.min(1, relic / e.relicN)], done = relic >= e.relicN;
+    // 판을 거듭한 사람의 것이다 — 아는 카드가 이만큼 쌓여야 열린다(67장).
+    // 에픽 조건이 「이 판에 잘했나」뿐이면 첫 판에도 열려버린다.
+    if (e.known) {
+      var kn = S.known ? Object.keys(S.known).length : 26;
+      parts.push(Math.min(1, kn / e.known));
+      if (kn < e.known) done = false;
+    }
     Object.keys(need).forEach(function (k) {
       var have = st[k] || 0;
       parts.push(Math.min(1, have / need[k]));
@@ -1026,6 +1033,16 @@
     // 비극(엘리트)은 막 보스를 다시 쓰지 않는다 — 2층에 기믹 보스가 나오면 온보딩이 끊긴다.
     // 대신 「난입이 확정된 공연」이다. 위험의 형태가 보스가 아니라 난입이다.
     if (nd.type === 'elite') {
+      // 🎭 분장실 열쇠 — 에픽은 「누적」이라 구조적으로 늦다(중앙 25층). 비극을 넘기면 당겨준다.
+      if (S.useStages) {
+        var ek2 = epicTilt(S) || Object.keys(EPIC)[0];
+        var need2 = epicNeedAt(S, ek2);
+        Object.keys(need2).forEach(function (k) {
+          S.stats[k] = (S.stats[k] || 0) + Math.ceil(need2[k] * 0.3);
+        });
+        S.stats.keys = (S.stats.keys || 0) + 1;
+        lg(S, 's', '  🎭 분장실 열쇠 — ' + EPIC[ek2].icon + ' ' + EPIC[ek2].name + ' 이 가까워졌다');
+      }
       var n2 = base.solo ? 1 : Math.min(2, base.maxCount || 2);
       var out2 = []; for (var j = 0; j < n2; j++) out2.push(base);
       return out2;
@@ -2134,6 +2151,8 @@
     if (id === 'beggar') return (S.gold < 25 && S.hp > S.maxHp * 0.65) ? 9 - hpPart(0.18) * 0.4 : -7;
     if (id === 'merge')  return deckSize(S) > T.CFG.gold.reelMin + 2 ? 8 : -3;
     if (id === 'burning') return S.scripts.length > 5 ? 7 * w.status : -5;
+    if (id === 'invite') return tiltAt(S) ? 34 : 2;      // 무대를 노리는 중이면 가장 값이 크다
+    if (id === 'folio')  return 12;                      // 다음 판을 위한 것 — 이 판에는 도움이 안 된다
     return -1;
   }
 
@@ -2211,6 +2230,40 @@
       if (w2) S.scripts = S.scripts.filter(function (x) { return x !== w2; });
       S.actBurn = (S.actBurn || 0) + 2;             // 이번 막 동안 화상 +2
       lg(S, 'e', '    🔥 「' + (w2 ? w2.name : '') + '」 을 태웠다 — 이번 막 화상 +2');
+      return;
+    }
+    // 🎫 초대장 — 노리는 무대의 미충족 조건 하나를 즉시 채운다.
+    // 조건이 누적뿐이면 시간이 곧 조건이라 판마다 속도가 같다(53.2).
+    if (id === 'invite') {
+      var tk = tiltAt(S); if (!tk) return;
+      var st = STAGES[tk], g = stageProg(S, tk), need = needAt(S);
+      if (g.relic < need.relic) {
+        var want = st.relic.filter(function (k) {
+          var rr = T.RELICS[k]; return !relicN(S, k) && (!rr.dark || (S.asc.level || 0) >= rr.asc); });
+        if (want.length) { takeRelic(S, want[0]); lg(S, 'e', '    🎫 ' + T.RELICS[want[0]].name); return; }
+      }
+      if (g.reel < need.reel) {
+        var give = need.reel - g.reel, card = st.reel[0];
+        for (var q = 0; q < give && deckSize(S) < T.CFG.reelMax; q++) S.deck[card] = (S.deck[card] || 0) + 1;
+        lg(S, 'e', '    🎫 ' + T.CARDS[card].name + ' ' + give + '장'); return;
+      }
+      if (g.script < need.script) {
+        var cand = T.SCRIPTS.filter(function (sc) {
+          return knownScript(S, sc) && st.script(sc.effect || {}, sc)
+              && !S.scripts.some(function (x) { return x.id === sc.id; }); });
+        if (cand.length) { S.scripts.push(cand[Math.floor(S.rnd() * cand.length)]);
+          lg(S, 'e', '    🎫 대본을 한 권 얻었다'); }
+      }
+      return;
+    }
+    // 📜 낡은 대본철 — 아직 못 본 무대 하나를 도감에 등록한다
+    if (id === 'folio') {
+      if (!S.meta) return;
+      var cx = S.meta.codex || (S.meta.codex = {});
+      var un = Object.keys(STAGES).filter(function (k) { return !cx[k]; });
+      if (un.length) { var pick2 = un[Math.floor(S.rnd() * un.length)];
+        cx[pick2] = 1; S.stats.folio = (S.stats.folio || 0) + 1;
+        lg(S, 'e', '    📜 ' + STAGES[pick2].icon + ' ' + STAGES[pick2].name + ' 이 도감에 실렸다'); }
       return;
     }
   }
