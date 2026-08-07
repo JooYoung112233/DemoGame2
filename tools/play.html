@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>The Last Theater — 플레이 시뮬레이터</title>
+<title>UNDERSTUDY — 플레이 시뮬레이터</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body { background:#0b0b0e; color:#b9b4ab; min-height:100vh; padding:12px; gap:12px;
@@ -204,7 +204,7 @@
   function showTitle() {
     S = null; render();
     var o = ov();
-    o.innerHTML = '<h3>The Last Theater</h3>'
+    o.innerHTML = '<h3>대역 — UNDERSTUDY</h3>'
       + '<div class="sub">슬롯이 <b>배역</b>을 무대에 올린다. 준비한 <b>대본</b>은 요구 배역이 무대에 있을 때 상연된다.<br>'
       + '상태이상은 피해를 <b>곱한다</b> — 먼저 걸고 그다음 터뜨린다.<br>'
       + '<span style="color:#56545e">처음에는 두 명만 열려 있다. 나머지는 그 캐릭터의 승리 조건을 한 번 해내면 열린다.</span></div>';
@@ -720,7 +720,7 @@
       return;
     }
     // 실린 규칙이 예상과 다르면 브라우저가 옛 스크립트를 붙들고 있는 것이다
-    document.title = 'The Last Theater — ' + T.CFG.floors + '층 · 캐릭터 '
+    document.title = 'UNDERSTUDY — ' + T.CFG.floors + '층 · 캐릭터 '
       + Object.keys(T.CHARS).length + '종 · 공격 ×' + S.diff.atkMul;
     el('tAct').textContent = '제' + S.act + '막 · ' + S.ch.name
       + ' · ' + S.diff.name + (S.asc.level ? ' 재연 ' + S.asc.level + '단' : '');
