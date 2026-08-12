@@ -27,7 +27,7 @@
               // 반사는 「맞아야 나가는 피해」라 내가 조절할 수 없다 — 거울의 배우는
               // 화력의 89% 가 반사이고 턴당 대본 피해가 2.5(어릿광대 85.5)다.
               // 완성하면 쌓아둔 반사가 스스로 나간다. 수동이 능동이 된다.
-              gain: '매 턴 시작 시 쌓인 반사의 절반을 적 전체에게 쏜다' },
+              gain: '매 턴 시작 시 쌓인 반사를 적 전체에게 쏜다 · 반사 상한 2배' },
     burn:   { name: '화형의 무대', icon: '🔥',
               reel: ['rage', 'candle'], relic: ['embers', 'madBaton'],
               script: function (e) { return !!e.burn; },
@@ -1125,7 +1125,8 @@
     return { ch: S.ch, w: w, rnd: S.rnd, S: S, relax: relicN(S, 'stand_in'), cheerMax: S.asc.cheerMax,
       embers: relicN(S, 'embers'), venom: relicN(S, 'venom'),
       encore: relicN(S, 'encore'), encoreCall: relicN(S, 'encoreCall'), actBurn: S.actBurn || 0,
-      thornCap: T.CFG.thornCap * (T.CFG.thornActMul[S.act - 1] || 1) * (S.ch.thornsMul || 1) + relicN(S, 'thorns') * 8
+      thornCap: T.CFG.thornCap * (T.CFG.thornActMul[S.act - 1] || 1) * (S.ch.thornsMul || 1)
+                * (stageOn(S, 'mirror') ? 2 : 1) + relicN(S, 'thorns') * 8
                 + relicN(S, 'crackMirror') * 12,
       blockCapPct: T.CFG.blockCapPct * (relicN(S, 'crackMirror') ? 0.8 : 1),
       statusMul: relicN(S, 'madBaton') ? 2 : 1,
@@ -1153,8 +1154,14 @@
     if (!live.length) return;
     // 🪞 쌓인 반사의 절반이 스스로 나간다 — 맞기를 기다리지 않아도 된다
     if (stageOn(S, 'mirror') && S.thorns > 0) {
-      var shot = Math.round(S.thorns * 0.5);
-      live.forEach(function (e) { T.damageEnemy(S, e, shot, { aoe: 1, rnd: S.rnd }); });
+      // 절반으로는 전투당 117 밖에 안 나갔다 — 3막 적 한 마리 몫도 못 된다.
+      // 무대를 여는 과정 자체가 화력을 버리는 일이라(반사 축은 턴당 대본 피해 2.5)
+      // 보상이 그 손실을 확실히 넘어야 한다. 완성 판 클리어가 220판 중 0판이었다.
+      var shot = Math.round(S.thorns);
+      var _before = live.reduce(function (a, e) { return a + e.hp; }, 0);
+      live.forEach(function (e) { T.damageEnemy(e, shot, { aoe: 1, rnd: S.rnd }); });
+      var _after = live.reduce(function (a, e) { return a + e.hp; }, 0);
+      S.stats.mirrorReal = (S.stats.mirrorReal || 0) + (_before - _after);
       S.stats.mirrorShot = (S.stats.mirrorShot || 0) + shot * live.length;
       lg(S, 'b', '  🪞 거울의 무대 — 반사 ' + shot + ' 이 쏟아진다');
     }

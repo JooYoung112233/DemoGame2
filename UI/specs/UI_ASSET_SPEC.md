@@ -76,13 +76,13 @@
 
 슬롯은 하나의 완성 이미지로 굽지 않고 아래 순서로 합성한다.
 
-1. 각 창에서 Y축으로 반복하는 `UI/slots/reels/runtime/reel-belt-empty-tile-512x280.png`
+1. 각 창에서 Y축으로 반복하는 `UI/slots/slot-reel-repeat-strip.png`
 2. 릴에 반복 배치한 개별 심볼
 3. 비활성 상태 오버레이(시작 시 네 번째 창 커튼)
-4. 최상단 투명 하우징 `UI/slots/runtime/slot-frame-empty-1024.png`
+4. 최상단 투명 하우징 `UI/slots/slot-machine-housing.png`
 
 - 하우징은 항상 4칸이며 네 창 내부는 완전 투명하다. 가운데 당첨선은 표시하지 않는다.
-- 개별 심볼은 `UI/slots/symbols/runtime/` 아래 계열별 256×256 투명 PNG를 사용한다.
+- 개별 심볼은 `UI/slots/symbols/` 아래 256×256 투명 PNG를 사용한다.
 - 심볼은 CAST 8종, MUSIC 9종, PROP 9종과 공용 WILD 1종으로 총 27종이다.
 - 한 릴은 같은 심볼 오브젝트를 세로 간격으로 반복 배치하고 Y 좌표만 순환시킨다. 정지할 때 목표 심볼을 창 중앙에 스냅한다.
 - 정지 상태에서는 중앙 결과 심볼 하나만 보인다. 위·아래 심볼은 창 밖에 두고 회전 중에만 마스크 영역을 통과시킨다.
