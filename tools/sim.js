@@ -60,6 +60,34 @@
   };
   // 에픽 무대 — 물건이 아니라 「그렇게 플레이했다」가 조건이다.
   // 일반 무대는 효과를 축으로, 에픽은 시스템을 축으로 삼는다.
+  // ── 레전드 — 정상 (69.4) ─────────────────────────────────
+  //
+  // 재연 8단. 앞의 일곱 단계가 전부 여기로 가는 계단이 된다.
+  // 어둠 유물은 3개 → 1개로 내렸다 — 판당 유물 획득이 2.1개인데 어둠만 3개를 요구하면
+  // 사람 기준 1% 이고, 유물 슬롯을 어둠으로 채우면 무대 유물을 못 사서 에픽 조건과 충돌한다.
+  var LEGEND = {
+    id: 'lastTheater', icon: '🎦', name: '마지막 극장의 무대',
+    // 30층으로 잡았더니 남은 6층에서 두 번 상연이 판당 1.4회 — 정상에 올라 얻은 보상인데
+    // 쓸 시간이 없었다. 24층이면 3막 전체를 그 힘으로 돈다.
+    ascAt: 8, epicN: 1, darkN: 1, floorAt: 24,
+    gain: '모든 대본이 두 번 상연된다 · 매 턴 최대 HP −3'
+  };
+  function legendProg(S) {
+    var lv = (S.asc && S.asc.level) || 0;
+    var dark = S.relics.filter(function (k) { return T.RELICS[k] && T.RELICS[k].dark; }).length;
+    var epic = 0;
+    Object.keys(EPIC).forEach(function (k) { if (epicProg(S, k).done) epic++; });
+    var floor = S.at ? S.at.f + 1 : 0;
+    var done = lv >= LEGEND.ascAt && epic >= LEGEND.epicN
+            && dark >= LEGEND.darkN && floor >= LEGEND.floorAt;
+    return { asc: lv, epic: epic, dark: dark, floor: floor, done: done };
+  }
+  function legendOn(S) {
+    if (!S.useStages) return false;
+    if (S.legendCache != null) return S.legendCache;
+    S.legendCache = legendProg(S).done;
+    return S.legendCache;
+  }
   var EPIC = {
     encore: { name: '앙코르의 무대', icon: '🎪',
               relic: ['longBow', 'encoreCall'], relicN: 2,
@@ -1338,6 +1366,7 @@
     S.fightTurn0 = S.stats.turns;
     S.block = 0; S.thorns = 0; S.turn = 0; S.revived = false;
     S.sealed = {}; S.censor = null; S.maxPlay = 0;
+    S.legendCache = null;
     S.stageDoneCache = null;      // 무대 완성 여부는 전투마다 다시 본다 —
                                   // 판 초반에 한 번 캐시되면 완성해도 영영 false 로 남는다
     // ✂️ 검열관 — 릴에서 배역 하나가 두 턴 동안 검열된다.
@@ -1442,6 +1471,8 @@
       S.stats.costMax += S.cost;
       S.tHits = 0; S.tPlays = 0; S.tBlock = 0; S.tHeal = 0; S.tSelf = 0;
       if (relicN(S, 'darkScript')) S.hp -= 2;
+      // 🎦 레전드 — 모든 대본이 두 번 상연된다. 대신 극장이 배우를 갉아먹는다.
+      if (legendOn(S)) { S.maxHp = Math.max(20, S.maxHp - 3); S.hp = Math.min(S.hp, S.maxHp); }
       if (S.bleed > 0) { var bk = Math.round(S.bleed); S.hp = Math.min(S.maxHp, S.hp + bk); S.bleed = 0;
         if (bk > 0) lg(S, 's', '  🩸 태운 피 ' + bk + ' 이 돌아왔다'); }
       if (S.curser && S.curser.hp > 0) sowCurse(S);
@@ -1544,6 +1575,7 @@
         if (C.ampHit) ampTurn = 1;
         // 에픽 무대는 물건이 아니라 「그렇게 플레이했다」를 조건으로 삼는다.
         // 그러려면 시스템을 실제로 몇 번 썼는지를 세어야 한다.
+        if (legendOn(S)) { applyPlay(C, a.sc, a.t, ctx); S.stats.encore2 = (S.stats.encore2 || 0) + 1; }
         if (a.sc.curtain) S.stats.curtainPlays = (S.stats.curtainPlays || 0) + 1;
         // 자해 대본은 비싸서 판당 대본이 57장이었다(다른 캐릭터 75~80).
         // 태운 피가 돌아오듯 코스트도 하나 돌아온다.
@@ -2869,6 +2901,7 @@
     POLICIES: POLICIES, SKILLS: SKILLS, stageProb: stageProb, NK: NK, mergeW: mergeW,
     STAGES: STAGES, stageProg: stageProg, tiltAt: tiltAt, stageTune: stageTune,
     EPIC: EPIC, epicProg: epicProg, epicTilt: epicTilt,
+    LEGEND: LEGEND, legendProg: legendProg,
     needAt: needAt, epicNeedAt: epicNeedAt,
     // 사람 플레이용
     newRun: newRun, goTo: goTo, openFight: openFight, beginTurn: beginTurn,
