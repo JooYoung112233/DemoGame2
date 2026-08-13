@@ -73,7 +73,10 @@
               // 재연 0 의 환호 유물은 「큰 극장」(+40) 과 「빠른 인사」(−25) 뿐이라
               // 서로 정반대다. 2개를 요구하면 상충하는 유물을 둘 다 사게 만든다.
               relic: ['bigHouse', 'quickBow', 'hotHouse', 'emptyHouse'], relicN: 1,
-              need: { ovations: 17, hotWins: 7 },
+              // 유지 7 → 5 로 내려도 3% → 4% 였다. 병목은 기립 쪽이다 —
+              // 상위 10%(17)로 잡았는데 그 뒤에 넣은 변종(💀 침묵하는 해골 · 👎 야유하는 관객)이
+              // 환호를 깎아서 같은 숫자가 더 어려워졌다.
+              need: { ovations: 13, hotWins: 5 },
               gain: '「달아오른 무대」가 꺼지지 않는다' }
   };
   function epicProg(S, key) {
