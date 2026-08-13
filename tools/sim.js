@@ -1360,6 +1360,8 @@
         lg(S, 'e', '  📖 「' + best.name + '」 이 한 턴 봉인됐다'); }
     }
     S.foes = pickFoes(S, nd).map(function (b) {
+      // 재연 — 익숙한 얼굴이 조금씩 달라진다(69.1)
+      if (!b.boss && S.asc.level) b = T.variantOf(b, S.asc.level, S.rnd);
       // 재연 — 보스가 기믹을 하나씩 더 배운다. 수치가 아니라 규칙이 늘어난다.
       if (b.boss && S.asc.bossExtra) {
         var learn = (T.BOSS_LEARN[b.name] || []).slice(0, S.asc.bossExtra);
@@ -1664,6 +1666,21 @@
         lg(S, 's', '  🔔 관객이 퇴장했다 — 시계 +' + pay);
       }
     });
+    // 🕯 기억하는 관객 — 퇴장하면 남은 적이 강해진다
+    // 👻 두 번 죽는 배우 — 쓰러져도 한 번 일어난다
+    S.foes.forEach(function (f) {
+      if (f.hp > 0 || f.handled) return;
+      f.handled = 1;
+      if (f.revive && !f.revived2) {
+        f.revived2 = 1; f.hp = Math.round(f.maxHp * f.revive); f.handled = 0;
+        lg(S, 'e', '  👻 ' + f.name + ' 이 다시 일어난다');
+        return;
+      }
+      if (f.onDeathBuff) {
+        S.foes.forEach(function (o) { if (o.hp > 0) o.atk += f.onDeathBuff; });
+        lg(S, 'e', '  🕯 ' + f.name + ' 을 기억한다 — 남은 적 공격 +' + f.onDeathBuff);
+      }
+    });
     if (died && relicN(S, 'candleR')) { S.maxHp += 2 * died * relicN(S, 'candleR'); S.hp += 2 * died; }
     if (!S.foes.some(function (f) { return f.hp > 0; })) { winFight(S); return { won: true }; }
 
@@ -1705,6 +1722,10 @@
     S.foes.forEach(function (f) {
       if (f.hp <= 0 || f.t > 0) return;
       f.t = f.cd;
+      if (f.cheerDrain && S.cheer > 0) {
+        S.cheer = Math.max(0, S.cheer - f.cheerDrain);
+        lg(S, 'e', '  💀 ' + f.name + ' — 환호 −' + f.cheerDrain);
+      }
       var it = f.next || T.pickIntent(f, S.rnd);
       f.next = T.pickIntent(f, S.rnd);
       if (it === 'defend') { f.block += f.defVal; lg(S, 't', '  ' + f.name + ' 방어 ' + f.defVal); return; }

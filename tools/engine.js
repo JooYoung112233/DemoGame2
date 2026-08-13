@@ -378,6 +378,44 @@
   ];
   // 층이 올라갈수록 난입 확률이 오른다
   // 막이 오를수록 난입이 잦아진다 — 중간 구간에도 위협이 있어야 한다
+
+  // ── 적 변종 — 재연에서만 (69.1) ──────────────────────────
+  //
+  // 재연이 「같은 게임을 더 아프게」가 아니려면 얼굴이 바뀌어야 한다. 수치를 올리는
+  // 대신 규칙을 하나씩 얹는다. 새로 15종을 만드는 게 아니라 기존 적의 변주라
+  // 비용은 적고, 「적 15종 중 보스가 3종뿐」이라는 다양성 문제도 함께 풀린다.
+  //
+  // at: 이 재연 단수부터 나온다 · p: 그 적이 변종으로 바뀔 확률
+  var VARIANTS = {
+    '잊혀진 관객':   { at: 1, p: 0.45, name: '기억하는 관객', icon: '🕯',
+                     note: '퇴장하면 남은 적이 강해진다', onDeathBuff: 3 },
+    '가면 없는 배우': { at: 1, p: 0.40, name: '얼굴 없는 배우', icon: '🎭',
+                     note: '회피한다', evadeSingle: 0.3 },
+    '무대 거미':     { at: 2, p: 0.40, name: '실을 뽑는 거미', icon: '🕸',
+                     note: '슬롯 하나를 잠근다', gimmick: 'censor', gimCd: 3 },
+    '춤추는 그림자':  { at: 2, p: 0.45, name: '그림자 무희', icon: '🌑',
+                     note: '더 잘 피한다', evadeSingle: 0.45 },
+    '웃는 병사':     { at: 3, p: 0.40, name: '웃지 않는 병사', icon: '😶',
+                     note: '방어가 더 빨리 자란다', defGrow: 3, defMax: 14 },
+    '노래하는 해골':  { at: 3, p: 0.40, name: '침묵하는 해골', icon: '💀',
+                     note: '환호를 깎는다', cheerDrain: 8 },
+    '박수치는 관객':  { at: 4, p: 0.45, name: '야유하는 관객', icon: '👎',
+                     note: '흉내에 더해 환호를 깎는다', cheerDrain: 6, gimCd: 3 },
+    '유령 배우':     { at: 5, p: 0.45, name: '두 번 죽는 배우', icon: '👻',
+                     note: '쓰러져도 한 번 일어난다', revive: 0.4 }
+  };
+  // 이 적이 이 재연 단수에서 변종이 되는가
+  function variantOf(base, ascLevel, rnd) {
+    var v = VARIANTS[base.name];
+    if (!v || (ascLevel || 0) < v.at || rnd() >= v.p) return base;
+    var out = Object.assign({}, base);
+    Object.keys(v).forEach(function (k) {
+      if (k === 'at' || k === 'p' || k === 'note') return;
+      out[k] = v[k];
+    });
+    out.variant = 1;
+    return out;
+  }
   function intrudeChance(floor) {
     var act = Math.min(3, Math.floor(floor / CFG.actLen) + 1);
     return [0.08, 0.24, 0.36][act - 1];
@@ -1303,6 +1341,7 @@
     CHARS: CHARS, ENEMIES: ENEMIES, DIFFICULTY: DIFFICULTY, CFG: CFG, INTENT_KO: INTENT_KO,
     WIN_KO: WIN_KO, scriptWeight: scriptWeight, pickWeighted: pickWeighted,
     GIMMICK_TEXT: GIMMICK_TEXT, INTRUDERS: INTRUDERS, intrudeChance: intrudeChance,
+    VARIANTS: VARIANTS, variantOf: variantOf,
     GROWTH: GROWTH,
     CHEER: CHEER, CHEER_TEXT: CHEER_TEXT, DEMANDS: DEMANDS, DEMAND_CHEER: DEMAND_CHEER,
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
