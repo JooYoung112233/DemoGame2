@@ -511,6 +511,57 @@
     return k || null;
   }
 
+
+  // ── 이력 — 재연을 넘길 때마다 한 줄 (69.3) ────────────────
+  //
+  // 재연 N단을 처음 넘기면 퍽 3개 중 하나를 고른다. 그 세이브에 영구히 남는다.
+  // 고정 보상이 아니라 선택이어야 한다 — 매번 같은 것을 주면 두 번째 여정부터
+  // 아무 감흥이 없다. 8단까지 올리면 퍽 8개이고 여정마다 다른 조합이 된다.
+  //
+  // 균형 규칙: 퍽은 그 단계가 올린 난이도보다 작아야 한다. 다 갚아주면
+  // 재연이 「다른 게임」이 아니라 「제자리」가 된다.
+  var PERKS = {
+    spare:   { icon: '🎫', name: '여벌 유품',   desc: '유품을 판당 한 번 더 쓴다' },
+    dresser: { icon: '🎭', name: '분장대',      desc: '유품 슬롯 +1' },
+    folio:   { icon: '📜', name: '두꺼운 대본철', desc: '대본 보유 +1' },
+    budget:  { icon: '⚡', name: '개막 예산',    desc: '최대 코스트 +1' },
+    roster:  { icon: '🎬', name: '상연 목록',    desc: '시작 릴 1칸을 원하는 것으로' },
+    keen:    { icon: '🔍', name: '눈 밝은 감독',  desc: '무대 릴 조건 −1' },
+    vault:   { icon: '🏛', name: '깊은 창고',    desc: '계승 유물 슬롯 +1' },
+    troupe:  { icon: '🎪', name: '전속 극단',    desc: '커튼콜 칸 +1' },
+    patron:  { icon: '💰', name: '후원자',      desc: '시작 골드 +15' },
+    copy:    { icon: '📖', name: '필사본',      desc: '대본 조각 +25%' },
+    regular: { icon: '🙌', name: '단골',        desc: '전투를 환호 25 로 시작' },
+    improv:  { icon: '✨', name: '즉흥 극단',    desc: '즉석 대본 +1' }
+  };
+  // 그 단계에서 고를 수 있는 셋 — 이미 가진 것은 빼고 결정론적으로 뽑는다
+  function perkOffer(owned, tier) {
+    var have = {}; (owned || []).forEach(function (k) { have[k] = 1; });
+    var pool = Object.keys(PERKS).filter(function (k) { return !have[k]; });
+    var out = [];
+    for (var i = 0; i < 3 && pool.length; i++) out.push(pool.splice((tier * 7 + i * 5) % pool.length, 1)[0]);
+    return out;
+  }
+  // 가진 퍽을 하나의 수정자로 접는다
+  function perkMods(owned) {
+    var m = { prop: 0, propSlot: 0, hand: 0, cost: 0, swap: 0, reelEase: 0,
+              vault: 0, curtain: 0, gold: 0, shard: 1, cheer: 0, temp: 0 };
+    (owned || []).forEach(function (k) {
+      if (k === 'spare')   m.prop++;
+      if (k === 'dresser') m.propSlot++;
+      if (k === 'folio')   m.hand++;
+      if (k === 'budget')  m.cost++;
+      if (k === 'roster')  m.swap++;
+      if (k === 'keen')    m.reelEase++;
+      if (k === 'vault')   m.vault++;
+      if (k === 'troupe')  m.curtain++;
+      if (k === 'patron')  m.gold += 15;
+      if (k === 'copy')    m.shard *= 1.25;
+      if (k === 'regular') m.cheer += 25;
+      if (k === 'improv')  m.temp++;
+    });
+    return m;
+  }
   // ── 대본 조각 — 판을 거듭하며 「제3막」을 복원한다 ─────────
   //
   // 누적 층수로 자동 지급하던 초연 기록을 흡수했다. 자동 지급은 「하다 보면 열리는 것」이라
@@ -1223,6 +1274,7 @@
     CHEER: CHEER, CHEER_TEXT: CHEER_TEXT, DEMANDS: DEMANDS, DEMAND_CHEER: DEMAND_CHEER,
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
     PROPS: PROPS, propOf: propOf,
+    PERKS: PERKS, perkOffer: perkOffer, perkMods: perkMods,
     // 숫자를 그대로 내보내면 복사본이 박혀서 이후 변경이 반영되지 않는다 —
     // 충전 비용 2·3·4 스윕이 셋 다 같은 결과를 냈다.
     propCharge: function () { return PROP_CHARGE; },

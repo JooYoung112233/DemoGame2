@@ -112,6 +112,7 @@
   function needAt(S) {
     var n = { reel: STAGE_NEED.reel, relic: STAGE_NEED.relic, script: STAGE_NEED.script };
     // 릴과 대본을 번갈아 푼다. 유물은 건드리지 않는다 — 1 아래로는 축이 사라진다.
+    if (S.perk && S.perk.reelEase) n.reel = Math.max(2, n.reel - S.perk.reelEase);
     for (var i = 0, r = reliefOf(S); i < r; i++) {
       if (i % 2 === 0) n.reel = Math.max(2, n.reel - 1);
       else n.script = Math.max(2, n.script - 1);
@@ -833,12 +834,14 @@
     // 대본 해금 — 써본 카드의 조합만 풀에 들어온다. opt.known 이 없으면 전부 열린 상태.
     S.known = opt.known || null;
     S.useStages = !!opt.stages;
+    S.perk = T.perkMods(opt.perks || []);   // 이력 — 재연을 넘기며 고른 퍽들
     S.useProps = !!opt.props;
     S.prop = opt.props ? T.propOf(opt.charKey) : null;   // 유품은 그 캐릭터 것을 들고 시작한다
-    S.propCharge = opt.props ? T.propCharge() : 0;       // 한 판에 쓸 수 있는 총 횟수
+    S.propCharge = opt.props ? T.propCharge() + S.perk.prop : 0;   // 한 판에 쓸 수 있는 총 횟수
     S.slotMax = T.CFG.stageBase + (opt.slot4 ? 1 : 0);   // 복원 목록을 사면 applyMeta 가 덮는다
     S.tiltKey = null;
     S.hp = S.maxHp;
+    S.gold += S.perk.gold;
     S.map = makeMap(rnd);
     S.w = makePlayer(pol, ch, sk, rnd);
     var w = S.w;
@@ -1317,11 +1320,11 @@
     // 빌드가 자란 것이 실제 출력이 되어야 한다.
     return Math.max(1, S.ch.maxCost + (S.growth.cost || 0) + (S.act - 1) * T.CFG.costPerAct
                        + relicN(S, 'drumOpen') + relicN(S, 'darkScript')
-                       - relicN(S, 'doubleCast'));
+                       - relicN(S, 'doubleCast') + (S.perk ? S.perk.cost : 0));
   }
   function scriptCap(S) {
     return T.CFG.scriptBase + (S.ch.handBonus || 0) + (S.growth.hand || 0) * 2
-         + relicN(S, 'archive') * 3 + relicN(S, 'tornScript') * 4;
+         + relicN(S, 'archive') * 3 + relicN(S, 'tornScript') * 4 + (S.perk ? S.perk.hand : 0);
   }
 
   function fight(S, w, nd) {
@@ -1395,7 +1398,7 @@
     S.cast = pickCast(S, S.w);   // 전투 전 캐스팅
     S.cast2 = S.growth.cast ? pickCast(S, S.w, S.cast) : null;
     // 환호는 런 내내 이어진다. 오직 기립 박수(가득 참)에서만 0 으로 돌아간다.
-    if (S.cheer == null) S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25;
+    if (S.cheer == null) S.cheer = (S.ch.cheerStart || 0) + (S.growth.cheer || 0) * 25 + (S.perk ? S.perk.cheer : 0);
     // 관객의 요구는 큰 무대에서만 — 판마다 걸면 배경음이 된다 (판당 19회였다).
     // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
     S.fThorns = 0; S.thornsMark = 0; S.stallSkip = 0;
@@ -1458,7 +1461,11 @@
       // 커튼콜 — 지난 무대를 닫은 대본이 1턴에 무료로 손패에 온다.
       // 이 주입이 사람 플레이 경로(beginTurn)에만 있어서 봇은 커튼콜을 한 번도
       // 쓴 적이 없다. 이번 세션의 밸런스 측정은 전부 커튼콜 없이 돌아갔다.
-      if (S.turn === 1 && S.curtainIn && S.curtainIn.length) {
+      // 커튼콜 전용 캐릭터가 커튼콜을 제일 적게 썼다 — 전투가 3.5턴으로 길어서
+      // 1턴에만 오는 한 장의 비중이 작았다(어릿광대 2.4턴 · 커튼콜 19.8 vs 종막 13.7).
+      // 연속이 쌓여 있으면 매 턴 온다 — 「연속을 잇는다」가 곧 자기 강화가 된다.
+      var curtainNow = S.turn === 1 || ((S.chain || 0) >= 1 && (S.ch.chainPer || 0) >= 0.4);
+      if (curtainNow && S.curtainIn && S.curtainIn.length) {
         S.curtainIn.forEach(function (id) {
           var csc = T.SCRIPT_BY_ID[id];
           if (csc) S.temp.unshift(Object.assign({}, csc, { temp: true, curtain: true, cost: 0 }));
@@ -1530,6 +1537,9 @@
         // 에픽 무대는 물건이 아니라 「그렇게 플레이했다」를 조건으로 삼는다.
         // 그러려면 시스템을 실제로 몇 번 썼는지를 세어야 한다.
         if (a.sc.curtain) S.stats.curtainPlays = (S.stats.curtainPlays || 0) + 1;
+        // 자해 대본은 비싸서 판당 대본이 57장이었다(다른 캐릭터 75~80).
+        // 태운 피가 돌아오듯 코스트도 하나 돌아온다.
+        if (S.ch.selfToDmg && (a.sc.effect || {}).selfDamage) { S.cost += 1; S.stats.selfRefund = (S.stats.selfRefund || 0) + 1; }
         S.stats.cheerPeak = Math.max(S.stats.cheerPeak || 0, C.cheer || 0);
         // 실제로 상연한 것만 센다 — applyPlay 는 계획 탐색 안에서도 불린다
         var _e = T.scriptEffect(a.sc, S.ch);
@@ -1829,7 +1839,7 @@
     // 커튼콜 — 막을 닫은 대본이 다음 무대의 1턴에 오른다
     if (S.lastId) {
       var slots = (S.ch.curtainSlots || T.CFG.curtain.slots) + (S.growth.curtain || 0)
-        + (stageOn(S, 'curtain') ? 1 : 0)
+        + (stageOn(S, 'curtain') ? 1 : 0) + (S.perk ? S.perk.curtain : 0)
                 + relicN(S, 'longBow');
       // 🎦 닫힌 막 — 무대를 닫은 대본이 아니라 「이어가려던 대본」을 다음 커튼콜로 보낸다.
       // 종막의 배우가 연속을 잇지 못하고 끊기는 것을 한 번 되돌린다.
@@ -2455,7 +2465,7 @@
     // 도감만은 계정 공유다. 조각·복원·재연·해금은 난이도 세이브 안에 갇히지만,
     // 도감은 「이 무대가 존재한다는 지식」이지 능력치가 아니다(65.5).
     var meta = { floors: 0, seen: {}, vault: [], shards: 0, owned: [], souls: {},
-                 codex: opt.codex || {}, known: opt.known || {} };
+                 codex: opt.codex || {}, known: opt.known || {}, perks: [] };
     Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) unlocked[k] = 1; });
     var PKs = Object.keys(POLICIES), fav = PKs[Math.floor(rnd() * PKs.length)];
 
@@ -2472,7 +2482,7 @@
       var runSeed = ((opt.seed | 0) + i * 104729) | 0;
       // 시작 릴의 카드는 이미 손에 쥐고 시작하므로 아는 것으로 친다
       Object.keys(T.CHARS[ck].deck).forEach(function (c) { meta.known[c] = 1; });
-      var r = run({ seed: runSeed, charKey: ck, diffKey: diff, known: meta.known,
+      var r = run({ seed: runSeed, charKey: ck, diffKey: diff, known: meta.known, perks: meta.perks,
                     policyKey: pk, skillObj: sk, asc: asc, meta: meta,
                     stages: opt.stages, snap: opt.snap });
       var newUnlock = 0;
@@ -2499,7 +2509,7 @@
       if (firstSoul) meta.souls[ck] = 1;
       var gained = T.shardsFor({ floor: r.floor, bossKills: r.stats.bossKills || 0,
                                  stageDone: stageDone, epicDone: epicDone, firstSoul: firstSoul });
-      meta.shards += gained;
+      meta.shards += Math.round(gained * T.perkMods(meta.perks).shard);
       meta.floors += r.floor;
 
       // 살 수 있는 것이 있으면 산다 — 싼 것부터. 사람은 눈앞의 것을 먼저 연다.
@@ -2532,7 +2542,19 @@
         if (playedDiff === 'normal' && !firstNormal) firstNormal = i;
         // 그 난이도 안에서 재연이 오른다. 보통을 처음 넘기면 재연 1단이 열린다.
         if (playedDiff === 'story') { /* 이야기에는 재연이 없다 — 결말을 보러 온 자리다 */ }
-        else asc = Math.min(T.ASCENSION.length, Math.max(playedDiff === 'normal' ? 1 : 0, asc + 1));
+        else {
+          var before = asc;
+          asc = Math.min(T.ASCENSION.length, Math.max(playedDiff === 'normal' ? 1 : 0, asc + 1));
+          // 이력 — 그 단을 처음 넘겼으면 퍽 3개 중 하나를 고른다. 영구히 남는다.
+          if (asc > before) {
+            var off = T.perkOffer(meta.perks, asc);
+            if (off.length) {
+              var pick = off[Math.floor(rnd() * off.length)];
+              meta.perks.push(pick);
+              out[out.length - 1] = out[out.length - 1] || {};
+            }
+          }
+        }
       }
       // 관전을 위해 이 판을 재현할 수 있는 값을 전부 남긴다
       out.push({ i: i, char: r.char, charKey: ck, policy: r.policy, policyKey: pk, skill: sk.t,
@@ -2588,7 +2610,7 @@
              unlocked: Object.keys(unlocked), maxAsc: asc,
              meta: { floors: meta.floors, seen: Object.keys(meta.seen).length, vault: meta.vault.slice(),
                      shards: meta.shards, owned: meta.owned.slice() },
-             shards: meta.shards, owned: meta.owned.slice(), codex: Object.keys(meta.codex), known: Object.keys(meta.known),
+             shards: meta.shards, owned: meta.owned.slice(), codex: Object.keys(meta.codex), known: Object.keys(meta.known), perks: meta.perks.slice(),
              premiere: T.restored(meta.owned) };
   }
 
