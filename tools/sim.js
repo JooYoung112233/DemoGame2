@@ -27,11 +27,13 @@
               // 반사는 「맞아야 나가는 피해」라 내가 조절할 수 없다 — 거울의 배우는
               // 화력의 89% 가 반사이고 턴당 대본 피해가 2.5(어릿광대 85.5)다.
               // 완성하면 쌓아둔 반사가 스스로 나간다. 수동이 능동이 된다.
-              gain: '매 턴 시작 시 쌓인 반사를 적 전체에게 쏜다 · 반사 상한 2배' },
+              gain: '매 턴 시작 시 쌓인 반사의 절반을 적 전체에게 쏜다 · 반사 상한 2배' },
     burn:   { name: '화형의 무대', icon: '🔥',
               reel: ['rage', 'candle'], relic: ['embers', 'madBaton'],
               script: function (e) { return !!e.burn; },
-              gain: '화상이 매 턴 인접한 적에게 절반씩 번진다' },
+              // 다른 무대는 전부 곱셈인데(반사 방출 · 둔화 상한 해제 · 타격마다 증폭)
+              // 화형만 덧셈이라 뭘 해도 1.6~1.9배에서 안 움직였다.
+              gain: '화상이 걸린 적에게 주는 광역 피해가 3배가 된다' },
     king:   { name: '왕정의 무대', icon: '👑',
               reel: ['king', 'crown'], relic: ['drumOpen', 'darkScript', 'encore'],
               script: function (e, sc) { var r = sc.requires || [];
@@ -53,7 +55,8 @@
     poison: { name: '쇠약의 무대', icon: '🩸',
               reel: ['violin', 'tragedy', 'cold'], relic: ['venom', 'glass', 'madBaton'],
               script: function (e) { return !!e.poison || !!e.slow; },
-              gain: '화상·독·둔화가 매 턴 1씩 깊어진다' }
+              // 「1씩 깊어진다」로는 1.5배로 여섯 중 최하위였다
+              gain: '둔화 상한이 사라진다 — 굳을수록 계속 깊어진다' }
   };
   // 에픽 무대 — 물건이 아니라 「그렇게 플레이했다」가 조건이다.
   // 일반 무대는 효과를 축으로, 에픽은 시스템을 축으로 삼는다.
@@ -1145,6 +1148,21 @@
       propAoe: S.propAoe || 0, propReflect: S.propReflect || 0, propBlood: S.propBlood || 0,
       overflowMul: (S.ch.overflowMul || 1) * (relicN(S, 'mirrorR') ? 2 : 1) };
   }
+  // 🔥 화형의 무대 — 화상을 안고 퇴장한 적의 남은 화상이 살아있는 적 전체에게 옮겨붙는다.
+  // 대본으로 죽든 지속 피해로 죽든 잡히도록, 죽은 적에 남아 있는 burn 값을 본다.
+  function burnSpread(S) {
+    if (!S.useStages || !stageOn(S, 'burn')) return;
+    var live = S.foes.filter(function (e) { return e.hp > 0; });
+    if (!live.length) return;
+    S.foes.forEach(function (e) {
+      if (e.hp > 0 || !(e.burn > 0)) return;
+      var carry = e.burn; e.burn = 0;
+      live.forEach(function (o) { o.burn = (o.burn || 0) + carry; });
+      S.stats.burnSpread = (S.stats.burnSpread || 0) + carry * live.length;
+      lg(S, 'b', '  🔥 화형의 무대 — 불이 옮겨붙는다 (+' + carry + ')');
+    });
+  }
+
   // 완성된 무대가 매 턴 하는 일. 51.2 「완성은 규칙」이 여기서 실제로 일어난다.
   // 이 함수가 없던 동안 무대는 「조건을 채운 비율」일 뿐 게임을 바꾸지 않았다 —
   // 거울의 배우가 무대 완성 1위(55%)인데 클리어 최하위였던 이유다.
@@ -1152,12 +1170,12 @@
     if (!S.useStages) return;
     var live = S.foes.filter(function (e) { return e.hp > 0; });
     if (!live.length) return;
+    if (stageOn(S, 'burn')) live.forEach(function (e) { e.burnAmp = 3.0; });
     // 🪞 쌓인 반사의 절반이 스스로 나간다 — 맞기를 기다리지 않아도 된다
     if (stageOn(S, 'mirror') && S.thorns > 0) {
-      // 절반으로는 전투당 117 밖에 안 나갔다 — 3막 적 한 마리 몫도 못 된다.
-      // 무대를 여는 과정 자체가 화력을 버리는 일이라(반사 축은 턴당 대본 피해 2.5)
-      // 보상이 그 손실을 확실히 넘어야 한다. 완성 판 클리어가 220판 중 0판이었다.
-      var shot = Math.round(S.thorns);
+      // 절반이다. 전액·상한2배까지 올려봤지만 그건 damageEnemy 인자 순서를 틀려서
+      // 실제 피해가 0 이던 상태에서 잡은 값이었다 — 고치고 나니 클리어 89% 로 과했다.
+      var shot = Math.round(S.thorns * 0.5);
       var _before = live.reduce(function (a, e) { return a + e.hp; }, 0);
       live.forEach(function (e) { T.damageEnemy(e, shot, { aoe: 1, rnd: S.rnd }); });
       var _after = live.reduce(function (a, e) { return a + e.hp; }, 0);
@@ -1165,21 +1183,8 @@
       S.stats.mirrorShot = (S.stats.mirrorShot || 0) + shot * live.length;
       lg(S, 'b', '  🪞 거울의 무대 — 반사 ' + shot + ' 이 쏟아진다');
     }
-    // 🔥 화상이 인접한 적에게 번진다
-    if (stageOn(S, 'burn')) {
-      var burning = live.filter(function (e) { return (e.burn || 0) > 0; });
-      burning.forEach(function (e) {
-        live.forEach(function (o) { if (o !== e) o.burn = Math.max(o.burn || 0, Math.floor(e.burn / 2)); });
-      });
-    }
-    // 🩸 상태이상이 매 턴 깊어진다
-    if (stageOn(S, 'poison')) {
-      live.forEach(function (e) {
-        if (e.burn) e.burn++;
-        if (e.poison) e.poison++;
-        if (e.slow) e.slow++;
-      });
-    }
+    // 🩸 둔화 상한이 사라진다
+    if (stageOn(S, 'poison')) live.forEach(function (e) { e.slowFree = 1; });
   }
 
   // ── 유품 — 전투당 한 번의 개입 ────────────────────────────

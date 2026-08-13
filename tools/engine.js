@@ -1142,8 +1142,12 @@
 
   function ampMul(e, opt) {
     var mul = 1;
-    if (e.slowN) mul += Math.min(AMP.slowCap, AMP.slowPer * e.slowN);
-    if (opt.aoe && e.burn > 0) mul *= AMP.burnAoe;
+    // 🩸 쇠약의 무대(완성) — 둔화 상한이 사라진다. 굳을수록 계속 깊어진다.
+    if (e.slowN) mul += e.slowFree ? AMP.slowPer * e.slowN : Math.min(AMP.slowCap, AMP.slowPer * e.slowN);
+    // 🔥 화형의 무대(완성) — 화상 위의 광역이 3배가 된다.
+    // 「번진다」1.9배 · 「안 꺼진다」1.6배 · 「옮겨붙는다」1.8배 — 셋 다 덧셈이라 값이 안 났다.
+    // 대본이 주는 화상은 2~6 이고 그걸 아무리 옮겨도 판당 122 다. 곱해야 한다.
+    if (opt.aoe && e.burn > 0) mul *= (e.burnAmp || AMP.burnAoe);
     return mul;
   }
 
