@@ -512,6 +512,39 @@
   }
 
 
+
+  // ── 퀘스트 목록 — 실패를 보상으로 바꾼다 (69.2) ───────────
+  //
+  // 재연은 지면 아무것도 없었다. 400명 중 272명이 한 번도 못 깨고 0 을 쥔 채 떠난다.
+  // 목록이 있으면 「오늘은 못 깼지만 셋은 했다」가 된다 — 밸런스로 못 푸는 것을
+  // 구조로 푸는 자리다. 깬 것마다 조각이 남고, 그 조각으로 복원 목록을 연다.
+  var QUESTS = [
+    { id: 'floor',   icon: '🪜', name: '끝까지 간다',   desc: '24층에 닿는다',        stat: 'floor',        need: 24, shard: 20 },
+    { id: 'boss',    icon: '👑', name: '막을 넘긴다',   desc: '보스를 둘 잡는다',      stat: 'bossKills',    need: 2,  shard: 18 },
+    { id: 'stage',   icon: '🎭', name: '무대를 세운다',  desc: '무대를 하나 완성한다',   stat: 'stageDone',    need: 1,  shard: 25 },
+    { id: 'ovation', icon: '🙌', name: '기립 박수',    desc: '기립 박수를 8회 받는다',  stat: 'ovations',     need: 8,  shard: 15 },
+    { id: 'curtain', icon: '🎪', name: '앙코르',      desc: '커튼콜로 12회 상연한다',  stat: 'curtainPlays', need: 12, shard: 15 },
+    { id: 'chain',   icon: '🔗', name: '같은 장면으로', desc: '연속을 3회 잇는다',     stat: 'chainMax',     need: 3,  shard: 18 },
+    { id: 'three',   icon: '🃏', name: '삼중 상연',    desc: '3종 대본을 10회 상연한다', stat: 'tierThree',   need: 10, shard: 20 },
+    { id: 'demand',  icon: '📣', name: '관객의 요구',   desc: '요구를 3회 들어준다',    stat: 'demandDone',   need: 3,  shard: 15 },
+    { id: 'prop',    icon: '🎫', name: '유품을 쓴다',   desc: '유품을 3회 쓴다',       stat: 'propUses',     need: 3,  shard: 12 },
+    { id: 'intrude', icon: '🎩', name: '난입자를 돌려보낸다', desc: '난입자를 둘 잡는다', stat: 'intruderWins', need: 2,  shard: 18 }
+  ];
+  // 이 판의 목록 — 셋. 재연 단수와 판 번호로 정해진다.
+  function questsFor(tier, runIndex) {
+    var out = [], pool = QUESTS.slice();
+    for (var i = 0; i < 3 && pool.length; i++)
+      out.push(pool.splice((tier * 3 + runIndex * 7 + i * 4) % pool.length, 1)[0]);
+    return out;
+  }
+  // 판이 끝났을 때 깬 것과 조각
+  function questResult(list, stats) {
+    var done = [], shard = 0;
+    (list || []).forEach(function (q) {
+      if ((stats[q.stat] || 0) >= q.need) { done.push(q.id); shard += q.shard; }
+    });
+    return { done: done, shard: shard };
+  }
   // ── 이력 — 재연을 넘길 때마다 한 줄 (69.3) ────────────────
   //
   // 재연 N단을 처음 넘기면 퍽 3개 중 하나를 고른다. 그 세이브에 영구히 남는다.
@@ -1275,6 +1308,7 @@
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
     PROPS: PROPS, propOf: propOf,
     PERKS: PERKS, perkOffer: perkOffer, perkMods: perkMods,
+    QUESTS: QUESTS, questsFor: questsFor, questResult: questResult,
     // 숫자를 그대로 내보내면 복사본이 박혀서 이후 변경이 반영되지 않는다 —
     // 충전 비용 2·3·4 스윕이 셋 다 같은 결과를 냈다.
     propCharge: function () { return PROP_CHARGE; },

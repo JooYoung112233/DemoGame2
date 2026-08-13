@@ -898,6 +898,9 @@
 
   function finish(S, won, killedBy) {
     var st = S.stats;
+    st.floor = S.at ? S.at.f + 1 : 0;
+    st.stageDone = 0;
+    if (S.useStages) Object.keys(STAGES).forEach(function (k) { if (stageProg(S, k).done) st.stageDone = 1; });
     return { won: won, killedBy: killedBy, char: S.ch.name, charKey: keyOf(T.CHARS, S.ch),
       policy: S.pol.name, skill: S.sk.name, w: S.w, feat: S.feat, seenIds: S.seenIds || {}, knownCards: S.knownCards || {},
       floor: S.at ? S.at.f + 1 : 0, nodes: st.nodes, turns: st.turns,
@@ -1547,6 +1550,7 @@
         S.stats.thornAdd = (S.stats.thornAdd || 0) + (_e.thorns || 0) * (S.ch.thornsMul || 1);
         S.stats.plays++;
         S.stats.byTier[a.sc.tier] = (S.stats.byTier[a.sc.tier] || 0) + 1;
+        if (a.sc.tier === 'three') S.stats.tierThree = (S.stats.tierThree || 0) + 1;
         S.stats.byScript[a.sc.name] = (S.stats.byScript[a.sc.name] || 0) + 1;
         (S.fightIds = S.fightIds || {})[a.sc.id] = 1;   // 이 전투에 상연한 대본 (🎦 닫힌 막)
         if (a.sc.temp) { var ti = S.temp.indexOf(a.sc); if (ti >= 0) S.temp.splice(ti, 1); }
@@ -2507,7 +2511,15 @@
       });
       var firstSoul = r.won && !meta.souls[ck];
       if (firstSoul) meta.souls[ck] = 1;
-      var gained = T.shardsFor({ floor: r.floor, bossKills: r.stats.bossKills || 0,
+      // 퀘스트 — 재연에서만. 깬 것마다 조각이 남는다. 져도 남는다.
+      var qList = asc > 0 ? T.questsFor(asc, i) : [];
+      var qRes = T.questResult(qList, r.stats);
+      if (qRes.done.length) {
+        meta.questDone = (meta.questDone || 0) + qRes.done.length;
+        meta.questShard = (meta.questShard || 0) + qRes.shard;
+      }
+      meta.questOffer = (meta.questOffer || 0) + qList.length;
+      var gained = qRes.shard + T.shardsFor({ floor: r.floor, bossKills: r.stats.bossKills || 0,
                                  stageDone: stageDone, epicDone: epicDone, firstSoul: firstSoul });
       meta.shards += Math.round(gained * T.perkMods(meta.perks).shard);
       meta.floors += r.floor;
@@ -2611,6 +2623,7 @@
              meta: { floors: meta.floors, seen: Object.keys(meta.seen).length, vault: meta.vault.slice(),
                      shards: meta.shards, owned: meta.owned.slice() },
              shards: meta.shards, owned: meta.owned.slice(), codex: Object.keys(meta.codex), known: Object.keys(meta.known), perks: meta.perks.slice(),
+             questDone: meta.questDone || 0, questOffer: meta.questOffer || 0, questShard: meta.questShard || 0,
              premiere: T.restored(meta.owned) };
   }
 
