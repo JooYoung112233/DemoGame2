@@ -452,7 +452,7 @@
   function applyPlay(C, sc, tgt, ctx) {
     var acc = T.scriptEffect(sc, ctx.ch), ev = [];
     // 🪄 부서진 지휘봉 — 이번 턴 모든 대본이 광역이 된다
-    if (ctx.propAoe && acc.dmg && !acc.aoe) { acc.aoe = acc.dmg; acc.dmg = 0; }
+    if (ctx.propAoe && acc.dmg && !acc.aoe) { acc.aoe = acc.dmg * (ctx.propAoeMul || 1); acc.dmg = 0; }
 
     if (ctx.embers && T.scriptFam(sc) === 'score' && acc.burn) acc.burn += 2 * ctx.embers;
     // 「독이 든 성배」 — 계열을 가리지 않는다. 독 대본이 7종뿐이라 계열까지 걸면 닿지 않는다.
@@ -552,6 +552,12 @@
       var targets = (acc.aoe > 0) ? alive : [t0];
       var did = 0;
       targets.forEach(function (f) {
+        // 👺 가면으로 방어력이 0 인 동안에는 원본을 깎는다. 아니면 턴이 끝나며
+        // 그대로 돌아와서 가면이 어릿광대 본인의 정체성을 지운다 (−3pp 였다).
+        if (f.propStripped != null) {
+          var cut0 = Math.min(f.propStripped, shred); f.propStripped -= cut0; did = Math.max(did, cut0);
+          return;
+        }
         if (f.def <= 0) return;
         var cut = Math.min(f.def, shred); f.def -= cut; did = Math.max(did, cut);
       });
@@ -623,14 +629,15 @@
         var back = Math.round(acc.selfDmg * ctx.ch.selfRefund);
         C.hp = Math.min(C.maxHp, C.hp + back);
         ev.push('🩸 처형 — 태운 피 ' + back + ' 회수');
-      } else if (ctx.ch.bleedBack) {
-        C.bleed = (C.bleed || 0) + acc.selfDmg * ctx.ch.bleedBack;
+      } else if (ctx.ch.bleedBack || ctx.propBloodBack) {
+        C.bleed = (C.bleed || 0) + acc.selfDmg * (ctx.propBloodBack ? 1 : ctx.ch.bleedBack);
       }
     }
     if (!ctx.noCheer) {
       var need = Math.max(30, ctx.cheerNeed ? Math.min(ctx.cheerNeed, ctx.cheerCap) : ctx.cheerCap);
       if (ctx.noOvation) need = 1e9;   // 「달아오른 객석」 — 박수는 오지 않고 열기만 남는다
-      cheerFor(C, sc, kills, ev, need, ctx.ovation, ctx.repeatMul, ctx.ch.freshBonus || 0, ctx.cheerCap);
+      cheerFor(C, sc, kills, ev, need, ctx.ovation, ctx.repeatMul, ctx.ch.freshBonus || 0, ctx.cheerCap,
+               ctx.propHoldHalf || 0);   // 💐 마른 화환
     }
     return ev;
   }
@@ -678,7 +685,7 @@
     }, ctx.rnd, 1)[0];
   }
 
-  function cheerFor(C, sc, kills, ev, cap, ova, repMul, fresh, hardCap) {
+  function cheerFor(C, sc, kills, ev, cap, ova, repMul, fresh, hardCap, keepHalf) {
     var CH = T.CHEER, d = 0;
     cap = cap || CH.max;
     // 「관객의 총아」 — 이번 전투에서 처음 올리는 대본마다 환호가 오른다.
@@ -699,7 +706,9 @@
     C.cheer = Math.max(0, Math.min(hardCap || cap, (C.cheer || 0) + d));
     if (C.cheer >= cap) {
       var gain = ova || CH.ovation;
-      C.cheer = 0; C.cost += gain; C.ovation = 1;
+      // 💐 마른 화환 — 박수를 받아도 객석이 절반은 그대로 앉아 있다
+      C.cheer = keepHalf ? Math.round(cap * 0.5) : 0;
+      C.cost += gain; C.ovation = 1;
       C.gold += CH.ovationGold;
       if (ev) ev.push('👏 기립 박수 — 코스트 +' + gain + ' · 골드 +' + CH.ovationGold);
     }
@@ -873,6 +882,8 @@
     S.propSlots = opt.props ? T.BUY_SLOT_BASE + S.perk.propSlot : 0;
     // 충전은 유품마다 따로 센다. 하나의 공용 통으로 두면 조건이 잘 맞는 캐릭터 유품이
     // 3회를 먼저 다 먹고 산 물건은 판당 0.17회밖에 안 나갔다 — 산 값을 못 한다.
+    // 명품 — 이 캐릭터로 무대를 완성한 적이 있으면 강화판을 들고 시작한다 (77장)
+    S.propMaster = !!(opt.props && opt.master);
     S.propMax = opt.props ? T.propCharge() + S.perk.prop : 0;
     S.propLeft = {};
     if (S.prop) S.propLeft[S.prop] = S.propMax;
@@ -1191,6 +1202,8 @@
       noCheer: relicN(S, 'emptyHouse') ? 1 : 0,
       finalCurtain: relicN(S, 'finalCurtain') ? 1 : 0,
       propAoe: S.propAoe || 0, propReflect: S.propReflect || 0, propBlood: S.propBlood || 0,
+      propAoeMul: S.propAoeMul || 1, propBloodBack: S.propBloodBack || 0,
+      propHoldHalf: S.propHoldHalf || 0,
       overflowMul: (S.ch.overflowMul || 1) * (relicN(S, 'mirrorR') ? 2 : 1) };
   }
   // 🔥 화형의 무대 — 화상을 안고 퇴장한 적의 남은 화상이 살아있는 적 전체에게 옮겨붙는다.
@@ -1260,8 +1273,9 @@
       var pk = list[pi];
       if ((S.propLeft[pk] || 0) <= 0) continue;
       if (fireProp(S, ctx, pk, live)) {
-        var pp = T.propInfo(pk);
+        var pp = T.propInfo(pk, S.propMaster && pk === S.prop);
         S.propLeft[pk]--; S.stats.propUses = (S.stats.propUses || 0) + 1;
+        if (S.propMaster && pk === S.prop) S.stats.masterUses = (S.stats.masterUses || 0) + 1;
         S.stats.propBy = S.stats.propBy || {};
         S.stats.propBy[pk] = (S.stats.propBy[pk] || 0) + 1;
         lg(S, 'e', '  ' + pp.icon + ' ' + pp.name + ' 을 썼다');
@@ -1273,35 +1287,44 @@
   function fireProp(S, ctx, key, live) {
     var p = T.propInfo(key);
     if (!p) return false;
+    var mst = S.propMaster && key === S.prop;   // 명품이면 조항이 하나 붙는다
     var use = false;
 
     if (p.kind === 'slot') {
       // 한 칸만 바꾸면 상연할 수 있게 되는 대본이 있나 — 있으면 그 배역으로 바꾼다
-      var hand = handOf(S), bestGain = 0, bestAt = -1, bestId = null;
-      hand.forEach(function (sc) {
-        if (sc.curtain || T.canStage(sc, S.stage, ctx.relax)) return;
-        if (costOf(ctx.ch, sc) > S.cost) return;
-        for (var i = 0; i < S.stage.length; i++) {
-          var keep = S.stage[i], req = sc.requiresFam ? [] : (sc.requires || []);
-          var cand = sc.requiresFam
-            ? Object.keys(T.CARDS).filter(function (id) { return (T.CARDS[id] || {}).fam === sc.requiresFam; })
-            : req;
-          for (var c = 0; c < cand.length; c++) {
-            S.stage[i] = cand[c];
-            if (T.canStage(sc, S.stage, ctx.relax)) {
-              var g = scriptRaw(S, S.w, sc);
-              if (g > bestGain) { bestGain = g; bestAt = i; bestId = cand[c]; }
+      // 🎬 감독의 초고 — 같은 탐색을 두 번 돌린다. 한 칸으로는 안 되던 대본이 열린다.
+      for (var pass = 0; pass < (mst ? 2 : 1); pass++) {
+        var hand = handOf(S), bestGain = 0, bestAt = -1, bestId = null;
+        hand.forEach(function (sc) {
+          if (sc.curtain || T.canStage(sc, S.stage, ctx.relax)) return;
+          if (costOf(ctx.ch, sc) > S.cost) return;
+          for (var i = 0; i < S.stage.length; i++) {
+            var keep = S.stage[i], req = sc.requiresFam ? [] : (sc.requires || []);
+            var cand = sc.requiresFam
+              ? Object.keys(T.CARDS).filter(function (id) { return (T.CARDS[id] || {}).fam === sc.requiresFam; })
+              : req;
+            for (var c = 0; c < cand.length; c++) {
+              S.stage[i] = cand[c];
+              if (T.canStage(sc, S.stage, ctx.relax)) {
+                var g = scriptRaw(S, S.w, sc);
+                if (g > bestGain) { bestGain = g; bestAt = i; bestId = cand[c]; }
+              }
             }
+            S.stage[i] = keep;
           }
-          S.stage[i] = keep;
-        }
-      });
-      if (bestAt >= 0) {
+        });
+        if (bestAt < 0) break;
         S.stage[bestAt] = bestId; use = true;
-        lg(S, 'e', '  🎬 연출 노트 — 슬롯을 ' + T.CARDS[bestId].name + ' 로 바꿨다');
+        S.stats.propSlotN = (S.stats.propSlotN || 0) + 1;
+        lg(S, 'e', '  🎬 슬롯을 ' + T.CARDS[bestId].name + ' 로 바꿨다');
       }
     } else if (p.kind === 'aoe') {
-      if (live.length >= 2) { S.propAoe = 1; ctx.propAoe = 1; use = true; }
+      if (live.length >= 2) {
+        S.propAoe = 1; ctx.propAoe = 1;
+        S.propAoeMul = mst ? 1.3 : 1; ctx.propAoeMul = S.propAoeMul;   // 🪄 이어붙인 지휘봉
+        if (mst) S.stats.propAoeM = (S.stats.propAoeM || 0) + 1;
+        use = true;
+      }
     } else if (p.kind === 'reflect') {
       // e.next 는 의도 id 문자열이지 객체가 아니다. e.next.dmg 를 읽고 있어서
       // 480판 동안 한 번도 발동하지 않았다.
@@ -1313,32 +1336,60 @@
       // 방어로 막고도 남는 피해가 최대 HP 의 12% 를 넘을 때
       // 적은 1턴에 움직이지 않는다 — 의도를 한 턴 미리 공개하기 때문이다(48장).
       // 예고를 보고 그 턴에 쓰면 정작 맞을 때는 효과가 꺼져 있다.
-      if (S.turn >= 2 && incoming >= S.maxHp * 0.12) { S.propReflect = 1; ctx.propReflect = 1; use = true; }
+      if (S.turn >= 2 && incoming >= S.maxHp * 0.12) {
+        S.propReflect = 1; ctx.propReflect = 1;
+        S.propReflectBlock = mst ? 1 : 0;   // 🪞 전신 거울 — 반사한 만큼 방어가 된다
+        use = true;
+      }
     } else if (p.kind === 'dots') {
       // 적의 둔화 스택은 e.slowN 이다. e.slow 는 적에게 존재하지 않는 키라
       // 둔화가 판정에도 배로도 들어가지 않았다 — 악장의 축 절반이 비어 있었다.
       var dot = live.reduce(function (a, e) { return a + (e.burn || 0) + (e.poison || 0) + (e.slowN || 0); }, 0);
       if (dot >= 8) {
         live.forEach(function (e) { e.burn = (e.burn || 0) * 2; e.poison = (e.poison || 0) * 2; e.slowN = (e.slowN || 0) * 2; });
+        S.propDotLock = mst ? 1 : 0;   // 🎼 완성된 악보 — 두 배로 만든 그 턴에는 줄지 않는다
+        if (mst) S.stats.propLock = (S.stats.propLock || 0) + 1;
         use = true;
       }
     } else if (p.kind === 'blood') {
       // 자해 대본을 낼 수 있을 때만 값이 있다
       // 대본 데이터의 키는 selfDamage 다. selfDmg 로 보고 있어서 한 번도 발동하지 않았다.
       if (handOf(S).some(function (sc) { return (sc.effect || {}).selfDamage && canPlay(S, sc); })) {
-        S.propBlood = 1; ctx.propBlood = 1; use = true;
+        S.propBlood = 1; ctx.propBlood = 1;
+        S.propBloodBack = mst ? 1 : 0; ctx.propBloodBack = S.propBloodBack;   // 🩸 남겨진 유서
+        use = true;
       }
     } else if (p.kind === 'strip') {
-      var tough = null, td = 0;
-      live.forEach(function (e) { if ((e.def || 0) > td) { td = e.def; tough = e; } });
-      if (tough && td >= 4) { tough.propStripped = tough.def; tough.def = 0; S.propStrip = tough; use = true; }
+      // 👺 광대의 가면 — 하나가 아니라 전부의 방어를 벗긴다
+      if (mst) {
+        var got = live.filter(function (e) { return (e.def || 0) > 0; });
+        if (got.length && got.reduce(function (a, e) { return a + e.def; }, 0) >= 4) {
+          got.forEach(function (e) { e.propStripped = e.def; e.def = 0; });
+          S.propStrip = got; use = true;
+          S.stats.propStripN = (S.stats.propStripN || 0) + got.length;
+        }
+      } else {
+        var tough = null, td = 0;
+        live.forEach(function (e) { if ((e.def || 0) > td) { td = e.def; tough = e; } });
+        if (tough && td >= 4) { tough.propStripped = tough.def; tough.def = 0; S.propStrip = [tough]; use = true;
+          S.stats.propStripN = (S.stats.propStripN || 0) + 1; }
+      }
     } else if (p.kind === 'hold') {
       // 환호를 쌓기 시작했을 때 걸어야 값이 있다
-      if ((S.cheer || 0) >= 25) { S.propHold = 1; use = true; }
+      if ((S.cheer || 0) >= 25) {
+        S.propHold = 1;
+        // 💐 마른 화환 — 「박수 기준 −15」로 잡았더니 기준이 55 라 하한 30 위에서
+        // 아무 일도 없었다 (기립 10.71 → 10.85). 박수 뒤에 남는 쪽으로 바꿨다.
+        if (mst) { S.propHoldHalf = 1; ctx.propHoldHalf = 1; }
+        use = true;
+      }
     } else if (p.kind === 'curtain') {
       // 이미 이어가는 연속이 있을 때만 — 지킬 것이 없으면 오히려 더 나쁜 대본을
       // 다음 커튼콜로 보내게 된다 (22% → 17% 였다)
-      if (S.chainId && handOf(S).some(function (sc) { return sc.id === S.chainId; })) { S.propCurtain = 1; use = true; }
+      if (S.chainId && handOf(S).some(function (sc) { return sc.id === S.chainId; })) {
+        S.propCurtain = mst ? 2 : 1;   // 🎦 내려진 막 — 한 장이 아니라 두 장을 보낸다
+        use = true;
+      }
 
     // ── 여기부터 상점 유품 ──
     } else if (p.kind === 'cost') {
@@ -1380,9 +1431,14 @@
   }
   // 턴이 끝나면 이번 턴짜리 효과를 되돌린다
   function propTurnEnd(S) {
-    if (S.propStrip) { S.propStrip.def = S.propStrip.propStripped; S.propStrip = null; }
+    if (S.propStrip) {
+      S.propStrip.forEach(function (e) { e.def = Math.max(0, e.propStripped || 0); delete e.propStripped; });
+      S.propStrip = null;
+    }
     S.propAoe = 0; S.propReflect = 0; S.propBlood = 0; S.propHalf = 0; S.propSpin = 0;
-    if (S.ctx) { S.ctx.propAoe = 0; S.ctx.propReflect = 0; S.ctx.propBlood = 0; }
+    S.propReflectBlock = 0; S.propDotLock = 0; S.propAoeMul = 1; S.propBloodBack = 0;
+    if (S.ctx) { S.ctx.propAoe = 0; S.ctx.propReflect = 0; S.ctx.propBlood = 0;
+                 S.ctx.propAoeMul = 1; S.ctx.propBloodBack = 0; }
   }
 
   // 슬롯 수 — 3칸에서 시작해 성장으로 4칸까지. 「무대」는 빌드를 가리키므로(51장) 칸은 슬롯이라 부른다
@@ -1507,6 +1563,7 @@
     S.fThorns = 0; S.thornsMark = 0; S.stallSkip = 0;
     S.propAoe = 0; S.propReflect = 0; S.propStrip = null; S.propCurtain = 0; S.propHold = 0; S.propBlood = 0; S.fightIds = {};
     S.propHalf = 0; S.propSpin = 0; S.propKeep = 0;   // 🧵 실타래는 전투 끝까지 남는다
+    S.propHoldHalf = 0; S.propReflectBlock = 0; S.propDotLock = 0; S.propAoeMul = 1; S.propBloodBack = 0;
     S.curtainIn = (S.curtainNext || []).slice();   // 지난 무대를 닫은 대본들
     S.curtainNext = [];
     S.demand = (nd.type === 'elite' || nd.type === 'boss') ? nextDemand({}, ctxOf(S, S.w)) : null;
@@ -1541,6 +1598,7 @@
       // 🎦 레전드 — 모든 대본이 두 번 상연된다. 대신 극장이 배우를 갉아먹는다.
       if (legendOn(S)) { S.maxHp = Math.max(20, S.maxHp - 3); S.hp = Math.min(S.hp, S.maxHp); }
       if (S.bleed > 0) { var bk = Math.round(S.bleed); S.hp = Math.min(S.maxHp, S.hp + bk); S.bleed = 0;
+        S.stats.bleedBack = (S.stats.bleedBack || 0) + bk;
         if (bk > 0) lg(S, 's', '  🩸 태운 피 ' + bk + ' 이 돌아왔다'); }
       if (S.curser && S.curser.hp > 0) sowCurse(S);
 
@@ -1669,7 +1727,7 @@
         if (!S.foes.some(function (f) { return f.hp > 0; })) { winFight(S); return { won: true }; }
       }
       if (ampTurn) S.stats.ampTurns++;
-      if (!plan.seq.length) S.cheer = Math.max(0, S.cheer + T.CHEER.emptyTurn);
+      if (!plan.seq.length && !S.propHold) S.cheer = Math.max(0, S.cheer + T.CHEER.emptyTurn);
       S.stats.costUsed += maxCost(S) - S.cost;
 
       var res = endTurn(S, w);
@@ -1755,7 +1813,8 @@
 
   function endTurn(S, w) {
     var before = S.foes.filter(function (f) { return f.hp > 0; }).length;
-    S.foes.forEach(function (f) { if (f.hp > 0) T.tickDots(f); });
+    // 🎼 완성된 악보 — 두 배로 만든 그 턴에는 상태이상이 줄지 않는다 (피해는 들어간다)
+    S.foes.forEach(function (f) { if (f.hp > 0) T.tickDots(f, S.propDotLock); });
     var died = before - S.foes.filter(function (f) { return f.hp > 0; }).length;
     // 관객을 퇴장시키면 시계를 되산다 — 하수인이 시간이라는 자원이 된다
     S.foes.forEach(function (f) {
@@ -1807,7 +1866,9 @@
     if (S.turn - (S.stallSkip || 0) >= stallAt) {
       S.foes.forEach(function (f) { if (f.hp > 0) f.atk = Math.ceil(f.atk * (1 + T.CFG.stallAtkPer)); });
       S.hp -= S.asc.stallDmg;
-      S.cheer = Math.max(0, S.cheer + T.CHEER.coolPerTurn);
+      // 💐 꽃다발 — 이번 전투 동안 환호가 식지 않는다.
+      // 플래그를 세워 놓고 읽는 곳이 없어서 이 유품은 아무것도 하지 않고 있었다.
+      if (!S.propHold) S.cheer = Math.max(0, S.cheer + T.CHEER.coolPerTurn);
       if (S.turn - (S.stallSkip || 0) === stallAt) lg(S, 'e', '  😠 관객이 야유한다 — 이제 매 턴 적이 세진다');
     }
     var gr = gimmicks(S);
@@ -1858,6 +1919,8 @@
         var mr = inc;
         if (mr > 0) { f.hp -= mr; S.fThorns = (S.fThorns || 0) + mr;
           S.stats.propRefl = (S.stats.propRefl || 0) + mr;
+          // 🪞 전신 거울 — 돌려준 만큼 무대 위에 방어로 남는다
+          if (S.propReflectBlock) { S.block += mr; S.stats.propBlock = (S.stats.propBlock || 0) + mr; }
           lg(S, 'b', '    🪞 그대로 반사 ' + Math.round(mr)); }
       }
       if (S.thorns) {
@@ -1977,6 +2040,17 @@
       // 🎦 닫힌 막 — 마무리 대본을 덮어쓰지 않고 한 장 더한다
       if (S.propCurtain && S.chainId && S.chainId !== S.lastId && (S.fightIds || {})[S.chainId])
         S.curtainNext.push(S.chainId);
+      // 🎦 내려진 막 — 이번 전투에 상연한 것 중 가장 값이 큰 것을 한 장 더 보낸다
+      if (S.propCurtain >= 2) {
+        var pick = null, pv = 0;
+        Object.keys(S.fightIds || {}).forEach(function (id) {
+          if (S.curtainNext.indexOf(id) >= 0) return;
+          var sc = T.SCRIPT_BY_ID[id]; if (!sc) return;
+          var v = scriptRaw(S, S.w, sc);
+          if (v > pv) { pv = v; pick = id; }
+        });
+        if (pick) { S.curtainNext.push(pick); S.stats.propEncore = (S.stats.propEncore || 0) + 1; }
+      }
       // 연속 — 지난 무대를 닫은 그 대본으로 또 닫았는가
       if (S.chainId === S.lastId) {
         S.chain = Math.min(T.CFG.curtain.chainMax, (S.chain || 0) + 1);
@@ -2674,7 +2748,7 @@
     // 도감만은 계정 공유다. 조각·복원·재연·해금은 난이도 세이브 안에 갇히지만,
     // 도감은 「이 무대가 존재한다는 지식」이지 능력치가 아니다(65.5).
     var meta = { floors: 0, seen: {}, vault: [], shards: 0, owned: [], souls: {},
-                 codex: opt.codex || {}, known: opt.known || {}, perks: [] };
+                 codex: opt.codex || {}, known: opt.known || {}, perks: [], master: {} };
     Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k].start) unlocked[k] = 1; });
     var PKs = Object.keys(POLICIES), fav = PKs[Math.floor(rnd() * PKs.length)];
 
@@ -2693,6 +2767,7 @@
       Object.keys(T.CHARS[ck].deck).forEach(function (c) { meta.known[c] = 1; });
       var r = run({ seed: runSeed, charKey: ck, diffKey: diff, known: meta.known, perks: meta.perks,
                     policyKey: pk, skillObj: sk, asc: asc, meta: meta,
+                    props: opt.props, master: meta.master[ck],
                     stages: opt.stages, snap: opt.snap });
       var newUnlock = 0;
       Object.keys(r.feat || {}).forEach(function (k) {
@@ -2716,6 +2791,11 @@
       });
       var firstSoul = r.won && !meta.souls[ck];
       if (firstSoul) meta.souls[ck] = 1;
+      // 명품 유품 — 그 캐릭터로 무대를 하나 세우면 강화판이 그 세이브에 영구히 남는다.
+      // 어느 무대든 상관없다. 캐릭터와 무대는 별개다(52장).
+      var newMaster = 0;
+      // snap 은 opt.snap 을 켰을 때만 채워진다 — 여기서는 finish() 가 찍는 값을 쓴다
+      if (r.stats.stageDone && !meta.master[ck]) { meta.master[ck] = 1; newMaster = 1; }
       // 퀘스트 — 재연에서만. 깬 것마다 조각이 남는다. 져도 남는다.
       var qList = asc > 0 ? T.questsFor(asc, i) : [];
       var qRes = T.questResult(qList, r.stats);
@@ -2778,7 +2858,9 @@
                  diff: playedDiff, asc: playedAsc, seed: runSeed,
                  won: r.won, floor: r.floor, killedBy: r.killedBy, hp: r.hp, gold: r.gold,
                  deck: r.deck, scripts: r.scripts, relics: r.relics, stats: r.stats, feat: r.feat,
-                 unlocked: Object.keys(unlocked).length });
+                 unlocked: Object.keys(unlocked).length,
+                 master: !!meta.master[ck], newMaster: !!newMaster,
+                 masterN: Object.keys(meta.master).length });
 
       // 그만두는가
       if (r.won) streak = 0; else streak++;
@@ -2796,6 +2878,7 @@
       if (nx2 && meta.shards >= nx2.cost * 0.6) novelty += 0.16;
       // 이번 판에 무대나 에픽을 처음 열었다 — 도감에 새 항목이 들어온다
       if (newStage) novelty += 0.26;
+      if (newMaster) novelty += 0.20;                                  // 이 캐릭터의 명품 유품이 열렸다
       if (newEpic) novelty += 0.30;
       if (meta.vault.length) novelty += 0.08;                          // 계승할 유물이 있다
       // 다음 재연 단에서 어둠 유물이 열린다 — 이게 재연을 올릴 이유다.

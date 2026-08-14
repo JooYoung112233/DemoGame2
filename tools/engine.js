@@ -571,7 +571,30 @@
   // 구매 칸은 처음부터 하나 열려 있다. 복원 목록 뒤에만 보이게 하면 첫 판 하는
   // 사람은 상점 유품이 있다는 것조차 모른 채 판을 끝낸다.
   var BUY_SLOT_BASE = 1;
-  function propInfo(k) { return PROPS[k] || SHOP_PROPS[k] || null; }
+
+  // ── 명품 유품 — 그 캐릭터로 무대를 열면 (77장) ─────────────
+  //
+  // 해금 조건은 「그 캐릭터로 무대를 하나 완성한다」다. 어느 무대든 상관없다 —
+  // 캐릭터와 무대는 별개라는 선(52장)을 여기서 깨면 안 된다. 그 캐릭터로 한 판을
+  // 끝까지 세워봤다는 증명이지, 정해진 무대를 강요하는 숙제가 아니다.
+  //
+  // 강화는 숫자를 키우지 않고 「쓰는 순간」을 하나 옮긴다. 배수만 올리면
+  // 해금 전후가 같은 판이고, 그러면 해금이 그냥 늦게 오는 밸런스 패치가 된다.
+  var MASTER = {
+    note:    { icon: '🎬', name: '감독의 초고',    desc: '슬롯 두 칸을 원하는 배역으로 바꾼다' },
+    baton:   { icon: '🪄', name: '이어붙인 지휘봉', desc: '모든 대본이 광역이 되고, 그 광역이 1.3배' },
+    handMir: { icon: '🪞', name: '전신 거울',      desc: '피해를 반사하고 반사한 만큼 방어를 얻는다' },
+    score:   { icon: '🎼', name: '완성된 악보',    desc: '화상·독·둔화를 두 배로 · 이번 턴 줄지 않는다' },
+    bloody:  { icon: '🩸', name: '남겨진 유서',    desc: '태운 피가 두 배 환산 · 이번 턴 태운 피는 전부 돌아온다' },
+    nose:    { icon: '👺', name: '광대의 가면',    desc: '이번 턴 적 전체의 방어를 0으로' },
+    bouquet: { icon: '💐', name: '마른 화환',      desc: '환호가 식지 않고, 기립 박수 뒤에도 절반이 남는다' },
+    closed:  { icon: '🎦', name: '내려진 막',      desc: '이번 턴 상연한 대본 둘을 다음 커튼콜에 더한다' }
+  };
+  function propInfo(k, master) {
+    if (master && MASTER[k]) return { icon: MASTER[k].icon, name: MASTER[k].name,
+                                      desc: MASTER[k].desc, kind: PROPS[k].kind, of: PROPS[k].of };
+    return PROPS[k] || SHOP_PROPS[k] || null;
+  }
 
 
 
@@ -1317,14 +1340,16 @@
   }
 
   // 지속 피해 정산 — 독은 임계를 넘기면 잠긴다(감소하지 않는다)
-  function tickDots(e) {
+  // noDecay 는 🎼 완성된 악보 — 피해는 그대로 들어가되 이번 턴만 줄지 않는다.
+  // 정산 자체를 건너뛰면 두 배로 만든 그 턴에 도트가 아예 안 터진다 (악장 −4pp 였다).
+  function tickDots(e, noDecay) {
     var out = 0;
-    if (e.burn) { e.hp -= e.burn; out += e.burn; e.burn--; }
+    if (e.burn) { e.hp -= e.burn; out += e.burn; if (!noDecay) e.burn--; }
     if (e.poison) {
       e.hp -= e.poison; out += e.poison;
-      if (e.poison < AMP.poisonLock) e.poison--;
+      if (!noDecay && e.poison < AMP.poisonLock) e.poison--;
     }
-    if (e.slowN) e.slowN--;
+    if (e.slowN && !noDecay) e.slowN--;
     return out;
   }
 
@@ -1371,6 +1396,7 @@
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
     PROPS: PROPS, propOf: propOf,
     SHOP_PROPS: SHOP_PROPS, propInfo: propInfo, BUY_SLOT_BASE: BUY_SLOT_BASE,
+    MASTER: MASTER,
     PERKS: PERKS, perkOffer: perkOffer, perkMods: perkMods,
     QUESTS: QUESTS, questsFor: questsFor, questResult: questResult,
     // 숫자를 그대로 내보내면 복사본이 박혀서 이후 변경이 반영되지 않는다 —
