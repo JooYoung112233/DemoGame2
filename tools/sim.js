@@ -140,8 +140,12 @@
   function reliefOf(S) {
     return Math.floor(((S.asc && S.asc.level) || 0) / STAGE_RELIEF);
   }
-  function needAt(S) {
+  function needAt(S, key) {
     var n = { reel: STAGE_NEED.reel, relic: STAGE_NEED.relic, script: STAGE_NEED.script };
+    // 🔄 무대 전환 — 지금까지 다른 무대에 쌓은 것이 새 무대의 자재가 된다.
+    // 이게 없으면 「전환」이 아니라 「재시작」이다: 중앙 19층에 사서 남은 17층으로
+    // 0 부터 릴 4·유물 1·대본 3 을 다시 채워야 했고, 실제로 연 판이 8% 뿐이었다.
+    if (key && S.switchTo === key) { n.reel = Math.max(2, n.reel - 1); n.script = Math.max(2, n.script - 1); }
     // 릴과 대본을 번갈아 푼다. 유물은 건드리지 않는다 — 1 아래로는 축이 사라진다.
     if (S.perk && S.perk.reelEase) n.reel = Math.max(2, n.reel - S.perk.reelEase);
     for (var i = 0, r = reliefOf(S); i < r; i++) {
@@ -187,7 +191,7 @@
     var script = S.scripts.filter(function (sc) {
       return !(S.script0 || {})[sc.id] && st.script(sc.effect || {}, sc);
     }).length;
-    var need = needAt(S);
+    var need = needAt(S, key);
     var p = 0.4 * Math.min(1, reel / need.reel)
           + 0.3 * Math.min(1, relic / need.relic)
           + 0.3 * Math.min(1, script / need.script);
@@ -209,6 +213,13 @@
   var TILT_KEEP = 0.12;           // 이만큼 앞서야 갈아탄다
   function tiltAt(S) {
     if (!S.useStages) return null;
+    // 🔄 무대 전환 — 사람이 한 번 방향을 튼다. 완성될 때까지 기울기가 여기 고정된다.
+    // 관성 0.12 때문에 기울기는 판당 중앙 0회 바뀐다 — 한 번 걸리면 되돌릴 손잡이가
+    // 없었고, 세 판 중 한 판이 엉뚱한 무대로 끌려간 채 끝났다(30%).
+    if (S.tiltPin) {
+      if (!stageProg(S, S.tiltPin).done) { S.tiltKey = S.tiltPin; return S.tiltPin; }
+      S.tiltPin = null;                        // 열었으면 고정을 푼다
+    }
     var cur = S.tiltKey, curP = -1;
     if (cur) { var cg = stageProg(S, cur); if (cg.done) cur = null; else curP = cg.p; }
     var best = cur, bv = cur ? curP + TILT_KEEP : TILT_AT;
@@ -948,8 +959,10 @@
   function finish(S, won, killedBy) {
     var st = S.stats;
     st.floor = S.at ? S.at.f + 1 : 0;
-    st.stageDone = 0;
-    if (S.useStages) Object.keys(STAGES).forEach(function (k) { if (stageProg(S, k).done) st.stageDone = 1; });
+    st.stageDone = 0; st.stageList = [];
+    if (S.useStages) Object.keys(STAGES).forEach(function (k) {
+      if (stageProg(S, k).done) { st.stageDone = 1; st.stageList.push(k); }
+    });
     return { won: won, killedBy: killedBy, char: S.ch.name, charKey: keyOf(T.CHARS, S.ch),
       policy: S.pol.name, skill: S.sk.name, w: S.w, feat: S.feat, seenIds: S.seenIds || {}, knownCards: S.knownCards || {},
       floor: S.at ? S.at.f + 1 : 0, nodes: st.nodes, turns: st.turns,
@@ -2136,7 +2149,7 @@
     // 조용한 기울기 — 후보 셋 중 한 자리를 그 무대의 카드로 채운다.
     // 이게 없으면 특정 카드가 뜰 기대값이 판당 0.25장이라 무엇도 못 모은다.
     var tk = tiltAt(S);
-    if (tk && S.rnd() < TILT_P.card && stageProg(S, tk).reel < needAt(S).reel) {
+    if (tk && S.rnd() < TILT_P.card && stageProg(S, tk).reel < needAt(S, tk).reel) {
       var want = STAGES[tk].reel[Math.floor(S.rnd() * STAGES[tk].reel.length)];
       if (out.indexOf(want) < 0) out[out.length - 1] = want;
     }
@@ -2166,7 +2179,7 @@
     });
     var seen = (S.meta && S.meta.seen) || {};
     var tk = tiltAt(S);
-    var tst = (tk && S.rnd() < TILT_P.script && stageProg(S, tk).script < needAt(S).script) ? STAGES[tk] : null;
+    var tst = (tk && S.rnd() < TILT_P.script && stageProg(S, tk).script < needAt(S, tk).script) ? STAGES[tk] : null;
     // 대본 서고 — 예전 판에서 상연해 본 대본이 더 자주 뜬다. 덱을 이어서 만들어가는 감각.
     return T.pickWeighted(pool, function (sc) {
       var v = T.scriptWeight(S.ch, sc) * (seen[sc.id] ? T.ARCHIVE_MUL : 1);
@@ -2194,7 +2207,7 @@
       });
     }
     var tk = tiltAt(S);
-    if (tk && stageProg(S, tk).relic < needAt(S).relic) put(open(STAGES[tk].relic));
+    if (tk && stageProg(S, tk).relic < needAt(S, tk).relic) put(open(STAGES[tk].relic));
     var ek = epicTilt(S);
     if (ek) put(open(EPIC[ek].relic));
     return list;
@@ -2237,9 +2250,9 @@
     }
     var tk = tiltAt(S); if (!tk) return 0;
     var st = STAGES[tk], g = stageProg(S, tk);
-    if (kind === 'card' && g.reel < needAt(S).reel && st.reel.indexOf(x) >= 0) return (5 + 5 * g.p) * TILT_W;
-    if (kind === 'relic' && g.relic < needAt(S).relic && st.relic.indexOf(x) >= 0) return 14 + 14 * g.p;
-    if (kind === 'script' && g.script < needAt(S).script && st.script(x.effect || {}, x)) return 4 + 4 * g.p;
+    if (kind === 'card' && g.reel < needAt(S, tk).reel && st.reel.indexOf(x) >= 0) return (5 + 5 * g.p) * TILT_W;
+    if (kind === 'relic' && g.relic < needAt(S, tk).relic && st.relic.indexOf(x) >= 0) return 14 + 14 * g.p;
+    if (kind === 'script' && g.script < needAt(S, tk).script && st.script(x.effect || {}, x)) return 4 + 4 * g.p;
     return 0;
   }
 
@@ -2362,6 +2375,9 @@
       .slice(0, 3).map(function (sc) { return { sc: sc, cost: T.CFG.gold.upgrade[S.act - 1] || 32 }; });
     // 상점 유품 — 칸이 비었으면 사고, 차 있으면 바꾼다 (76장)
     var props = S.useProps ? offerProps(S, 3) : [];
+    // 🔄 무대 전환 — 2막부터 · 판당 한 번 (78장)
+    var swOffer = (S.useStages && S.act >= T.SWITCH.act && !S.tiltPin)
+      ? { cost: Math.round(T.SWITCH.cost * (S.asc.shopMul || 1)) } : null;
 
     // 유물이 가장 값이 크다 — 규칙을 바꾸니까. 그다음 대본, 배역.
     var guard = 0;
@@ -2379,6 +2395,10 @@
       props.forEach(function (it, i) {
         if (S.gold >= it.cost) buys.push({ v: propValue(S, it.k), kind: 'p', i: i, it: it });
       });
+      if (swOffer && S.gold >= swOffer.cost) {
+        var sw = switchPick(S);
+        if (sw) buys.push({ v: sw.v, kind: 'w', i: 0, it: { key: sw.key, cost: swOffer.cost } });
+      }
       ups.forEach(function (it, i) {
         if (S.gold < it.cost) return;
         // 코스트가 1 줄면 그 대본을 더 자주 낼 수 있다 — 값을 그 차이로 본다
@@ -2412,6 +2432,14 @@
         props.splice(b.i, 1);
         S.shopRec.prop = (S.shopRec.prop || 0) + 1;
         S.stats.propBuys = (S.stats.propBuys || 0) + 1;
+      }
+      if (b.kind === 'w') {
+        S.tiltPin = b.it.key; S.switchTo = b.it.key; swOffer = null;
+        S.stats.switchAt = S.at ? S.at.f + 1 : 0;
+        S.stats.switchFrom = S.tiltKey; S.stats.switchTo = b.it.key;
+        lg(S, 'e', '  🔄 무대 전환 — ' + STAGES[b.it.key].icon + ' ' + STAGES[b.it.key].name + ' 쪽으로 돌렸다');
+        // 버리고 가는 만큼 하나는 들고 간다 — 이게 없으면 전환이 기준선보다 손해다
+        fillStageOne(S, b.it.key, '🔄', 2);
       }
       if (b.kind === 'u') {
         var ix = S.scripts.indexOf(b.it.sc);
@@ -2463,6 +2491,69 @@
     }
     return v;
   }
+  // ── 🔄 무대 전환 — 어디로 돌릴 것인가 (78장) ───────────────
+  //
+  // 무대마다 그 덱에 맞는 정도가 다르다. 진행도만 보고 고르면 관성을 푸는 것 이상이
+  // 아니지만, 성향을 섞으면 「내 덱이 하려던 것」쪽으로 돌리는 물건이 된다.
+  var STAGE_FIT = {
+    mirror:  function (w) { return w.thorns * 1.4 + w.block * 0.4; },
+    burn:    function (w) { return w.aoe * 1.0 + w.status * 0.6; },
+    king:    function (w) { return w.dmg * 0.8; },
+    mask:    function (w) { return w.dmg * 0.5 + w.status * 0.5; },
+    curtain: function (w) { return w.block * 1.2; },
+    poison:  function (w) { return w.status * 1.4; }
+  };
+  // 그 무대의 미충족 조건 하나를 즉시 채운다 — 🎫 초대장(53.2)과 🔄 무대 전환이 함께 쓴다.
+  // reelCap 은 릴을 몇 장까지 줄지 — 초대장은 모자란 만큼 전부(0), 전환은 두 장까지다.
+  function fillStageOne(S, key, tag, reelCap) {
+    var st = STAGES[key], g = stageProg(S, key), need = needAt(S, key);
+    if (g.relic < need.relic) {
+      var want = st.relic.filter(function (k) {
+        var rr = T.RELICS[k]; return !relicN(S, k) && (!rr.dark || (S.asc.level || 0) >= rr.asc); });
+      if (want.length) { takeRelic(S, want[0]); lg(S, 'e', '    ' + tag + ' ' + T.RELICS[want[0]].name); return true; }
+    }
+    if (g.reel < need.reel) {
+      var give = need.reel - g.reel, card = st.reel[0];
+      if (reelCap) give = Math.min(give, reelCap);
+      for (var q = 0; q < give && deckSize(S) < T.CFG.reelMax; q++) S.deck[card] = (S.deck[card] || 0) + 1;
+      lg(S, 'e', '    ' + tag + ' ' + T.CARDS[card].name + ' ' + give + '장'); return true;
+    }
+    if (g.script < need.script) {
+      var cand = T.SCRIPTS.filter(function (sc) {
+        return knownScript(S, sc) && st.script(sc.effect || {}, sc)
+            && !S.scripts.some(function (x) { return x.id === sc.id; }); });
+      if (cand.length) { S.scripts.push(cand[Math.floor(S.rnd() * cand.length)]);
+        lg(S, 'e', '    ' + tag + ' 대본을 한 권 얻었다'); return true; }
+    }
+    return false;
+  }
+
+  function switchPick(S) {
+    var cur = S.tiltKey, curP = cur ? stageProg(S, cur).p : 0;
+    var curFit = cur ? (STAGE_FIT[cur] || function () { return 1; })(S.w) : 0;
+    // 돌려도 못 채울 만큼 남은 층이 적으면 사지 않는다.
+    // 8층으로 뒀더니 중앙 19층에 사서 열린 판이 8% 였다 — 활주로가 모자랐다.
+    var left = T.CFG.floors - (S.at ? S.at.f + 1 : 0);
+    if (left < 12) return null;
+    var best = null, bv = -1;
+    Object.keys(STAGES).forEach(function (k) {
+      if (k === cur) return;
+      var g = stageProg(S, k);
+      if (g.done) return;
+      var score = g.p + (STAGE_FIT[k] || function () { return 1; })(S.w) * 0.10;
+      if (score > bv) { bv = score; best = k; }
+    });
+    if (!best) return null;
+    var gap = bv - (curP + curFit * 0.10);
+    // 「격차 0.08 이상」으로만 걸었더니 봇은 잘 풀리는 판에서 샀다 —
+    // 산 판의 평균이 32.7층 · 클리어 68% 로 전체 평균(20.7층 · 30%)보다 훨씬 위였다.
+    // 골드가 남는 판이 곧 오래 산 판이라서다. 그 판에 사면 무대 +5pp, 클리어 −8pp.
+    // 이건 구제 수단이므로 「정말 안 풀리는 판」에서만 잡혀야 한다.
+    if (gap < 0.15) return null;
+    if (curP >= 0.5) return null;         // 지금 무대가 이미 반이면 갈아탈 때가 아니다
+    return { key: best, v: 14 + gap * 45 };
+  }
+
   function offerProps(S, n) {
     var have = {}; (S.buyProps || []).forEach(function (k) { have[k] = 1; });
     var pool = Object.keys(T.SHOP_PROPS).filter(function (k) { return !have[k]; });
@@ -2646,24 +2737,7 @@
     // 조건이 누적뿐이면 시간이 곧 조건이라 판마다 속도가 같다(53.2).
     if (id === 'invite') {
       var tk = tiltAt(S); if (!tk) return;
-      var st = STAGES[tk], g = stageProg(S, tk), need = needAt(S);
-      if (g.relic < need.relic) {
-        var want = st.relic.filter(function (k) {
-          var rr = T.RELICS[k]; return !relicN(S, k) && (!rr.dark || (S.asc.level || 0) >= rr.asc); });
-        if (want.length) { takeRelic(S, want[0]); lg(S, 'e', '    🎫 ' + T.RELICS[want[0]].name); return; }
-      }
-      if (g.reel < need.reel) {
-        var give = need.reel - g.reel, card = st.reel[0];
-        for (var q = 0; q < give && deckSize(S) < T.CFG.reelMax; q++) S.deck[card] = (S.deck[card] || 0) + 1;
-        lg(S, 'e', '    🎫 ' + T.CARDS[card].name + ' ' + give + '장'); return;
-      }
-      if (g.script < need.script) {
-        var cand = T.SCRIPTS.filter(function (sc) {
-          return knownScript(S, sc) && st.script(sc.effect || {}, sc)
-              && !S.scripts.some(function (x) { return x.id === sc.id; }); });
-        if (cand.length) { S.scripts.push(cand[Math.floor(S.rnd() * cand.length)]);
-          lg(S, 'e', '    🎫 대본을 한 권 얻었다'); }
-      }
+      fillStageOne(S, tk, '🎫', 0);
       return;
     }
     // 📜 낡은 대본철 — 아직 못 본 무대 하나를 도감에 등록한다

@@ -572,6 +572,18 @@
   // 사람은 상점 유품이 있다는 것조차 모른 채 판을 끝낸다.
   var BUY_SLOT_BASE = 1;
 
+  // ── 무대 전환 — 기울기를 사람이 한 번 튼다 (78장) ──────────
+  //
+  // 51.4 의 「해체」를 대신한다. 해체는 잘못 켠 무대를 끄는 물건인데 무대는 조건이
+  // 차면 자동으로 켜지므로 잘못 켤 일이 없다 — 없는 문제를 푸는 물건이었다.
+  // 실재하는 답답함은 반대쪽이다: 기울기가 엉뚱한 무대로 걸린 채 끝나는 판이 30%.
+  //
+  // 2막부터만 나온다. 1층부터 살 수 있으면 그건 전환이 아니라 선포이고,
+  // 선포는 51장에서 이미 버렸다 — 덱 짜는 재미가 반감된다.
+  // 35골드는 유물 한 개 값이라 기회비용이 컸다 — 산 판의 클리어가 8pp 떨어졌다.
+  var SWITCH = { icon: '🔄', name: '무대 전환', desc: '기울기를 원하는 무대로 돌린다',
+                 cost: 24, act: 2 };
+
   // ── 명품 유품 — 그 캐릭터로 무대를 열면 (77장) ─────────────
   //
   // 해금 조건은 「그 캐릭터로 무대를 하나 완성한다」다. 어느 무대든 상관없다 —
@@ -1396,7 +1408,7 @@
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
     PROPS: PROPS, propOf: propOf,
     SHOP_PROPS: SHOP_PROPS, propInfo: propInfo, BUY_SLOT_BASE: BUY_SLOT_BASE,
-    MASTER: MASTER,
+    MASTER: MASTER, SWITCH: SWITCH,
     PERKS: PERKS, perkOffer: perkOffer, perkMods: perkMods,
     QUESTS: QUESTS, questsFor: questsFor, questResult: questResult,
     // 숫자를 그대로 내보내면 복사본이 박혀서 이후 변경이 반영되지 않는다 —
