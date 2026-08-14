@@ -868,7 +868,14 @@
     S.perk = T.perkMods(opt.perks || []);   // 이력 — 재연을 넘기며 고른 퍽들
     S.useProps = !!opt.props;
     S.prop = opt.props ? T.propOf(opt.charKey) : null;   // 유품은 그 캐릭터 것을 들고 시작한다
-    S.propCharge = opt.props ? T.propCharge() + S.perk.prop : 0;   // 한 판에 쓸 수 있는 총 횟수
+    // 상점 유품 — 산 것이 여기 쌓인다. 칸은 기본 1, 분장대(복원·퍽)가 늘린다.
+    S.buyProps = [];
+    S.propSlots = opt.props ? T.BUY_SLOT_BASE + S.perk.propSlot : 0;
+    // 충전은 유품마다 따로 센다. 하나의 공용 통으로 두면 조건이 잘 맞는 캐릭터 유품이
+    // 3회를 먼저 다 먹고 산 물건은 판당 0.17회밖에 안 나갔다 — 산 값을 못 한다.
+    S.propMax = opt.props ? T.propCharge() + S.perk.prop : 0;
+    S.propLeft = {};
+    if (S.prop) S.propLeft[S.prop] = S.propMax;
     S.slotMax = T.CFG.stageBase + (opt.slot4 ? 1 : 0);   // 복원 목록을 사면 applyMeta 가 덮는다
     S.tiltKey = null;
     S.hp = S.maxHp;
@@ -938,7 +945,7 @@
       hp: Math.max(0, Math.round(S.hp)), maxHp: S.maxHp, gold: S.gold,
       deck: Object.assign({}, S.deck), scripts: S.scripts.map(function (s) { return s.name; }),
       scriptIds: S.scripts.map(function (s) { return s.id; }),
-      relics: S.relics.slice(), stats: st, log: S.log, trace: S.trace };
+      relics: S.relics.slice(), buyProps: (S.buyProps || []).slice(), stats: st, log: S.log, trace: S.trace };
   }
   function keyOf(o, v) { return Object.keys(o).filter(function (k) { return o[k] === v; })[0]; }
 
@@ -952,6 +959,7 @@
     S.premiere = p;
     // 슬롯 4칸은 복원 목록에서 산다. 사기 전에는 3칸으로 판을 돈다.
     S.slotMax = T.CFG.stageBase + (p.slot ? 1 : 0);
+    if (S.useProps) S.propSlots += p.prop;   // 🎫 분장대 — 상점 유품을 하나 더 들 수 있다
 
     // 시작 릴 교체 — 가장 값이 낮은 칸을 이 캐릭터 풀의 가장 값 높은 배역으로 바꾼다
     for (var i = 0; i < p.swap; i++) {
@@ -1228,13 +1236,17 @@
   //
   // 봇은 「좋은 턴을 만들려고 아껴둔다」를 못 한다(커튼콜과 같은 한계 · 50.4).
   // 그래서 조건이 맞는 첫 턴에 쓴다 — 사람보다 낮게 나온다는 것을 알고 재야 한다.
+  // 들고 있는 유품 — 캐릭터 것이 먼저다. 산 물건이 고유를 밀어내면 안 된다.
+  function heldProps(S) {
+    return (S.prop ? [S.prop] : []).concat(S.buyProps || []);
+  }
   function propReady(S) {
-    return S.useProps && S.prop && (S.propCharge || 0) > 0;
+    return S.useProps && heldProps(S).some(function (k) { return (S.propLeft[k] || 0) > 0; });
   }
   // 이번 턴에 쓸 값어치가 있나 — 유품마다 판정이 다르다
   function tryProp(S, ctx) {
     if (!propReady(S)) return;
-    var p = T.PROPS[S.prop], live = S.foes.filter(function (e) { return e.hp > 0; });
+    var live = S.foes.filter(function (e) { return e.hp > 0; });
     if (!live.length) return;
     // 한 판에 세 번뿐이다. 아무 데나 쓰면 정작 필요할 때 없다.
     // 주연·비극이거나, 몰렸거나, 전투가 길어졌을 때만 꺼낸다.
@@ -1242,6 +1254,25 @@
     var worth = nd.type === 'boss' || nd.type === 'elite'
              || S.hp < S.maxHp * 0.5 || S.turn >= 5 || S.foes.length >= 3;
     if (!worth) return;
+    // 한 턴에 하나만. 아니면 봇이 보스 첫 턴에 판 전체의 충전을 태운다.
+    var list = heldProps(S);
+    for (var pi = 0; pi < list.length; pi++) {
+      var pk = list[pi];
+      if ((S.propLeft[pk] || 0) <= 0) continue;
+      if (fireProp(S, ctx, pk, live)) {
+        var pp = T.propInfo(pk);
+        S.propLeft[pk]--; S.stats.propUses = (S.stats.propUses || 0) + 1;
+        S.stats.propBy = S.stats.propBy || {};
+        S.stats.propBy[pk] = (S.stats.propBy[pk] || 0) + 1;
+        lg(S, 'e', '  ' + pp.icon + ' ' + pp.name + ' 을 썼다');
+        return;
+      }
+    }
+  }
+  // 이 유품이 지금 값이 있으면 걸고 true — 없으면 아무것도 하지 않는다
+  function fireProp(S, ctx, key, live) {
+    var p = T.propInfo(key);
+    if (!p) return false;
     var use = false;
 
     if (p.kind === 'slot') {
@@ -1284,9 +1315,11 @@
       // 예고를 보고 그 턴에 쓰면 정작 맞을 때는 효과가 꺼져 있다.
       if (S.turn >= 2 && incoming >= S.maxHp * 0.12) { S.propReflect = 1; ctx.propReflect = 1; use = true; }
     } else if (p.kind === 'dots') {
-      var dot = live.reduce(function (a, e) { return a + (e.burn || 0) + (e.poison || 0) + (e.slow || 0); }, 0);
+      // 적의 둔화 스택은 e.slowN 이다. e.slow 는 적에게 존재하지 않는 키라
+      // 둔화가 판정에도 배로도 들어가지 않았다 — 악장의 축 절반이 비어 있었다.
+      var dot = live.reduce(function (a, e) { return a + (e.burn || 0) + (e.poison || 0) + (e.slowN || 0); }, 0);
       if (dot >= 8) {
-        live.forEach(function (e) { e.burn = (e.burn || 0) * 2; e.poison = (e.poison || 0) * 2; e.slow = (e.slow || 0) * 2; });
+        live.forEach(function (e) { e.burn = (e.burn || 0) * 2; e.poison = (e.poison || 0) * 2; e.slowN = (e.slowN || 0) * 2; });
         use = true;
       }
     } else if (p.kind === 'blood') {
@@ -1306,16 +1339,49 @@
       // 이미 이어가는 연속이 있을 때만 — 지킬 것이 없으면 오히려 더 나쁜 대본을
       // 다음 커튼콜로 보내게 된다 (22% → 17% 였다)
       if (S.chainId && handOf(S).some(function (sc) { return sc.id === S.chainId; })) { S.propCurtain = 1; use = true; }
+
+    // ── 여기부터 상점 유품 ──
+    } else if (p.kind === 'cost') {
+      // 올릴 수 있는 대본이 예산보다 많을 때. 「낼 수 없는 한 장이 있나」로 봤더니
+      // 턴 시작 코스트가 4~5 라 거의 걸리지 않았다 — 판당 0.00 회였다.
+      var able = handOf(S).filter(function (sc) { return T.canStage(sc, S.stage, ctx.relax); });
+      var sum = able.reduce(function (a, sc) { return a + costOf(ctx.ch, sc); }, 0);
+      if (able.length >= 2 && sum > S.cost) { S.cost += 2; use = true; }
+    } else if (p.kind === 'half') {
+      // 예고를 보고 건다. 적은 1턴에 움직이지 않으므로 2턴부터가 의미 있다.
+      var inc2 = 0;
+      live.forEach(function (e) {
+        var info = T.intentInfo(e, e.next);
+        if (info.kind === 'atk') inc2 += info.n;
+      });
+      if (S.turn >= 2 && inc2 - S.block >= S.maxHp * 0.15) { S.propHalf = 1; use = true; }
+    } else if (p.kind === 'draw') {
+      var have = {}; S.temp.forEach(function (s) { have[s.id] = 1; });
+      var more = instantScripts(S, ctx, 2).filter(function (s) { return !have[s.id]; }).slice(0, 2);
+      // 낼 수 있는 것이 이미 넉넉하면 두 장이 더 와도 손패만 늘어난다
+      if (more.length && handOf(S).filter(function (sc) { return canPlay(S, sc); }).length <= 3) {
+        more.forEach(function (s) { S.temp.push(s); });
+        use = true;
+      }
+    } else if (p.kind === 'spin') {
+      // 고를 것이 없는 턴을 사는 물건이다. 낼 수 있는 대본이 하나 이하일 때.
+      if (handOf(S).filter(function (sc) { return canPlay(S, sc); }).length <= 2) { S.propSpin = 2; use = true; }
+    } else if (p.kind === 'keep') {
+      // 지킬 연속이 있을 때 미리 건다. 「이을 대본이 손에 없을 때」로 좁혔더니
+      // 종막이 20% 들고도 발동 0.00 이었다 — 이건 보험이지 구조용이 아니다.
+      if (!S.propKeep && (S.chain || 0) >= 1) { S.propKeep = 1; use = true; }
+    } else if (p.kind === 'slowAll') {
+      if (live.length >= 2 || (S.at || {}).type === 'boss') {
+        live.forEach(function (e) { T.applySlow(e, 3); });
+        use = true;
+      }
     }
-    if (use) {
-      S.propCharge--; S.stats.propUses = (S.stats.propUses || 0) + 1;
-      lg(S, 'e', '  ' + p.icon + ' ' + p.name + ' 을 썼다');
-    }
+    return use;
   }
   // 턴이 끝나면 이번 턴짜리 효과를 되돌린다
   function propTurnEnd(S) {
     if (S.propStrip) { S.propStrip.def = S.propStrip.propStripped; S.propStrip = null; }
-    S.propAoe = 0; S.propReflect = 0; S.propBlood = 0;
+    S.propAoe = 0; S.propReflect = 0; S.propBlood = 0; S.propHalf = 0; S.propSpin = 0;
     if (S.ctx) { S.ctx.propAoe = 0; S.ctx.propReflect = 0; S.ctx.propBlood = 0; }
   }
 
@@ -1440,6 +1506,7 @@
     // 비극과 주연에서만 걸어 특별한 자리로 남긴다.
     S.fThorns = 0; S.thornsMark = 0; S.stallSkip = 0;
     S.propAoe = 0; S.propReflect = 0; S.propStrip = null; S.propCurtain = 0; S.propHold = 0; S.propBlood = 0; S.fightIds = {};
+    S.propHalf = 0; S.propSpin = 0; S.propKeep = 0;   // 🧵 실타래는 전투 끝까지 남는다
     S.curtainIn = (S.curtainNext || []).slice();   // 지난 무대를 닫은 대본들
     S.curtainNext = [];
     S.demand = (nd.type === 'elite' || nd.type === 'boss') ? nextDemand({}, ctxOf(S, S.w)) : null;
@@ -1529,7 +1596,7 @@
 
       // 계획 → 필요하면 재굴림 → 다시 계획
       var plan = planTurn(S, ctx);
-      var rer = 0, free = (S.ch.freeReroll || 0) + (S.growth.reroll || 0);
+      var rer = 0, free = (S.ch.freeReroll || 0) + (S.growth.reroll || 0) + (S.propSpin || 0);
       while (rer < 2 && (free > 0 || S.cost >= 2)) {
         if (S.rnd() > S.sk.useReroll) break;        // 재굴림을 쓸 줄 아는지가 숙련도다
         var k = worstReel(S, ctx), isFree = free > 0;
@@ -1653,7 +1720,7 @@
     return S.temp.concat(S.scripts.filter(function (s) { return !S.sealed[s.id]; }));
   }
 
-  function instantScripts(S, ctx) {
+  function instantScripts(S, ctx, bonus) {
     if (relicN(S, 'tornScript')) return [];        // 어둠 유물 — 즉석 대본이 나오지 않는다
     var owned = {}; S.scripts.forEach(function (s) { owned[s.id] = 1; });
     var out = [];
@@ -1666,7 +1733,7 @@
     out.sort(function (a, b) { return b.cost - a.cost; });
     // 즉석은 기본 1장. 유물이 늘리고, 환호가 절반을 넘으면 한 장 더 —
     // 관중이 달아오르면 즉흥이 나온다는 그림이다.
-    var tn = T.CFG.tempBase + (S.growth.temp || 0) + relicN(S, 'improv')
+    var tn = T.CFG.tempBase + (S.growth.temp || 0) + relicN(S, 'improv') + (bonus || 0)
            + ((S.cheer || 0) >= (S.asc.cheerMax || T.CHEER.max) * 0.5 ? 1 : 0);
     return out.slice(0, Math.max(1, tn));
   }
@@ -1774,6 +1841,9 @@
         lg(S, 'e', '  ' + f.name + ' 방어 ' + Math.round(ab2) + ' 흡수'); S.block -= ab2; return; }
       var inc = f.atk * (it === 'doubleStrike' ? 2 : 1);
       if (it === 'attackBleed' || it === 'attackBurn') inc += f.dotVal;
+      // 🕯 꺼지지 않는 초 — 방어 앞에서 반으로 줄인다. 뒤에서 줄이면 방어 덱에는
+      // 남는 것이 없어서(손거울이 그랬다) 방어를 쓰는 캐릭터에게만 안 통한다.
+      if (S.propHalf) inc = Math.round(inc * 0.5);
       var ab = Math.min(S.block, inc); S.block -= ab; S.hp -= (inc - ab);
       // 크게 맞으면 관객이 등을 돌린다 — 이게 있어야 「환호 유지」가 덱이 된다
       if ((inc - ab) >= S.maxHp * T.CHEER.dropAt && S.cheer > 0) {
@@ -1913,6 +1983,11 @@
         S.stats.chainMax = Math.max(S.stats.chainMax || 0, S.chain);
         lg(S, 's', '  🎭 연속 ' + S.chain + '회 — 「' + (T.SCRIPT_BY_ID[S.lastId] || {}).name + '」');
         if (S.chain >= 3) S.feat.closer = 1;
+      } else if (S.propKeep) {
+        // 🧵 실타래 — 다른 대본으로 닫아도 연속이 그대로 넘어간다
+        S.chainId = S.lastId;
+        S.stats.propKeep = (S.stats.propKeep || 0) + 1;
+        lg(S, 's', '  🧵 실타래 — 연속 ' + S.chain + '회가 끊기지 않았다');
       } else {
         S.chain = S.chainId ? Math.floor((S.chain || 0) * (S.ch.chainKeep || 0)) : 0;
         S.chainId = S.lastId;
@@ -2211,6 +2286,8 @@
     // 대본 상한(7장)과 부딪히지 않는 지출처다. 있는 것을 강하게 하니까.
     var ups = S.scripts.filter(function (sc) { return sc.cost > 1 && !sc.upgraded; })
       .slice(0, 3).map(function (sc) { return { sc: sc, cost: T.CFG.gold.upgrade[S.act - 1] || 32 }; });
+    // 상점 유품 — 칸이 비었으면 사고, 차 있으면 바꾼다 (76장)
+    var props = S.useProps ? offerProps(S, 3) : [];
 
     // 유물이 가장 값이 크다 — 규칙을 바꾸니까. 그다음 대본, 배역.
     var guard = 0;
@@ -2224,6 +2301,9 @@
       });
       cards.forEach(function (it, i) {
         if (S.gold >= it.cost) buys.push({ v: cardValue(S, w, it.id) * 0.9, kind: 'c', i: i, it: it });
+      });
+      props.forEach(function (it, i) {
+        if (S.gold >= it.cost) buys.push({ v: propValue(S, it.k), kind: 'p', i: i, it: it });
       });
       ups.forEach(function (it, i) {
         if (S.gold < it.cost) return;
@@ -2240,6 +2320,25 @@
       if (b.kind === 'r') { takeRelic(S, b.it.k); relics.splice(b.i, 1); S.shopRec.relic++; lg(S, 'e', '  🏪 유물 ' + T.RELICS[b.it.k].name); }
       if (b.kind === 's') { S.scripts.push(b.it.sc); scripts.splice(b.i, 1); S.shopRec.script++; lg(S, 'e', '  🏪 대본 「' + b.it.sc.name + '」'); }
       if (b.kind === 'c') { if (deckSize(S) < T.CFG.reelMax) { S.deck[b.it.id] = (S.deck[b.it.id] || 0) + 1; noteTake(S, b.it.id, 'shop'); } else S.stats.reelFull = (S.stats.reelFull || 0) + 1; cards.splice(b.i, 1); S.shopRec.card++; lg(S, 'e', '  🏪 배역 ' + T.CARDS[b.it.id].name); }
+      if (b.kind === 'p') {
+        if (S.buyProps.length >= S.propSlots) {
+          // 칸이 찼으면 가장 값이 낮은 것을 내려놓는다. 충전은 늘지 않는다 — 든 개수가 그대로다.
+          var wi = 0, wv = 1e9;
+          S.buyProps.forEach(function (k, ix2) { var pv = propRaw(S, k); if (pv < wv) { wv = pv; wi = ix2; } });
+          lg(S, 'e', '  🏪 유품 교체 ' + T.SHOP_PROPS[S.buyProps[wi]].name + ' → ' + T.SHOP_PROPS[b.it.k].name);
+          delete S.propLeft[S.buyProps[wi]];
+          S.buyProps[wi] = b.it.k;
+          S.propLeft[b.it.k] = S.propMax;        // 새로 든 물건은 충전이 차 있다
+          S.stats.propSwaps = (S.stats.propSwaps || 0) + 1;
+        } else {
+          S.buyProps.push(b.it.k);
+          S.propLeft[b.it.k] = S.propMax;
+          lg(S, 'e', '  🏪 유품 ' + T.SHOP_PROPS[b.it.k].name);
+        }
+        props.splice(b.i, 1);
+        S.shopRec.prop = (S.shopRec.prop || 0) + 1;
+        S.stats.propBuys = (S.stats.propBuys || 0) + 1;
+      }
       if (b.kind === 'u') {
         var ix = S.scripts.indexOf(b.it.sc);
         // 카탈로그 객체를 그대로 고치면 다른 런까지 오염된다 — 복제해서 바꾼다
@@ -2249,6 +2348,56 @@
       }
     }
     closeShop(S);
+  }
+
+  // ── 상점 유품 — 값 매기기 (76장) ─────────────────────────
+  //
+  // 값을 캐릭터로 기울인다. 같은 상점에서 종막은 실타래를, 악장은 삐걱대는 바닥을
+  // 집게 하려는 것이다. 전부 같은 값이면 「범용 유품」이 여섯 개가 아니라 하나가 된다.
+  // 기본값을 12 로 두었더니 여섯 캐릭터 중 여섯이 전부 회전권을 1위로 집었다.
+  // 캐릭터 항이 기본값에 묻혀서다. 기본을 낮추고 캐릭터 항을 키운다 —
+  // 「범용 유품」이 여섯 개가 아니라 하나가 되면 넣은 의미가 없다.
+  // 기본값은 유품끼리의 순위에는 영향이 없다 (전부에 같은 수를 더하므로) —
+  // 오직 「유물·대본 대신 유품을 살 것인가」만 움직인다. 6 에서는 판당 0.52개였다.
+  var PROP_BASE = 10;
+  function propRaw(S, k) {
+    var ch = S.ch, v = PROP_BASE;
+    // 🔔 무대 종 — 예산이 늘 모자란 덱에게. 악장은 계열 밖 코스트 +1 을 달고 산다.
+    if (k === 'bell')   v += S.scripts.filter(function (sc) { return costOf(ch, sc) >= 3; }).length * 3
+                           + (ch.offFamCost ? 6 : 0);
+    // 🕯 꺼지지 않는 초 — 피가 깎였을 때. 총아는 크게 맞으면 환호가 0 이 되므로 방패가 곧 곱셈이다.
+    if (k === 'candle') v += (1 - S.hp / S.maxHp) * 14 + (ch.cheerDmgPer ? 6 : 0);
+    // 📯 호출 나팔 — 어릿광대는 즉석 대본이 곧 정체성이다 (해금 조건도 그것이다)
+    if (k === 'horn')   v += (ch.handBonus ? 8 : 0) + Math.max(0, 5 - S.scripts.length) * 2;
+    // 🎟 구겨진 회전권 — 재굴림을 쓸 줄 아는 사람에게, 그리고 이미 굴리는 연출가에게
+    if (k === 'ticket') v += (ch.freeReroll ? 6 : 0) + (S.sk.useReroll || 0) * 4 + (S.pol.thin || 0) * 3;
+    // 🧵 실타래 — 연속이 곧 곱셈인 덱에게
+    if (k === 'thread') v += (ch.chainPer || 0) * 20 + ((ch.curtainSlots || 1) > 1 ? 4 : 0);
+    // 🪤 삐걱대는 바닥 — 둔화가 곧 증폭인 덱, 그리고 여럿을 한 번에 미는 덱에게
+    if (k === 'creak')  v += (ch.famStatusPlus ? 8 : 0) + (ch.aoeFams ? 5 : 0) + (ch.soloAoeMul ? 2 : 0);
+    return v;
+  }
+  function propValue(S, k) {
+    var held = S.buyProps || [];
+    if (held.indexOf(k) >= 0) return 0;          // 같은 것을 둘 들지 않는다
+    var v = propRaw(S, k);
+    if (held.length >= S.propSlots) {
+      // 교체는 차액만큼만 값이 있다 — 그래서 후반 상점에서도 질문이 남는다
+      var worst = 1e9;
+      held.forEach(function (h) { worst = Math.min(worst, propRaw(S, h)); });
+      v -= worst;
+    }
+    return v;
+  }
+  function offerProps(S, n) {
+    var have = {}; (S.buyProps || []).forEach(function (k) { have[k] = 1; });
+    var pool = Object.keys(T.SHOP_PROPS).filter(function (k) { return !have[k]; });
+    var out = [];
+    for (var i = 0; i < n && pool.length; i++) {
+      var k = pool.splice(Math.floor(S.rnd() * pool.length), 1)[0];
+      out.push({ k: k, cost: Math.round(T.SHOP_PROPS[k].cost * (S.asc.shopMul || 1)) });
+    }
+    return out;
   }
 
   // 상점을 나갈 때의 잔액 — 골드가 남으면 계획의 재미가 준다

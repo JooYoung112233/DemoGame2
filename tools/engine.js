@@ -549,6 +549,30 @@
     return k || null;
   }
 
+  // ── 상점 유품 — 캐릭터를 가리지 않는 범용 (76장) ───────────
+  //
+  // 「🎫 분장대(유품 슬롯 +1)」를 160조각에 사도 넣을 물건이 없었다. 그 구멍이다.
+  //
+  // 전부 평평한 고정치다. 여기에 배수를 하나라도 주면 골드로 산 물건이 그 캐릭터의
+  // 유품(악보 ×2 · 피 묻은 대본 ×2)을 덮어쓴다. 개성이 골드로 지워지면 안 된다.
+  // 그래서 범용은 「한 턴을 사는」 것이고, 고유는 「그 덱을 증폭하는」 것이다.
+  // 값은 유물과 같은 띠에 둔다 (유물 12~34 · 중앙 22). 45~60 으로 잡았더니
+  // 상점 입장 골드 중앙이 44 라 판당 0.23개밖에 안 팔렸다 — 늘 제일 비싼 물건이었고
+  // 봇은 싼 유물부터 사고 나서 돈이 없었다. 유물보다 싸야 맞다: 유물은 규칙을 바꾸고
+  // 유품은 한 턴을 산다.
+  var SHOP_PROPS = {
+    bell:   { icon: '🔔', name: '무대 종',        desc: '이번 턴 코스트 +2',            kind: 'cost',    cost: 22 },
+    candle: { icon: '🕯', name: '꺼지지 않는 초', desc: '이번 턴 받는 피해 절반',        kind: 'half',    cost: 26 },
+    horn:   { icon: '📯', name: '호출 나팔',      desc: '즉석 대본 2장',                kind: 'draw',    cost: 20 },
+    ticket: { icon: '🎟', name: '구겨진 회전권',  desc: '이번 턴 재굴림이 공짜',         kind: 'spin',    cost: 18 },
+    thread: { icon: '🧵', name: '실타래',         desc: '이번 전투는 연속이 끊기지 않는다', kind: 'keep',  cost: 24 },
+    creak:  { icon: '🪤', name: '삐걱대는 바닥',  desc: '적 전체에 둔화 3',              kind: 'slowAll', cost: 22 }
+  };
+  // 구매 칸은 처음부터 하나 열려 있다. 복원 목록 뒤에만 보이게 하면 첫 판 하는
+  // 사람은 상점 유품이 있다는 것조차 모른 채 판을 끝낸다.
+  var BUY_SLOT_BASE = 1;
+  function propInfo(k) { return PROPS[k] || SHOP_PROPS[k] || null; }
+
 
 
   // ── 퀘스트 목록 — 실패를 보상으로 바꾼다 (69.2) ───────────
@@ -1346,6 +1370,7 @@
     CHEER: CHEER, CHEER_TEXT: CHEER_TEXT, DEMANDS: DEMANDS, DEMAND_CHEER: DEMAND_CHEER,
     ASCENSION: ASCENSION, BOSS_LEARN: BOSS_LEARN, ascend: ascend,
     PROPS: PROPS, propOf: propOf,
+    SHOP_PROPS: SHOP_PROPS, propInfo: propInfo, BUY_SLOT_BASE: BUY_SLOT_BASE,
     PERKS: PERKS, perkOffer: perkOffer, perkMods: perkMods,
     QUESTS: QUESTS, questsFor: questsFor, questResult: questResult,
     // 숫자를 그대로 내보내면 복사본이 박혀서 이후 변경이 반영되지 않는다 —
