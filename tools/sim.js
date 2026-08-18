@@ -1119,6 +1119,35 @@
   }
 
   // ── 전투 ─────────────────────────────────────────────────
+  // ── 조합 — 전투 하나가 「같은 몹 N마리」뿐이었다 (79장) ──────
+  //
+  // pickFoes 는 풀에서 한 종을 뽑아 N번 복제했다. 그래서 전투 종류가 몹 종류와
+  // 정확히 같았다 — 막당 4가지다. 클리어한 판이 막당 6.3전투를 치르니 같은 얼굴을
+  // 평균 1.6번 본다. 몹을 늘리기 전에, 있는 것을 섞는 것이 먼저다.
+  //
+  // 아무거나 섞으면 안 된다. 요구하는 답이 둘이 되면 난이도가 튄다 —
+  // 철갑(관통)과 흡수체(방어 무의존)를 같이 내면 답이 없는 전투가 된다.
+  // 조합마다 축을 하나로 모으고, 총 HP·공격이 단일 조합과 같은 띠에 있게 짠다.
+  var GROUPS = {
+    1: [
+      { name: '빈 객석',    of: [['잊혀진 관객', 2], ['무대 거미', 1]],       ask: '빠른 다타를 먼저 끊는다' },
+      { name: '어두운 복도', of: [['춤추는 그림자', 1], ['잊혀진 관객', 2]],   ask: '회피를 다타로 뚫는다' },
+      { name: '무대 뒤',    of: [['무대 거미', 2], ['가면 없는 배우', 1]],    ask: '출혈을 안고 빠른 것부터' },
+      { name: '남은 극단',  of: [['가면 없는 배우', 1], ['춤추는 그림자', 1]], ask: '출혈을 안고 회피를 뚫는다' }
+    ],
+    2: [
+      { name: '왕의 근위',  of: [['웃는 병사', 2], ['노래하는 해골', 1]],     ask: '회복을 끊고, 방어가 자라기 전에' },
+      { name: '관람석',    of: [['박수치는 관객', 2], ['웃는 병사', 1]],     ask: '큰 대본을 아끼며 관통' },
+      { name: '합창',      of: [['노래하는 해골', 2], ['박수치는 관객', 1]], ask: '전체 회복을 넘기는 화력' }
+    ],
+    3: [
+      { name: '초연의 밤',  of: [['흡수체', 1], ['유령 배우', 1]],           ask: '방어에 기대지 않고 회피를 뚫는다' },
+      { name: '막이 오른다', of: [['흡수체', 2], ['유령 배우', 1]],          ask: '방어 흡수 앞에서 딜을 낸다', heavy: 1 }
+    ]
+  };
+  var FOE_BY_NAME = {};
+  T.ENEMIES.forEach(function (e) { if (!e.boss) FOE_BY_NAME[e.name] = e; });
+
   function pickFoes(S, nd) {
     var pool = T.ENEMIES.filter(function (e) { return e.act === S.act && !e.boss; });
     if (nd.type === 'boss') {
@@ -1143,11 +1172,31 @@
       var out2 = []; for (var j = 0; j < n2; j++) out2.push(base);
       return out2;
     }
+    // 조합 — 첫 두 층은 단일로 둔다. 배우는 구간에 여러 종류가 한 번에 나오면
+    // 「무엇이 나를 죽였는지」를 못 배운다. 그 뒤부터 절반쯤 혼합이 섞인다.
+    var gs = GROUPS[S.act] || [];
+    if (!base.solo && nd.f >= 2 && gs.length && S.rnd() < 0.5) {
+      var g = gs[Math.floor(S.rnd() * gs.length)], mixed = [];
+      g.of.forEach(function (pair) {
+        var e = FOE_BY_NAME[pair[0]]; if (!e) return;
+        var want = Math.min(pair[1], e.maxCount || 9);
+        for (var q = 0; q < want; q++) mixed.push(e);
+      });
+      if (mixed.length > 2 && S.rnd() < 0.3) mixed.pop();   // 단일과 같은 여유를 준다
+      if (mixed.length) {
+        S.stats.groups = (S.stats.groups || 0) + 1;
+        S.stats.groupBy = S.stats.groupBy || {};
+        S.stats.groupBy[g.name] = (S.stats.groupBy[g.name] || 0) + 1;
+        lg(S, 'e', '  🎭 ' + g.name + ' — ' + g.ask);
+        return mixed;
+      }
+    }
     // 전투가 3턴에 끝나던 이유의 절반은 적이 한둘뿐이었기 때문이다.
     // 개별 적을 두껍게 하면 「벽처럼」 느껴지니 수를 늘린다 — 광역·다타에 값이 생긴다.
     var cap = Math.min(base.maxCount || 4, nd.f === 0 ? 1 : (S.act === 1 ? 3 : 4));
     var n = base.solo ? 1 : Math.max(1, cap - (S.rnd() < 0.3 ? 1 : 0));
     var out = []; for (var i = 0; i < n; i++) out.push(base);
+    S.stats.singles = (S.stats.singles || 0) + 1;
     return out;
   }
 
