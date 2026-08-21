@@ -1133,23 +1133,36 @@
       { name: '빈 객석',    of: [['잊혀진 관객', 2], ['무대 거미', 1]],       ask: '빠른 다타를 먼저 끊는다' },
       { name: '어두운 복도', of: [['춤추는 그림자', 1], ['잊혀진 관객', 2]],   ask: '회피를 다타로 뚫는다' },
       { name: '무대 뒤',    of: [['무대 거미', 2], ['가면 없는 배우', 1]],    ask: '출혈을 안고 빠른 것부터' },
-      { name: '남은 극단',  of: [['가면 없는 배우', 1], ['춤추는 그림자', 1]], ask: '출혈을 안고 회피를 뚫는다' }
+      { name: '남은 극단',  of: [['가면 없는 배우', 1], ['춤추는 그림자', 1]], ask: '출혈을 안고 회피를 뚫는다' },
+      { name: '접힌 줄',    of: [['접힌 객석', 2], ['잊혀진 관객', 1]],       ask: '관통 — 안 뚫으면 못 깎는다' },
+      { name: '안내 데스크', of: [['안내원', 1], ['가면 없는 배우', 2]],      ask: '안내원을 먼저' },
+      { name: '흩날린 전단', of: [['찢어진 전단', 3]],                      ask: '광역 — 하나씩은 늦다' },
+      { name: '천장',      of: [['삐걱이는 샹들리에', 1], ['잊혀진 관객', 2]], ask: '샹들리에가 자라기 전에' }
     ],
     2: [
       { name: '왕의 근위',  of: [['웃는 병사', 2], ['노래하는 해골', 1]],     ask: '회복을 끊고, 방어가 자라기 전에' },
       { name: '관람석',    of: [['박수치는 관객', 2], ['웃는 병사', 1]],     ask: '큰 대본을 아끼며 관통' },
-      { name: '합창',      of: [['노래하는 해골', 2], ['박수치는 관객', 1]], ask: '전체 회복을 넘기는 화력' }
+      { name: '합창',      of: [['노래하는 해골', 2], ['박수치는 관객', 1]], ask: '전체 회복을 넘기는 화력' },
+      { name: '소품 창고',  of: [['불붙은 소품', 2], ['웃는 병사', 1]],      ask: '터지는 순서를 고른다' },
+      { name: '왕의 그늘',  of: [['그림자 시종', 2], ['나팔수', 1]],        ask: '나팔수를 먼저, 그다음 앞을 치운다' },
+      { name: '가면 무도회', of: [['겹친 가면', 2], ['노래하는 해골', 1]],   ask: '광역이 흘러간다 — 단일로' },
+      { name: '행진',      of: [['나팔수', 1], ['웃는 병사', 2]],          ask: '보호가 붙기 전에' },
+      { name: '소매치기',  of: [['표 훔치는 손', 1], ['웃는 병사', 1]],   ask: '3턴 — 놓치면 골드를 들고 간다' }
     ],
     3: [
       { name: '초연의 밤',  of: [['흡수체', 1], ['유령 배우', 1]],           ask: '방어에 기대지 않고 회피를 뚫는다' },
-      { name: '막이 오른다', of: [['흡수체', 2], ['유령 배우', 1]],          ask: '방어 흡수 앞에서 딜을 낸다', heavy: 1 }
+      { name: '막이 오른다', of: [['흡수체', 2], ['유령 배우', 1]],          ask: '방어 흡수 앞에서 딜을 낸다', heavy: 1 },
+      { name: '깨진 조명',  of: [['유리 배우', 2], ['조명탑', 1]],           ask: '흘리는 것을 단일로, 빠르게' },
+      { name: '마지막 줄',  of: [['마지막 관객', 2], ['흡수체', 1]],        ask: '앞을 치우고 환호를 지킨다' },
+      { name: '도둑질',    of: [['막 도둑', 1], ['유령 배우', 1]],         ask: '5턴 — 놓치면 골드가 사라진다' },
+      { name: '무대 뒤편',  of: [['그림자 시종', 0], ['유리 배우', 1], ['마지막 관객', 1]], ask: '어느 쪽도 정직하게 안 맞는다' }
     ]
   };
   var FOE_BY_NAME = {};
-  T.ENEMIES.forEach(function (e) { if (!e.boss) FOE_BY_NAME[e.name] = e; });
+  T.ENEMIES.forEach(function (e) { if (!e.boss && !e.elite) FOE_BY_NAME[e.name] = e; });
 
   function pickFoes(S, nd) {
-    var pool = T.ENEMIES.filter(function (e) { return e.act === S.act && !e.boss; });
+    var pool = T.ENEMIES.filter(function (e) { return e.act === S.act && !e.boss && !e.elite; });
     if (nd.type === 'boss') {
       var bs = T.ENEMIES.filter(function (e) { return e.act === S.act && e.boss; })[0];
       return [bs || T.ENEMIES.filter(function (e) { return e.boss; })[0]];
@@ -1168,6 +1181,9 @@
         S.stats.keys = (S.stats.keys || 0) + 1;
         lg(S, 's', '  🎭 분장실 열쇠 — ' + EPIC[ek2].icon + ' ' + EPIC[ek2].name + ' 이 가까워졌다');
       }
+      // 비극은 「일반 몹 2마리 + 난입 확정」이라 막마다 얼굴이 없었다 (80장).
+      var mid = T.ENEMIES.filter(function (e) { return e.act === S.act && e.elite; })[0];
+      if (mid) { S.stats.elites = (S.stats.elites || 0) + 1; return [mid]; }
       var n2 = base.solo ? 1 : Math.min(2, base.maxCount || 2);
       var out2 = []; for (var j = 0; j < n2; j++) out2.push(base);
       return out2;
@@ -1955,6 +1971,10 @@
       f.next = T.pickIntent(f, S.rnd);
       if (it === 'defend') { f.block += f.defVal; lg(S, 't', '  ' + f.name + ' 방어 ' + f.defVal); return; }
       if (it === 'buff') { f.atk += f.buffVal; lg(S, 't', '  ' + f.name + ' 강화 +' + f.buffVal); return; }
+      if (it === 'shieldAll') {
+        var got = 0;
+        S.foes.forEach(function (y) { if (y.hp > 0 && y !== f) { y.block += f.shieldVal; got++; } });
+        lg(S, 't', '  ' + f.name + ' 동료 보호 +' + f.shieldVal + ' (' + got + '체)'); return; }
       if (it === 'healAll') {
         S.foes.forEach(function (y) { if (y.hp > 0) y.hp = Math.min(y.maxHp, y.hp + f.healVal); });
         lg(S, 't', '  ' + f.name + ' 전체 회복 ' + f.healVal); return; }
@@ -2003,6 +2023,36 @@
   // 닼던의 방식 — 수치가 아니라 강제되는 대응을 만든다.
   function gimmicks(S) {
     if (S.censor && --S.censor.turns <= 0) { lg(S, 'e', '  ✂️ 검열이 풀렸다'); S.censor = null; }
+
+    // 👤 후열 — 「나 말고 살아 있는 적이 있는가」. ampMul 이 이 값을 읽는다.
+    var aliveN = S.foes.filter(function (x) { return x.hp > 0; }).length;
+    S.foes.forEach(function (x) { x.covered = (x.hides && x.hp > 0 && aliveN > 1) ? 1 : 0; });
+
+    // 💥 퇴장 폭발 — 쓸어담는 순서를 생각하게 한다
+    S.foes.forEach(function (x) {
+      if (x.hp > 0 || !x.onDeathDmg || x.burstDone) return;
+      x.burstDone = 1; S.hp -= x.onDeathDmg;
+      S.stats.burstDmg = (S.stats.burstDmg || 0) + x.onDeathDmg;
+      lg(S, 'd', '  💥 ' + x.name + ' 이 터졌다 — ' + x.onDeathDmg + ' 피해');
+    });
+
+    // ⏳ 도주 — 시간을 끌면 골드를 들고 사라진다. 속결을 「손해」로 가르친다.
+    S.foes.forEach(function (x) {
+      if (x.hp <= 0 || !x.fleeT) return;
+      if (--x.fleeT > 0) { if (x.fleeT === 1) lg(S, 'e', '  ⏳ ' + x.name + ' 이 달아나려 한다'); return; }
+      var take = Math.min(S.gold, x.fleeGold || 0);
+      S.gold -= take; x.hp = 0; x.fled = 1;
+      S.stats.fled = (S.stats.fled || 0) + 1;
+      S.stats.fledGold = (S.stats.fledGold || 0) + take;
+      lg(S, 'e', '  ⏳ ' + x.name + ' 이 골드 ' + take + ' 를 들고 사라졌다');
+    });
+
+    // 🎫 표값 — 매 턴 골드를 걷고, 낼 것이 없으면 대신 강해진다
+    S.foes.forEach(function (x) {
+      if (x.hp <= 0 || x.gimmick !== 'toll') return;
+      if (S.gold >= x.toll) { S.gold -= x.toll; S.stats.tollPaid = (S.stats.tollPaid || 0) + x.toll; }
+      else { x.atk += 2; lg(S, 'e', '  🎫 표값을 못 냈다 — ' + x.name + ' 공격 +2'); }
+    });
 
     for (var i = 0; i < S.foes.length; i++) {
       var f = S.foes[i];

@@ -331,6 +331,56 @@
       intents: [['attack', 2], ['doubleStrike', 1]], demands: '광역 · 다타' },
     { act: 3, name: '종지기',    hp: 110, atk: 12, def: 3,  cd: 2, doom: 5, solo: true,
       intents: [['attack', 2], ['buff', 1, 5]], demands: '속도' },
+
+    // ── 1막 신규 — 2·3막이 요구할 축을 여기서 한 번씩 만난다 (80장) ──
+    // 기존 4종 중 답을 요구하는 것이 춤추는 그림자 하나뿐이었다. 1막은 배우는 막인데
+    // 가르치는 것이 없었다. 신규 4종은 관통·표적 순서·광역·속결을 하나씩 맡는다.
+    { act: 1, name: '접힌 객석', hp: 26, atk: 3, def: 5, cd: 3, maxCount: 2,
+      intents: [['attack', 2], ['defend', 1, 8]], demands: '관통' },
+    { act: 1, name: '안내원', hp: 14, atk: 3, def: 0, cd: 2, maxCount: 1,
+      intents: [['shieldAll', 2, 5], ['attack', 1]], demands: '안내원을 먼저' },
+    { act: 1, name: '찢어진 전단', hp: 9, atk: 3, def: 0, cd: 2, maxCount: 4, onDeathDmg: 2,
+      intents: [['attack', 3]], demands: '광역 — 하나씩 잡으면 늦는다' },
+    { act: 1, name: '삐걱이는 샹들리에', hp: 22, atk: 4, def: 1, cd: 3, maxCount: 1,
+      intents: [['attack', 2], ['buff', 2, 3]], demands: '속결' },
+
+    // ── 2막 신규 — 새 질문을 가져온다 ──
+    { act: 2, name: '불붙은 소품', hp: 20, atk: 6, def: 0, cd: 2, maxCount: 2, onDeathDmg: 9,
+      intents: [['attack', 2], ['attackBurn', 1, 3]], demands: '정리하는 순서' },
+    { act: 2, name: '그림자 시종', hp: 30, atk: 8, def: 2, cd: 2, maxCount: 2, hides: 0.4,
+      intents: [['attack', 2], ['defend', 1, 8]], demands: '앞을 치워야 뒤가 맞는다' },
+    { act: 2, name: '겹친 가면', hp: 28, atk: 9, def: 1, cd: 2, maxCount: 2, dodgeAoe: 0.5,
+      intents: [['attack', 2], ['doubleStrike', 1]], demands: '단일 화력' },
+    { act: 2, name: '표 훔치는 손', hp: 24, atk: 7, def: 1, cd: 2, maxCount: 1, flee: 3, fleeGold: 10,
+      intents: [['attack', 2], ['defend', 1, 6]], demands: '3턴 안에' },
+    { act: 2, name: '나팔수', hp: 26, atk: 6, def: 2, cd: 3, maxCount: 1,
+      intents: [['shieldAll', 2, 8], ['buff', 1, 4]], demands: '나팔수를 먼저' },
+
+    // ── 3막 신규 — 축이 겹쳐 온다. 그리고 solo 가 둘뿐이라 조합이 살아난다 ──
+    { act: 3, name: '유리 배우', hp: 38, atk: 12, def: 0, cd: 2, maxCount: 2,
+      dodgeAoe: 0.45, evadeSingle: 0.2,
+      intents: [['attack', 2], ['doubleStrike', 1]], demands: '어느 쪽으로든 새어나간다' },
+    { act: 3, name: '막 도둑', hp: 44, atk: 11, def: 2, cd: 2, maxCount: 1, flee: 3, fleeGold: 18,
+      intents: [['attack', 2], ['defend', 1, 10]], demands: '5턴 안에 — 놓치면 골드를 들고 간다' },
+    { act: 3, name: '마지막 관객', hp: 40, atk: 12, def: 2, cd: 2, maxCount: 2,
+      hides: 0.35, cheerDrain: 6,
+      intents: [['attack', 2], ['buff', 1, 4]], demands: '앞을 치우고, 환호를 지킨다' },
+    { act: 3, name: '조명탑', hp: 46, atk: 10, def: 3, cd: 3, maxCount: 1, onDeathDmg: 12,
+      intents: [['attack', 2], ['buff', 2, 5]], demands: '속결 — 다만 터진다' },
+
+    // ── 중간보스 — 비극(엘리트) 전용 얼굴 ──
+    // 지금까지 비극은 「일반 몹 2마리 + 난입 확정」이라 막마다 얼굴이 없었다.
+    { act: 1, name: '매표원', hp: 36, atk: 5, def: 2, cd: 2, elite: true, solo: true,
+      gimmick: 'toll', toll: 5,
+      intents: [['attack', 2], ['defend', 1, 10]], demands: '표값을 내거나, 빨리 끝내거나' },
+    { act: 2, name: '분장실 거울', hp: 72, atk: 12, def: 4, cd: 2, elite: true, solo: true,
+      gimmick: 'mimic', gimCd: 3, dodgeAoe: 0.35,
+      intents: [['attack', 2], ['defend', 1, 12], ['buff', 1, 4]], demands: '큰 대본을 아끼고, 단일로' },
+    { act: 3, name: '초연의 대역', hp: 108, atk: 16, def: 5, cd: 3, elite: true, solo: true,
+      gimmick: 'censor', gimCd: 3, hides: 0,
+      adds: [{ name: '대역의 그림자', hp: 26, atk: 9, def: 0, cd: 2, hides: 0.4,
+               intents: [['attack', 2], ['defend', 1, 6]] }],
+      intents: [['attack', 2], ['attackBleed', 1, 4], ['defend', 1, 14]], demands: '그림자를 먼저' },
     // 보스는 수치가 아니라 「강제되는 대응」으로 기억된다.
     // 닼던1 의 방식이다 — 하수인을 먼저 죽이게 만들고, 자원을 빼앗고, 시계를 건다.
 
@@ -964,12 +1014,18 @@
     censor: ['✂️ 검열',   '3턴마다 릴에서 가장 많은 배역을 2턴 봉인한다'],
     seize:  ['📜 압수',   '4턴마다 내 대본 하나를 이 전투 동안 압수한다 (최대 2장)'],
     phase:  ['🎭 2막',    'HP 절반에서 2막 — 공격 1.4배, 관객 둘을 부르고 9턴 시계가 돌아간다'],
-    doom:   ['🔔 막 내림', '시계가 0이 되면 막이 내려간다 — 관객을 퇴장시키면 시계가 +2']
+    doom:   ['🔔 막 내림', '시계가 0이 되면 막이 내려간다 — 관객을 퇴장시키면 시계가 +2'],
+    toll:   ['🎫 표값',   '매 턴 골드를 걷는다 — 낼 골드가 없으면 대신 강해진다'],
+    burst:  ['💥 폭발',   '퇴장할 때 터진다 — 정리하는 순서를 생각하게 한다'],
+    flee:   ['⏳ 도주',   '정해진 턴이 지나면 골드를 들고 사라진다'],
+    hide:   ['👤 후열',   '앞에 다른 적이 서 있는 동안 받는 피해가 줄어든다'],
+    dodgeAoe: ['🎭 흘림', '광역 피해를 흘려낸다 — 단일 화력을 요구한다']
   };
 
   var INTENT_KO = {
     attack: '공격', doubleStrike: '2연타', defend: '방어', buff: '강화',
-    healAll: '전체 회복', attackBleed: '공격+출혈', attackBurn: '공격+화상', absorb: '방어 흡수'
+    healAll: '전체 회복', attackBleed: '공격+출혈', attackBurn: '공격+화상', absorb: '방어 흡수',
+    shieldAll: '동료 보호'
   };
 
   // ── 조합표 조회 ───────────────────────────────────────────
@@ -1265,12 +1321,14 @@
       atk: Math.round(base.atk * atkMul), def: base.def || 0,
       t: base.cd, block: 0, burn: 0, poison: 0, doomMax: base.doom || 0,
       intents: base.intents || [['attack', 1]],
-      defVal: 8, buffVal: 4, healVal: 8, dotVal: 3
+      defVal: 8, buffVal: 4, healVal: 8, dotVal: 3, shieldVal: 5,
+      fleeT: base.flee || 0, covered: 0
     });
     e.intents.forEach(function (t) {
       if (t[0] === 'defend') e.defVal = t[2] || e.defVal;
       if (t[0] === 'buff') e.buffVal = t[2] || e.buffVal;
       if (t[0] === 'healAll') e.healVal = t[2] || e.healVal;
+      if (t[0] === 'shieldAll') e.shieldVal = t[2] || 5;
       if (t[0] === 'attackBleed' || t[0] === 'attackBurn') e.dotVal = t[2] || e.dotVal;
     });
     return e;
@@ -1282,6 +1340,7 @@
     if (it === 'defend')  return { ko: '방어',      n: f.defVal,  kind: 'def' };
     if (it === 'buff')    return { ko: '강화',      n: f.buffVal, kind: 'buff' };
     if (it === 'healAll') return { ko: '전체 회복', n: f.healVal, kind: 'heal' };
+    if (it === 'shieldAll') return { ko: '동료 보호', n: f.shieldVal, kind: 'def' };
     if (it === 'absorb')  return { ko: '방어 흡수', n: 0,         kind: 'absorb' };
     var n = f.atk * (it === 'doubleStrike' ? 2 : 1);
     if (it === 'attackBleed' || it === 'attackBurn') n += f.dotVal;
@@ -1324,6 +1383,9 @@
   function ampMul(e, opt) {
     var mul = 1;
     // 🩸 쇠약의 무대(완성) — 둔화 상한이 사라진다. 굳을수록 계속 깊어진다.
+    // 👤 후열 — 앞에 다른 적이 서 있는 동안은 잘 안 맞는다. 표적 순서를 강제한다.
+    // covered 는 매 턴 sim 이 「나 말고 살아 있는 적이 있는가」로 갱신한다.
+    if (e.hides && e.covered) mul *= (1 - e.hides);
     if (e.slowN) mul += e.slowFree ? AMP.slowPer * e.slowN : Math.min(AMP.slowCap, AMP.slowPer * e.slowN);
     // 🔥 화형의 무대(완성) — 화상 위의 광역이 3배가 된다.
     // 「번진다」1.9배 · 「안 꺼진다」1.6배 · 「옮겨붙는다」1.8배 — 셋 다 덧셈이라 값이 안 났다.
@@ -1344,6 +1406,8 @@
       if (!landed) return 0;
       amount = amount * landed / h;
     }
+    // 🎭 광역만 흘려낸다 — 단일 화력을 요구한다. 회피(evadeSingle)의 반대 축이다.
+    if (opt.aoe && e.dodgeAoe && opt.rnd && opt.rnd() < e.dodgeAoe) return 0;
     amount = amount * ampMul(e, opt);
     if (!opt.pierce) amount = Math.max(amount * AMP.minPierce, amount - e.def);
     if (e.block > 0) { var ab = Math.min(e.block, amount); e.block -= ab; amount -= ab; }
