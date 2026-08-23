@@ -194,7 +194,20 @@
              justify-content:center; gap:3%; }
   .hc .req span { width:17%; aspect-ratio:1; background-size:contain;
                   background-repeat:no-repeat; background-position:center;
-                  filter:sepia(.5) contrast(1.1); }
+                  filter:sepia(.5) contrast(1.1); border-radius:50%; }
+  /* 요구 심볼의 출처를 구분한다 — 무대에 있는 것 / 대역이 채운 것 / 없는 것 */
+  .hc .req .wild { box-shadow:0 0 0 1.5px #c8912f, 0 0 5px #d2a848cc;
+                   filter:sepia(.15) contrast(1.15) brightness(1.12); }
+  .hc .req .slack { box-shadow:0 0 0 1.5px #7f9a72, 0 0 5px #7f9a72aa;
+                    filter:sepia(.2) contrast(1.1); }
+  .hc .req .miss { opacity:.3; filter:grayscale(1) contrast(.9); }
+  .hc .why { position:absolute; left:6%; right:6%; top:53%; text-align:center;
+             font-size:.62cqw; color:#8e3b34; letter-spacing:.04em; }
+  .hc:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  .hc:disabled { cursor:default; }
+  .wildmark { position:absolute; left:0; right:0; bottom:3%; text-align:center;
+              font-size:.72cqw; letter-spacing:.16em; color:#f0cf7a;
+              text-shadow:0 1px 3px #000, 0 0 6px #d2a84899; pointer-events:none; }
   .hc .req em { font-style:normal; font-size:clamp(6px,.6vw,10px); color:#4a3520; }
   .hc .eff { position:absolute; left:6%; right:6%; bottom:7%; text-align:center;
              font-size:clamp(6px,.62vw,10px); color:#3a2a17; line-height:1.25;
@@ -474,12 +487,33 @@
     var t = Math.min(3, Math.max(1, c || 1));
     return '../UI/scripts/base/runtime/script-base-cast-cost' + t + '-story-384.png';
   }
-  function reqMarkup(sc) {
-    if (sc.requiresFam) return '<em>' + (T.FAM_KO[sc.requiresFam] || '') + ' 계열</em>';
+  // 요구 심볼 하나하나가 어떻게 채워졌는지 — 'have' 무대에 있다 / 'wild' 보석이 대신 선다 / 'miss' 없다
+  function reqFill(sc, stage, relax) {
+    var pool = [], wild = 0;
+    (stage || []).forEach(function (id) { if (T.isWild(id)) wild++; else pool.push(id); });
+    wild = Math.min(wild, 1);                       // 보석이 둘이어도 하나만 센다
+    var slack = relax || 0;
     return (sc.requires || []).map(function (id) {
-      var u = symUrl(id);
-      return u ? '<span style="background-image:url(' + u + ')"></span>'
-               : '<em>' + ((T.CARDS[id] || {}).icon || '?') + '</em>';
+      var i = pool.indexOf(id);
+      if (i >= 0) { pool.splice(i, 1); return 'have'; }
+      if (wild > 0) { wild--; return 'wild'; }
+      if (slack > 0) { slack--; return 'slack'; }
+      return 'miss';
+    });
+  }
+
+  function reqMarkup(sc, stage, relax) {
+    if (sc.requiresFam) return '<em>' + (T.FAM_KO[sc.requiresFam] || '') + ' 계열</em>';
+    var fill = reqFill(sc, stage, relax);
+    return (sc.requires || []).map(function (id, i) {
+      var u = symUrl(id), st = fill[i];
+      var t = st === 'wild' ? ' — 💎 보석이 대신 선다'
+            : st === 'slack' ? ' — 🎭 대역 배우가 이 요구를 무시한다'
+            : st === 'miss' ? ' — 무대에 없다' : ' — 무대에 있다';
+      var body = u ? '<span class="rq ' + st + '" style="background-image:url(' + u + ')"'
+                     + ' title="' + (T.CARDS[id] || {}).name + t + '"></span>'
+                   : '<em class="rq ' + st + '">' + ((T.CARDS[id] || {}).icon || '?') + '</em>';
+      return body;
     }).join('');
   }
   function cardIcon(id) {
@@ -979,9 +1013,13 @@
       var left = WIN_L + WIN_W * k;
       html += '<div class="win' + (live ? '' : ' shut') + (id === 'void' ? ' void' : '')
         + '" style="left:' + left.toFixed(3) + '%"'
-        + (live ? ' title="' + (dd.name || '') + ' — ' + T.cardText(dd) + '"' : ' title="닫힌 칸 — 복원 목록에서 연다"')
+        + (live ? ' title="' + (dd.name || '') + ' — '
+              + (T.isWild(id) ? '어떤 배역으로도 선다. 모자란 요구 하나를 대신 채운다 (보석이 둘이어도 하나만 센다)'
+                              : T.cardText(dd)) + '"'
+            : ' title="닫힌 칸 — 복원 목록에서 연다"')
         + '><div class="belt"></div>'
         + (live ? symMarkup(id) : '')
+        + (live && T.isWild(id) ? '<div class="wildmark">대역</div>' : '')
         + (live && (S.locked || [])[k] ? '<div class="lockmark">🔒</div>' : '') + '</div>';
     }
     // 하우징이 창 위를 덮는다. 네 번째 칸이 열렸을 때만 그 칸을 하우징 위에 다시 그린다
@@ -1049,10 +1087,12 @@
       btn.innerHTML = '<img class="base" src="' + scriptBase(cc) + '" alt="">'
         + '<div class="cost">' + cc + '</div>'
         + '<div class="ok ' + (staged ? 'yes">✓' : 'no">✕') + '</div>'
+        + (staged ? '' : '<div class="why">무대 조건 미충족</div>')
         + '<div class="ttl">' + sc.name + '</div>'
-        + '<div class="req">' + reqMarkup(sc) + '</div>'
+        + '<div class="req">' + reqMarkup(sc, S.stage, ctx.relax) + '</div>'
         + '<div class="eff">' + T.effText(sc.effect) + '</div>';
       if (can) btn.onclick = function () { clickScript(sc); };
+      else btn.disabled = true;        // 못 누르는 것은 포커스도 먹지 않아야 한다
       hr.appendChild(btn);
     };
     S.temp.forEach(function (sc) { add(sc, false); });
