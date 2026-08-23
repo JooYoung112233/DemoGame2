@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UNDERSTUDY · UI 화면 뷰어</title>
+  <style>
+    :root { color-scheme: dark; --gold: #d2a848; --ink: #0c0a0a; --panel: #171212; --line: #4d3820; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top, #302214 0, var(--ink) 46%); color: #f4e7c6; font: 15px/1.4 system-ui, sans-serif; }
+    header { display: flex; align-items: center; gap: 18px; padding: 14px 22px; border-bottom: 1px solid var(--line); background: rgb(12 10 10 / 88%); }
+    h1 { margin: 0; font-size: 18px; letter-spacing: .08em; color: var(--gold); white-space: nowrap; }
+    select { min-width: 230px; max-width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 4px; color: inherit; background: var(--panel); }
+    #position { margin-left: auto; color: #bca982; white-space: nowrap; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr); min-height: calc(100vh - 65px); }
+    .viewer { display: grid; grid-template-columns: 70px minmax(0, 1fr) 70px; align-items: center; min-height: 0; }
+    button { width: 46px; height: 80px; justify-self: center; border: 1px solid var(--line); border-radius: 6px; color: var(--gold); background: #1c1511; cursor: pointer; font-size: 34px; }
+    button:hover { background: #312313; }
+    figure { display: grid; place-items: center; margin: 0; min-height: 0; padding: 20px; }
+    img { display: block; width: auto; max-width: 100%; max-height: calc(100vh - 155px); object-fit: contain; border: 1px solid #6d5128; box-shadow: 0 14px 45px #000a; background: #080707; }
+    figcaption { width: min(100%, 1200px); padding-top: 11px; font-size: 16px; text-align: center; color: #dbc58f; }
+    .hint { margin: 0; padding: 0 24px 16px; text-align: center; color: #897856; font-size: 13px; }
+    @media (max-width: 620px) { header { flex-wrap: wrap; gap: 8px; } #position { margin-left: 0; } .viewer { grid-template-columns: 46px minmax(0, 1fr) 46px; } button { width: 38px; height: 58px; } figure { padding: 8px; } img { max-height: calc(100vh - 190px); } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>UNDERSTUDY · 화면 뷰어</h1>
+    <select id="screen" aria-label="화면 선택"></select>
+    <span id="position"></span>
+  </header>
+  <main>
+    <section class="viewer" aria-label="화면 미리보기">
+      <button id="previous" type="button" aria-label="이전 화면">‹</button>
+      <figure>
+        <img id="preview" alt="">
+        <figcaption id="caption"></figcaption>
+      </figure>
+      <button id="next" type="button" aria-label="다음 화면">›</button>
+    </section>
+    <p class="hint">← → 키 또는 버튼으로 넘기기 · 화면 선택 목록으로 바로 이동</p>
+  </main>
+  <script>
+    const screens = [
+      ['전체 UI 흐름도', 'flow-map/preview-1920.png'],
+      ['메인 메뉴', 'main-menu/preview-v3.png'],
+      ['감독 선택', 'director-select/preview.png'],
+      ['공연 준비', 'performance-prep/preview.png'],
+      ['이야기 장면', 'story/preview.png'],
+      ['여정 지도', 'map/preview.png'],
+      ['전투', 'combat/assembled-existing-ui-preview.png'],
+      ['공연 보상', 'reward/preview.png'],
+      ['극장 기록', 'theatre-records/preview.png'],
+      ['도감', 'compendium/preview.png'],
+      ['대본 사고', 'dramaturgy/preview.png'],
+      ['유물 창고', 'relic-treasure/preview-v2.png'],
+      ['공연 이력', 'reenactment/preview-v2.png'],
+      ['재연 준비', 'performance-prep/preview.png'],
+      ['각색실', 'dramaturgy/preview.png'],
+      ['즉흥극', 'event/preview.png'],
+      ['분장실', 'dressing-room/preview.png'],
+      ['오디션', 'audition/preview-v2.png'],
+      ['유물 보물', 'relic-treasure/preview.png'],
+      ['극단 성장', 'troupe-growth/preview-v4.png'],
+      ['막 전환', 'act-transition/preview.png'],
+      ['승리 정산', 'run-result/preview-victory-v2.png'],
+      ['패배 정산', 'run-result/preview-defeat-v1.png'],
+      ['시스템 메뉴', 'system-menu/preview.png'],
+      ['공용 오버레이', 'overlays/preview-details-performance-v3.png']
+    ];
+
+    const select = document.querySelector('#screen');
+    const image = document.querySelector('#preview');
+    const caption = document.querySelector('#caption');
+    const position = document.querySelector('#position');
+    let index = 0;
+
+    screens.forEach(([name], i) => select.add(new Option(name, i)));
+    function show(nextIndex) {
+      index = (nextIndex + screens.length) % screens.length;
+      const [name, path] = screens[index];
+      image.src = path;
+      image.alt = `${name} 화면`;
+      caption.textContent = name;
+      position.textContent = `${index + 1} / ${screens.length}`;
+      select.value = index;
+    }
+    document.querySelector('#previous').addEventListener('click', () => show(index - 1));
+    document.querySelector('#next').addEventListener('click', () => show(index + 1));
+    select.addEventListener('change', () => show(Number(select.value)));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft') show(index - 1);
+      if (event.key === 'ArrowRight') show(index + 1);
+    });
+    show(0);
+  </script>
+</body>
+</html>
