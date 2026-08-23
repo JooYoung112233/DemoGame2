@@ -208,8 +208,17 @@
   .flags span.warn { color:#d08a78; border-color:#5a3430; }
 
   /* ── 비전투 화면 · 오버레이 ── */
-  #body { position:absolute; inset:0; z-index:15; }
-  #overlay { position:absolute; inset:0; z-index:30; }
+  /* 층층이 쌓인 판이 그 아래를 막지 않게 한다.
+     #body 는 전투 부품의 그릇일 뿐이고, 적은 그보다 뒤(z2)에 서 있다. */
+  #body { position:absolute; inset:0; z-index:15; pointer-events:none; }
+  #body > * { pointer-events:auto; }
+  /* #body > * 가 특이도(1,0,0)로 이기므로 되돌릴 때도 id 를 물고 간다 */
+  #body > .banner, #body > .handwrap, .hrow, .flags, .win { pointer-events:none; }
+  .hc { pointer-events:auto; }
+  /* 오버레이는 비어 있어도 화면 전체를 덮는다. 내용이 있을 때만 클릭을 받아야
+     그 아래의 맵 노드·슬롯 노브·손패·턴 종료가 눌린다. */
+  #overlay { position:absolute; inset:0; z-index:30; pointer-events:none; }
+  #overlay > * { pointer-events:auto; }
   .over { position:absolute; inset:0; backdrop-filter:blur(3px);
           background:radial-gradient(ellipse 80% 60% at 50% 42%, #1b140bd9 0%, #060504f2 72%);
           display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -255,13 +264,14 @@
              margin-bottom:1.4cqw; text-align:center; }
   .maphead span { color:var(--muted); font-size:.78em; letter-spacing:.04em; margin-left:.8em; }
   .maprail { flex:1; min-height:0; width:100%; display:flex; align-items:center;
-             justify-content:center; gap:.42cqw; }
-  .floor { display:flex; flex-direction:column; gap:.42cqw; justify-content:center;
-           align-items:center; }
-  .mn { width:2.35cqw; height:2.35cqw; border:1px solid var(--line); background:#15110dee;
-        display:grid; place-items:center; font-size:0; color:var(--faint); cursor:default;
+             justify-content:center; gap:.7cqw; }
+  .floor { display:flex; flex-direction:column; gap:.7cqw; justify-content:center;
+           align-items:center; flex:none; }
+  .mn { width:6.3cqw; height:6.3cqw; border:1px solid var(--line); background:#15110dee;
+        display:flex; flex-direction:column; align-items:center; justify-content:center;
+        gap:.15cqw; font-size:.72cqw; color:var(--faint); cursor:default; flex:none;
         transition:border-color .15s, transform .15s; }
-  .mn .i { font-size:1.25cqw; display:block; line-height:1; }
+  .mn .i { font-size:2cqw; display:block; line-height:1; }
   .mn.can:hover { transform:scale(1.18); }
   .mn.here { transform:scale(1.15); }
   .mn.can { border-color:var(--goldd); color:var(--gold); cursor:pointer; }
@@ -557,7 +567,12 @@
       + '<div class="maprail" id="mw"></div></div>';
     var w = el('mw');
     // 좌 → 우 수평, 중앙 정렬 (DESIGN 17). 층이 열이고 갈래가 세로다.
-    S.map.forEach(function (row, fi) {
+    // 한 화면에 한 막만 건다 — 36층을 한 줄에 밀면 레일을 넘쳐 양끝이 잘린다.
+    var per = Math.max(1, Math.round(T.CFG.floors / 3));
+    var lo = Math.min((S.act - 1) * per, Math.max(0, S.map.length - per));
+    var hi = Math.min(S.map.length, lo + per);
+    S.map.slice(lo, hi).forEach(function (row, ri) {
+      var fi = lo + ri;
       var fl = document.createElement('div'); fl.className = 'floor';
       row.forEach(function (nd) {
         var d = document.createElement('div');
@@ -571,7 +586,7 @@
       });
       w.appendChild(fl);
     });
-    el('mh').innerHTML = '제' + S.act + '막 — ' + (S.floor || 1) + ' / ' + T.CFG.floors + '층'
+    el('mh').innerHTML = '제' + S.act + '막 — ' + (lo + 1) + '~' + hi + '층'
       + ' <span>다음 무대를 고른다</span>';
     render();
   }
