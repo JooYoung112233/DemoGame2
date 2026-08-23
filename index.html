@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>대역 · UNSCRIPTED · UNDERSTUDY · UNCAST</title>
+<meta name="description" content="슬롯을 돌려 대본을 짓고, 릴 구성 자체를 사고팔며 성장하는 다크 판타지 인형극 로그라이크 덱빌더.">
+<style>
+  :root {
+    color-scheme: dark;
+    --ink:    #0b0a0a;
+    --panel:  #16120f;
+    --raised: #1e1813;
+    --line:   #3b2c1a;
+    --line-2: #5d4522;
+    --gold:   #d2a848;
+    --gold-d: #8d7136;
+    --text:   #e8dcc2;
+    --dim:    #a1907012;
+    --muted:  #9b8b6c;
+    --faint:  #6d6049;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse 120% 70% at 50% -10%, #3a2814 0%, transparent 60%),
+      var(--ink);
+    color: var(--text);
+    font: 400 15px/1.65 "Malgun Gothic", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { width: min(100% - 40px, 1080px); margin-inline: auto; }
+
+  /* ---- 상단 바 ---- */
+  .topbar {
+    border-bottom: 1px solid var(--line);
+    background: rgb(11 10 10 / 82%);
+    backdrop-filter: blur(6px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topbar .wrap {
+    display: flex; align-items: center; gap: 16px;
+    min-height: 52px; flex-wrap: wrap;
+  }
+  .brand { color: var(--gold); letter-spacing: .16em; font-size: 13px; white-space: nowrap; }
+  .topbar nav { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; }
+  .topbar a { color: var(--muted); text-decoration: none; font-size: 13px; }
+  .topbar a:hover { color: var(--gold); }
+
+  /* ---- 히어로 ---- */
+  header.hero { padding: 76px 0 60px; text-align: center; position: relative; }
+  header.hero::after {
+    content: ""; display: block;
+    width: min(100%, 620px); height: 1px; margin: 54px auto 0;
+    background: linear-gradient(90deg, transparent, var(--line-2), transparent);
+  }
+  .kicker { color: var(--gold-d); font-size: 12px; letter-spacing: .34em; margin-bottom: 22px; }
+  h1 {
+    font-size: clamp(30px, 6.4vw, 58px);
+    font-weight: 400; line-height: 1.12; letter-spacing: .05em;
+    color: var(--gold);
+    text-shadow: 0 0 44px rgb(210 168 72 / 22%);
+  }
+  h1 .ko { display: block; font-size: .42em; letter-spacing: .48em; color: var(--text); margin-top: 20px; }
+  .tagline {
+    margin: 30px auto 0; max-width: 640px;
+    font-size: clamp(15px, 2.2vw, 19px); color: var(--text);
+  }
+  .tagline em { font-style: normal; color: var(--gold); }
+  .sub { margin: 14px auto 0; max-width: 620px; color: var(--muted); font-size: 14px; }
+
+  /* 제목 3단 구조 */
+  .triptych {
+    display: grid; gap: 1px; margin: 40px auto 0; max-width: 720px;
+    grid-template-columns: repeat(3, 1fr);
+    background: var(--line); border: 1px solid var(--line);
+  }
+  .triptych div { background: var(--panel); padding: 16px 10px; }
+  .triptych dt { color: var(--gold); font-size: 12px; letter-spacing: .13em; }
+  .triptych dd { color: var(--muted); font-size: 12.5px; margin-top: 7px; }
+  .triptych dd b { color: var(--text); font-weight: 400; display: block; font-size: 11px; color: var(--faint); margin-top: 3px; }
+
+  /* ---- 플레이 버튼 ---- */
+  .cta { margin-top: 44px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 15px 34px; border-radius: 3px;
+    text-decoration: none; font-size: 15px; letter-spacing: .05em;
+    border: 1px solid var(--line-2); color: var(--gold); background: var(--raised);
+    transition: background .18s, border-color .18s, transform .18s;
+  }
+  .btn:hover { background: #2a2015; border-color: var(--gold); transform: translateY(-2px); }
+  .btn.primary {
+    background: linear-gradient(180deg, #d2a848, #a8842f);
+    color: #17110a; border-color: #e2bd63; font-weight: 700;
+  }
+  .btn.primary:hover { background: linear-gradient(180deg, #e2bd63, #b8933a); }
+
+  /* ---- 섹션 ---- */
+  section { padding: 64px 0; }
+  section > .wrap > h2 {
+    font-size: 13px; font-weight: 400; letter-spacing: .3em;
+    color: var(--gold-d); margin-bottom: 8px;
+  }
+  .lede { color: var(--muted); max-width: 700px; margin-bottom: 34px; font-size: 14.5px; }
+
+  /* ---- 카드 ---- */
+  .cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); }
+  .card {
+    position: relative; display: flex; flex-direction: column;
+    padding: 26px 24px 22px; border: 1px solid var(--line); border-radius: 6px;
+    background: linear-gradient(160deg, var(--raised), var(--panel));
+    color: inherit; text-decoration: none; overflow: hidden;
+    transition: border-color .2s, transform .2s, box-shadow .2s;
+  }
+  a.card:hover {
+    border-color: var(--line-2); transform: translateY(-4px);
+    box-shadow: 0 14px 36px rgb(0 0 0 / 55%);
+  }
+  .card .num {
+    position: absolute; top: 12px; right: 16px;
+    font-size: 42px; font-weight: 700; color: var(--gold); opacity: .09;
+  }
+  .card .icon { font-size: 30px; line-height: 1; margin-bottom: 15px; }
+  .card h3 { font-size: 18px; font-weight: 400; color: var(--text); }
+  .card .tag {
+    display: inline-block; margin-top: 9px; padding: 2px 9px;
+    border: 1px solid var(--line-2); border-radius: 2px;
+    font-size: 11px; color: var(--gold-d); letter-spacing: .06em;
+  }
+  .card p { margin-top: 14px; font-size: 13.5px; color: var(--muted); flex: 1; }
+  .card .go { margin-top: 18px; font-size: 13px; color: var(--gold); }
+  .card.flat { cursor: default; }
+
+  /* ---- 시스템 ---- */
+  .pillars { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+  .pillar { background: var(--panel); padding: 24px 26px; display: grid; gap: 6px; }
+  .pillar h3 { font-size: 15px; font-weight: 400; color: var(--gold); }
+  .pillar p { font-size: 13.5px; color: var(--muted); }
+  .pillar .note { font-size: 12.5px; color: var(--faint); }
+  @media (min-width: 760px) { .pillars { grid-template-columns: 1fr 1fr; } }
+
+  /* ---- 수치 ---- */
+  .facts {
+    display: grid; gap: 1px; margin-top: 34px;
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+    background: var(--line); border: 1px solid var(--line);
+  }
+  .facts div { background: var(--panel); padding: 18px 14px; text-align: center; }
+  .facts b { display: block; font-size: 25px; font-weight: 400; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .facts span { display: block; margin-top: 4px; font-size: 12px; color: var(--faint); letter-spacing: .06em; }
+
+  /* ---- 인용 ---- */
+  blockquote {
+    margin: 0; padding: 26px 30px; border-left: 2px solid var(--gold-d);
+    background: var(--panel); color: var(--text); font-size: 15.5px;
+  }
+  blockquote span { display: block; margin-top: 10px; font-size: 13px; color: var(--faint); }
+
+  footer {
+    border-top: 1px solid var(--line); margin-top: 30px;
+    padding: 30px 0 48px; color: var(--faint); font-size: 12.5px;
+  }
+  footer .wrap { display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--gold); }
+
+  @media (max-width: 560px) {
+    .triptych { grid-template-columns: 1fr; }
+    header.hero { padding: 48px 0 40px; }
+    section { padding: 48px 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <span class="brand">대역 · UNDERSTUDY</span>
+    <nav>
+      <a href="tools/play.html">플레이</a>
+      <a href="UI/SCREEN_VIEWER.html">화면</a>
+      <a href="tools/agents.html">밸런스</a>
+      <a href="https://github.com/JooYoung112233/DemoGame2/blob/main/DESIGN.md">설계서</a>
+      <a href="https://jooyoung112233.github.io/DemoGame/">다른 데모 ↗</a>
+    </nav>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">SLOT ROGUELIKE DECKBUILDER</p>
+    <h1>
+      UNSCRIPTED<br>UNDERSTUDY<br>UNCAST
+      <span class="ko">대역</span>
+    </h1>
+
+    <p class="tagline">
+      폐극장에 갇힌 영혼들에게 배역을 씌워 무대에 세우고,<br>
+      막을 내려 <em>놓아주는</em> 로그라이크 덱빌더.
+    </p>
+    <p class="sub">
+      3릴 슬롯을 돌려 나온 심볼로 <b>대본</b>을 지어 상연하고,
+      상점에서 <b>릴 안의 구성 자체를 사고팔며</b> 성장한다.
+    </p>
+
+    <dl class="triptych">
+      <div><dt>UNSCRIPTED</dt><dd>대본이 없다 → 지어 올린다<b>1막</b></dd></div>
+      <div><dt>UNDERSTUDY</dt><dd>남을 대신해 선다 → 빙의<b>2막</b></dd></div>
+      <div><dt>UNCAST</dt><dd>배역이 벗겨진다 → 해방<b>3막</b></dd></div>
+    </dl>
+
+    <div class="cta">
+      <a class="btn primary" href="tools/play.html">▶ 플레이</a>
+      <a class="btn" href="UI/SCREEN_VIEWER.html">화면 갤러리</a>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>들어가 볼 곳</h2>
+    <p class="lede">
+      전부 브라우저에서 바로 열린다. 설치도 빌드도 없다.
+    </p>
+
+    <div class="cards">
+      <a class="card" href="tools/play.html">
+        <span class="num">01</span>
+        <span class="icon">🎰</span>
+        <h3>플레이 시뮬레이터</h3>
+        <span class="tag">한 판을 직접 둔다</span>
+        <p>
+          감독을 고르고 36층을 오른다. 지금 확정된 규칙이 그대로 돌아간다 —
+          대본 조합, 코스트, 환호, 커튼콜, 무대까지.
+        </p>
+        <span class="go">▶ 플레이 →</span>
+      </a>
+
+      <a class="card" href="UI/SCREEN_VIEWER.html">
+        <span class="num">02</span>
+        <span class="icon">🖼</span>
+        <h3>화면 갤러리</h3>
+        <span class="tag">UI 콘셉트 25종</span>
+        <p>
+          메인 메뉴부터 전투·상점·각색실·정산까지, 게임의 모든 화면과
+          이동 경로를 한 장에 담은 흐름도까지 넘겨 본다.
+        </p>
+        <span class="go">둘러보기 →</span>
+      </a>
+
+      <a class="card" href="tools/agents.html">
+        <span class="num">03</span>
+        <span class="icon">📊</span>
+        <h3>봇 시뮬레이터</h3>
+        <span class="tag">밸런스는 여기 숫자로 말한다</span>
+        <p>
+          수백 명의 봇이 실제로 판을 끝까지 둔다. 승률·캐릭터 스프레드·
+          상연 티어·무대 완성률이 전부 여기서 측정된 값이다.
+        </p>
+        <span class="go">돌려보기 →</span>
+      </a>
+
+      <a class="card" href="https://github.com/JooYoung112233/DemoGame2/blob/main/DESIGN.md">
+        <span class="num">04</span>
+        <span class="icon">📖</span>
+        <h3>설계서</h3>
+        <span class="tag">81장 · 살아있는 문서</span>
+        <p>
+          확정된 규칙과 그 근거. 폐기한 안 40여 개와 그 이유도 함께 적혀 있다 —
+          되돌아가지 않기 위해서.
+        </p>
+        <span class="go">GitHub 에서 읽기 ↗</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>무엇이 다른가</h2>
+    <p class="lede">
+      슬롯이 연출이고, 덱빌딩이 릴 구성이고, 빌드가 눈앞의 무대다.
+    </p>
+
+    <div class="pillars">
+      <div class="pillar">
+        <h3>릴이 곧 덱이다</h3>
+        <p>릴 18칸이 그대로 보이고, 상점에서 칸에 카드를 박아넣거나 빼낸다. 확률은 눈으로 센다.</p>
+        <p class="note">좋은 카드를 넣으면 다른 좋은 카드가 희석된다 — 이 긴장이 상점 결정의 전부다.</p>
+      </div>
+      <div class="pillar">
+        <h3>조합이 스킬을 만든다</h3>
+        <p>페이라인 3장으로 무엇을 지을지 매 스핀 고른다. 대본은 즉시 터지지 않고 손패로 들어간다.</p>
+        <p class="note">카드 26종 · 이름 붙은 대본 97종. 어려운 조합일수록 강하다.</p>
+      </div>
+      <div class="pillar">
+        <h3>관객은 쟁탈 대상이다</h3>
+        <p>환호는 런 내내 이어지고, 가득 차면 기립 박수로 터지며 0이 된다. 터뜨릴까 유지할까가 결정이다.</p>
+        <p class="note">관객이 요구를 걸면 효율과 쇼가 충돌한다 — 지금 죽일 수 있는데 웃길 것인가.</p>
+      </div>
+      <div class="pillar">
+        <h3>무대가 빌드다</h3>
+        <p>릴·유물·대본이 한 방향으로 모이면 무대가 완성되고, 그 순간 수치가 아니라 <b>규칙</b>이 바뀐다.</p>
+        <p class="note">무대를 연 판의 클리어율 30%, 못 연 판 3%.</p>
+      </div>
+    </div>
+
+    <div class="facts">
+      <div><b>36</b><span>층 · 3막</span></div>
+      <div><b>26</b><span>카드</span></div>
+      <div><b>97</b><span>대본</span></div>
+      <div><b>8</b><span>감독</span></div>
+      <div><b>30</b><span>적</span></div>
+      <div><b>9</b><span>무대</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>핵심 판타지</h2>
+    <blockquote>
+      “나는 싸우는 게 아니라 죽음을 연출한다.”
+      <span>당신은 무대 위 배우가 아니라 객석에서 일어난 마지막 감독이다.</span>
+    </blockquote>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>대역 — 개발 중 · 규칙은 웹 시뮬레이터로 먼저 검증하고 Unity 로 옮긴다</span>
+    <span>
+      <a href="https://github.com/JooYoung112233/DemoGame2">GitHub</a> ·
+      <a href="https://jooyoung112233.github.io/DemoGame/">다른 데모 프로토타입</a>
+    </span>
+  </div>
+</footer>
+
+</body>
+</html>
