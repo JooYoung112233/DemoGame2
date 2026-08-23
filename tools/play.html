@@ -4,171 +4,359 @@
 <meta charset="utf-8">
 <title>UNDERSTUDY — 플레이 시뮬레이터</title>
 <style>
+  /* ──────────────────────────────────────────────────────────────
+     좌표계 — 극장 레이어는 전부 1672x941 한 장의 캔버스를 공유한다
+     (UI/theater/README.md). 그래서 모든 배치는 % 로만 적는다.
+     슬롯은 1024x592 를 공유한다 (UI/slots/README.md).
+     아래 % 값은 눈대중이 아니라 각 PNG 의 실제 내용 경계를 재서 나왔다.
+     ────────────────────────────────────────────────────────────── */
+  :root {
+    --ink:#0a0908; --panel:#15110d; --raised:#1d1710; --line:#3b2c1a; --line2:#5d4522;
+    --gold:#d2a848; --goldd:#8d7136; --text:#e8dcc2; --muted:#9b8b6c; --faint:#6d6049;
+    --red:#8e3b34; --green:#7f9a72; --blue:#7f95b0; --purple:#8b7aa8;
+    color-scheme: dark;
+  }
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#0b0b0e; color:#b9b4ab; min-height:100vh; padding:12px; gap:12px;
-         font:400 13px/1.5 "Malgun Gothic",system-ui,sans-serif; display:flex; justify-content:center; }
-  .frame { width:700px; flex:none; background:#131317; border:1px solid #26262d; border-radius:8px;
-           overflow:hidden; display:flex; flex-direction:column; position:relative; min-height:820px; }
-  .topbar { min-height:38px; display:flex; align-items:center; gap:10px; padding:0 12px; background:#16161b;
-            border-bottom:1px solid #24242a; font-size:12px; color:#7d7a86; flex-wrap:wrap; }
-  .topbar b { color:#c6bd95; font-weight:400; font-variant-numeric:tabular-nums; }
-  .cost { display:inline-flex; gap:3px; vertical-align:-1px; }
-  .cost i { width:11px; height:11px; border-radius:50%; border:1px solid #57545f; display:block; }
-  .cost i.on { background:#c6bd95; border-color:#c6bd95; }
-  .cheerbar { display:inline-block; width:56px; height:6px; background:#25252e; border-radius:2px;
-              overflow:hidden; vertical-align:middle; margin-left:4px; }
-  .cheerbar>i { display:block; height:100%; background:#c6bd95; transition:width .2s; }
-  .relics { display:flex; gap:3px; } .relics span { font-size:14px; cursor:help; }
+  body { background:#060505; color:var(--text); min-height:100vh; padding:10px;
+         font:400 13px/1.5 "Malgun Gothic",system-ui,sans-serif;
+         display:flex; flex-direction:column; align-items:center; gap:10px; }
+  img { display:block; }
 
-  .flags { display:flex; gap:5px; flex-wrap:wrap; padding:6px 12px 0; font-size:10px; }
-  .flags span { border:1px solid #3a3a45; border-radius:3px; padding:1px 5px; color:#c49a6a; background:#1d1d25; }
-  .flags span.warn { color:#b07a6a; border-color:#4a3436; }
+  /* ── 게임 프레임 ── */
+  .game { position:relative; width:min(100%, 1500px); aspect-ratio:1672/941;
+          background:#000; overflow:hidden; border:1px solid var(--line);
+          box-shadow:0 18px 60px #000c; user-select:none; }
+  .lyr { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  /* 표시 토글은 display 를 요소별로 되돌린다.
+     한 줄로 display:block 을 씌우면 .stagearea 의 flex 와 .cheerwrap 의 flex 가 함께 죽는다. */
+  .game .runonly, .game .fightonly { display:none; }
+  .game.run .runonly { display:inline-flex; align-items:center; }
+  .game.run .hpwrap,
+  .game.run .costwrap,
+  .game.run .director { display:block; }
+  .game.fight .stagearea { display:flex; }
 
-  .stage { min-height:156px; padding:10px; display:flex; gap:8px; justify-content:center;
-           background:radial-gradient(ellipse at 50% 0%,#1c1a22 0%,#100f14 70%);
-           border-bottom:1px solid #24242a; align-items:flex-start; }
-  .foe { width:180px; background:#191922; border:1px solid #2c2c36; border-radius:6px; padding:8px; }
-  .foe.aim { border-color:#a8c49a; box-shadow:0 0 0 1px #a8c49a55; cursor:crosshair; }
-  .foe.dead { opacity:.22; }
-  .foe .nm { font-size:12px; color:#c6bd95; }
-  .foe .it { font-size:11px; color:#b07a6a; min-height:16px; margin:3px 0; }
-  .foe .amp { font-size:10px; color:#c49a6a; min-height:14px; }
-  .foe .tag { font-size:10px; color:#6b6b78; line-height:1.55; margin-top:3px; }
-  .bar { height:7px; background:#25252e; border-radius:2px; overflow:hidden; margin-bottom:2px; }
-  .bar>i { display:block; height:100%; }
-  .hpb>i{background:#7a4a44;} .blb>i{background:#5a6b7a;}
-  .num { font-size:10px; color:#7d7a86; font-variant-numeric:tabular-nums; }
+  /* 감독 — 작업대보다 앞, 화면 맨 왼쪽 하단 (theater/README 권장 영역) */
+  .director { position:absolute; left:-1.2%; top:55.3%; width:23.9%; aspect-ratio:1;
+         pointer-events:none; z-index:6; }
 
-  .board { padding:10px 12px 8px; }
-  .board .cap { font-size:11px; color:#6b6b78; margin-bottom:5px; }
-  .reels { display:flex; gap:6px; }
-  .reel { flex:1; background:#0e0e12; border:1px solid #2c2c36; border-radius:5px; overflow:hidden; }
-  .cell { height:26px; display:flex; align-items:center; justify-content:center; font-size:15px;
-          color:#45454f; border-bottom:1px solid #1c1c23; }
-  .cell.pay { height:54px; font-size:23px; color:#d8d2c4; background:#191922;
-              box-shadow:inset 0 0 0 1px #3a3a45; flex-direction:column; gap:1px; }
-  .cell.pay em { font-style:normal; font-size:10px; color:#8f8b99; }
-  .cell.pay.void { color:#5a4a4a; background:#181418; }
-  .rr { width:100%; border:0; border-top:1px solid #2c2c36; border-radius:0; padding:3px 0;
-        font-size:10px; background:#15151b; color:#7f9a72; }
-  .rr:hover:not(:disabled) { background:#1e2419; color:#a8c49a; }
-  .rr.free { color:#c6bd95; }
+  /* ── 상단바 ── */
+  .topbar { position:absolute; left:0; right:0; top:0; height:5.2%; z-index:20;
+            display:flex; align-items:center; gap:1.4%; padding:0 1.2%;
+            font-size:clamp(9px,.85vw,13px); color:var(--muted); letter-spacing:.04em; }
+  .topbar .act { color:var(--gold); letter-spacing:.1em; white-space:nowrap; }
+  .topbar b { color:var(--text); font-weight:400; font-variant-numeric:tabular-nums; }
+  .relics { display:flex; gap:.35em; margin-left:.6em; }
+  .relics span { font-size:1.15em; cursor:help; }
+  .cheerwrap { margin-left:auto; display:flex; align-items:center; gap:.5em; white-space:nowrap; }
+  .cheerbar { position:relative; width:clamp(90px,14vw,240px); height:.85em;
+              border:1px solid var(--line2); background:#120e09; overflow:hidden; }
+  .cheerbar>i { display:block; height:100%; transition:width .25s;
+                background:linear-gradient(180deg,#e2bd63,#a8842f); }
+  .cheerbar.hot>i { background:linear-gradient(180deg,#f0cf7a,#c8912f); }
+  .cheerbar u { position:absolute; top:0; bottom:0; width:1px; background:#00000066; }
 
-  .hand { padding:0 12px 8px; }
-  .hand .cap { font-size:11px; color:#6b6b78; margin-bottom:5px; }
-  .hand .cap b { color:#c6bd95; font-weight:400; }
-  .hrow { display:flex; gap:5px; flex-wrap:wrap; }
-  .hc { width:160px; text-align:left; background:#191922; border:1px solid #33333d; border-radius:5px;
-        padding:6px 7px; font:inherit; color:#b9b4ab; position:relative; cursor:pointer; }
-  .hc:hover:not(.dis) { border-color:#a8c49a; }
-  .hc.dis { opacity:.32; cursor:default; }
-  .hc.pend { border-color:#c6bd95; background:#24241c; }
-  .hc.temp { border-style:dashed; border-color:#8b7aa8; }
-  .hc.tip { box-shadow:0 0 0 1px #7f9a72; }
-  .hc.seal { opacity:.25; border-style:dotted; cursor:default; }
-  .hc .c { position:absolute; right:5px; top:4px; font-size:10px; color:#c6bd95; }
-  .hc .n { font-size:11px; color:#c6bd95; padding-right:14px; }
-  .hc .r { font-size:11px; color:#7f9a72; }
-  .hc .e { font-size:10px; color:#8f8b99; line-height:1.4; }
+  /* ── 무대 위의 적 ── */
+  .stagearea { position:absolute; left:15%; right:15%; top:7%; height:39.5%; z-index:2;
+               display:flex; align-items:flex-end; justify-content:center; gap:2.4%; }
+  .foe { position:relative; flex:0 1 22%; min-width:0; height:100%; display:flex;
+         flex-direction:column; align-items:center; justify-content:flex-end;
+         gap:1.5%; cursor:default; }
+  .foe.aim { cursor:crosshair; }
+  .foe.dead { opacity:.2; filter:grayscale(1); }
+  .foe .body { width:100%; flex:1 1 auto; min-height:0; position:relative;
+               background:linear-gradient(180deg,#1a141088,#0d0a07dd);
+               border:1px solid #4a3722; box-shadow:inset 0 0 30px #0009; }
+  .foe.aim .body { border-color:var(--gold); box-shadow:inset 0 0 30px #0009, 0 0 14px #d2a84855; }
+  .foe .body .sil { position:absolute; inset:12% 8% 6%; opacity:.62;
+                    background:currentColor; color:#2a1f14;
+                    -webkit-mask:radial-gradient(ellipse 42% 26% at 50% 15%,#000 62%,transparent 64%),
+                                 linear-gradient(#000,#000);
+                    -webkit-mask-composite:source-over; }
+  .foe .glyph { position:absolute; inset:0; display:grid; place-items:center;
+                font-size:clamp(20px,3.2vw,54px); filter:grayscale(.45) brightness(.85); }
+  .foe .nm { font-size:clamp(8px,.78vw,12px); color:var(--gold); text-align:center;
+             text-shadow:0 1px 3px #000; line-height:1.25; }
+  .foe .hpb { width:100%; height:.55em; min-height:5px; border:1px solid #5a3a2a; background:#170f0c; }
+  .foe .hpb>i { display:block; height:100%; background:linear-gradient(180deg,#a8514a,#6d2f2a); }
+  .foe .blb { width:100%; height:.4em; min-height:4px; border:1px solid #3a4a5a; background:#0f1317; }
+  .foe .blb>i { display:block; height:100%; background:#5a6b7a; }
+  .foe .num { font-size:clamp(7px,.66vw,11px); color:var(--muted);
+              font-variant-numeric:tabular-nums; text-shadow:0 1px 2px #000; }
+  .foe .it { font-size:clamp(7px,.68vw,11px); color:#e0b48a; background:#170f0acc;
+             border:1px solid var(--line2); padding:.1em .5em; white-space:nowrap;
+             text-shadow:0 1px 2px #000; }
+  .foe .tag { font-size:clamp(6px,.6vw,10px); color:var(--faint); text-align:center;
+              line-height:1.45; max-height:5.4em; overflow:hidden; }
+  .foe .amp { font-size:clamp(6px,.6vw,10px); color:#c49a6a; min-height:1em; }
 
-  .actions { padding:0 12px 9px; display:flex; gap:6px; align-items:center; }
-  button { background:#21212a; color:#b9b4ab; border:1px solid #57545f; border-radius:4px;
-           padding:7px 10px; font:inherit; font-size:12px; cursor:pointer; }
-  button:hover:not(:disabled){ border-color:#8b8467; color:#c6bd95; }
-  button:disabled { opacity:.32; cursor:default; }
-  button.go { border-color:#7f9a72; color:#a8c49a; }
-  button.wide { flex:1; }
+  /* ── 무대 안내 배너 ── */
+  .banner { position:absolute; left:50%; top:43.2%; transform:translateX(-50%); z-index:8;
+            background:#12100acc; border:1px solid var(--line2); padding:.25em 1.4em;
+            font-size:clamp(8px,.8vw,12px); color:var(--gold); letter-spacing:.16em;
+            white-space:nowrap; text-shadow:0 1px 3px #000; }
 
-  .log { flex:1; min-height:90px; max-height:180px; overflow-y:auto; padding:8px 12px; font-size:11px;
-         line-height:1.62; color:#77737f; border-top:1px solid #24242a; background:#0e0e12; }
-  .log .t{color:#5c5a63;} .log .s{color:#c6bd95;} .log .d{color:#b07a6a;}
-  .log .b{color:#7f95b0;} .log .e{color:#8b7aa8;} .log .a{color:#c49a6a;}
+  /* ── 슬롯 (1024x592 캔버스) ── */
+  .slotwrap { position:absolute; left:34.65%; top:42%; width:30.7%; aspect-ratio:1024/592;
+              z-index:9; }
+  .slotwrap .sl { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  .win { position:absolute; top:30.6%; height:34.5%; width:16.48%; overflow:hidden;
+         background:#0d0a07; }
+  .win .belt { position:absolute; inset:0; background-size:100% 100%; opacity:.85;
+               background-image:url(../UI/slots/slot-reel-repeat-strip.png); }
+  .win .sym { position:absolute; inset:8%; background-size:contain; background-repeat:no-repeat;
+              background-position:center; transition:transform .12s; }
+  .win .emo { position:absolute; inset:0; display:grid; place-items:center;
+              font-size:clamp(14px,2.2vw,34px); }
+  .win.spin .sym, .win.spin .emo { animation:reelspin .18s linear infinite; }
+  @keyframes reelspin { from{transform:translateY(-46%)} to{transform:translateY(46%)} }
+  .win.shut { background:#1a0d0d; }
+  .win.shut::after { content:""; position:absolute; inset:0;
+                     background:repeating-linear-gradient(90deg,#5a1f1f,#5a1f1f 3px,#3d1414 3px,#3d1414 7px);
+                     opacity:.9; }
+  .win.void { filter:grayscale(1) brightness(.5); }
+  .knob { position:absolute; top:66.9%; height:15.5%; width:7.8%; border:0; background:none;
+          padding:0; cursor:pointer; z-index:12; }
+  .knob:disabled { cursor:default; }
+  .knob i { position:absolute; left:31%; right:31%; top:10%; bottom:10%; border-radius:50%;
+            box-shadow:0 0 0 2px #00000055; transition:transform .07s, box-shadow .18s; }
+  .knob:not(:disabled):hover i { box-shadow:0 0 10px 2px #d2a84899; }
+  .knob:not(:disabled):active i { transform:translateY(3px); }
+  .knob.free i { box-shadow:0 0 8px 2px #d2a84866; }
+  .knob:disabled i { opacity:.35; }
+  .slotcap { position:absolute; left:0; right:0; top:82%; text-align:center;
+             font-size:clamp(7px,.7vw,11px); color:var(--muted); text-shadow:0 1px 3px #000; }
+  .slotcap b { color:var(--gold); font-weight:400; }
 
-  .over { position:absolute; inset:0; background:#0b0b0eee; display:flex; flex-direction:column;
-          align-items:center; justify-content:center; gap:11px; padding:20px; overflow-y:auto; }
-  .over h3 { font-size:15px; font-weight:400; color:#c6bd95; }
-  .over .sub { font-size:11px; color:#6b6b78; text-align:center; max-width:520px; line-height:1.7; }
-  .chars { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-  .chr { width:200px; background:#191922; border:1px solid #33333d; border-radius:6px; padding:10px;
-         cursor:pointer; text-align:left; }
-  .chr:hover:not(.lock) { border-color:#c6bd95; }
+  /* ── HP · 코스트 ── */
+  .hpwrap { position:absolute; left:0; top:47.8%; width:23.5%; aspect-ratio:442/76; z-index:14; }
+  .hpwrap .f { position:absolute; inset:0; width:100%; height:100%; }
+  .hpwrap .heart { position:absolute; left:3.2%; top:14.5%; width:11.8%; aspect-ratio:52/54; }
+  .hptrack { position:absolute; left:16.3%; top:30.3%; width:52%; height:38.2%;
+             overflow:hidden; background:#1a0d0b; }
+  .hptrack>i { display:block; height:100%; width:0; transition:width .3s;
+               background:url(../UI/hud/hp/fill.png) left center/auto 100% repeat-x; }
+  .hpnum { position:absolute; right:3.5%; top:0; bottom:0; width:26%;
+           display:grid; place-items:center; color:var(--gold);
+           font-size:clamp(9px,1.05vw,17px); font-variant-numeric:tabular-nums;
+           text-shadow:0 1px 3px #000; }
+
+  .costwrap { position:absolute; left:10.5%; top:59.8%; width:23%; aspect-ratio:402/91; z-index:14; }
+  .costwrap .f { position:absolute; inset:0; width:100%; height:100%; }
+  .costwrap .mask { position:absolute; left:3.5%; top:22%; width:11.9%; aspect-ratio:48/56; }
+  .costnum { position:absolute; left:0; right:0; top:6%; height:32%;
+             display:grid; place-items:center; color:var(--text);
+             font-size:clamp(10px,1.15vw,19px); font-variant-numeric:tabular-nums;
+             text-shadow:0 1px 3px #000; }
+  .costnum s { text-decoration:none; color:var(--muted); font-size:.72em; }
+  .sockets { position:absolute; left:19.4%; top:55%; height:26%; display:flex; }
+  .sockets img { height:100%; width:auto; margin-right:.32em; }
+
+  /* ── 손패 ── */
+  .handwrap { position:absolute; left:22%; right:8%; bottom:1.5%; height:33%; z-index:16;
+              display:flex; align-items:flex-end; justify-content:center; }
+  .hrow { width:100%; display:flex; align-items:flex-end; justify-content:center; height:100%; }
+  .hc { position:relative; flex:0 0 auto; width:12.9%; max-width:150px; aspect-ratio:384/533;
+        border:0; background:none; padding:0; font:inherit; color:var(--text); cursor:pointer;
+        margin-right:-1.8%; transform-origin:50% 100%; transition:transform .16s, filter .16s;
+        filter:drop-shadow(0 6px 12px #000a); }
+  .hc .base { position:absolute; inset:0; width:100%; height:100%; }
+  .hc:hover:not(.dis) { transform:translateY(-9%) scale(1.1); z-index:3; }
+  .hc.pend { transform:translateY(-13%) scale(1.12); z-index:4;
+             filter:drop-shadow(0 0 10px #d2a848cc); }
+  .hc.dis { filter:grayscale(.7) brightness(.62); cursor:default; }
+  .hc.tip .base { outline:2px solid var(--green); outline-offset:-3px; }
+  .hc.seal { filter:grayscale(1) brightness(.45); cursor:default; }
+  .hc.temp .base { outline:1px dashed var(--purple); outline-offset:-4px; }
+  .hc .cost { position:absolute; left:7%; top:4.5%; width:22%; aspect-ratio:1;
+              display:grid; place-items:center; color:#2b1d0c; font-weight:700;
+              font-size:clamp(8px,.82vw,14px);
+              background:url(../UI/icons/resources/runtime/cost-theatre-gem-192.png) center/contain no-repeat; }
+  .hc .ttl { position:absolute; left:8%; right:6%; top:27%; text-align:center;
+             font-size:clamp(6px,.62vw,10px); color:#3a2a17; line-height:1.2;
+             max-height:2.5em; overflow:hidden; }
+  .hc .req { position:absolute; left:8%; right:8%; top:41%; display:flex;
+             justify-content:center; gap:3%; }
+  .hc .req span { width:17%; aspect-ratio:1; background-size:contain;
+                  background-repeat:no-repeat; background-position:center;
+                  filter:sepia(.5) contrast(1.1); }
+  .hc .req em { font-style:normal; font-size:clamp(6px,.6vw,10px); color:#4a3520; }
+  .hc .eff { position:absolute; left:6%; right:6%; bottom:7%; text-align:center;
+             font-size:clamp(6px,.62vw,10px); color:#3a2a17; line-height:1.25;
+             max-height:3.6em; overflow:hidden; }
+  .hc .ok { position:absolute; right:7%; top:5%; font-size:clamp(7px,.7vw,11px); }
+  .hc .ok.no { color:#8e3b34; } .hc .ok.yes { color:#4c6b3f; }
+
+  /* ── 턴 종료 · 힌트 ── */
+  .acts { position:absolute; right:1.4%; bottom:5%; z-index:18; display:flex;
+          flex-direction:column; align-items:stretch; gap:.5em; }
+  .acts button { background:#14100acc; border:1px solid var(--line2); color:var(--gold);
+                 padding:.55em 1.1em; font:inherit; font-size:clamp(9px,.85vw,13px);
+                 letter-spacing:.1em; cursor:pointer; }
+  .acts button:hover:not(:disabled) { background:#241a0d; border-color:var(--gold); }
+  .acts button:disabled { opacity:.4; cursor:default; }
+  .acts .end { line-height:1.15; }
+  .acts .end b { display:block; font-weight:400; font-size:1.15em; }
+
+  /* ── 상태 배지 ── */
+  .flags { position:absolute; left:1%; top:6.5%; z-index:19; width:20%;
+           display:flex; flex-direction:column; gap:.3em; align-items:flex-start; }
+  .flags span { background:#14100acc; border:1px solid var(--line); padding:.12em .55em;
+                font-size:clamp(7px,.68vw,11px); color:#c49a6a; text-shadow:0 1px 2px #000; }
+  .flags span.warn { color:#d08a78; border-color:#5a3430; }
+
+  /* ── 비전투 화면 · 오버레이 ── */
+  #body { position:absolute; inset:0; z-index:15; }
+  #overlay { position:absolute; inset:0; z-index:30; }
+  .over { position:absolute; inset:0; background:#08070699; backdrop-filter:blur(3px);
+          display:flex; flex-direction:column; align-items:center; justify-content:center;
+          gap:1.1%; padding:2.5% 3%; overflow-y:auto; }
+  .over h3 { font-size:clamp(13px,1.35vw,22px); font-weight:400; color:var(--gold);
+             letter-spacing:.1em; }
+  .over .sub { font-size:clamp(9px,.85vw,13px); color:var(--muted); text-align:center;
+               max-width:64%; line-height:1.75; }
+  .chars { display:flex; gap:.7%; flex-wrap:wrap; justify-content:center; }
+  .chr { width:clamp(150px,15.5%,240px); background:#15110dee; border:1px solid var(--line);
+           padding:.7em .8em; cursor:pointer; text-align:left; }
+  .chr:hover:not(.lock) { border-color:var(--gold); background:#1e1710ee; }
   .chr.lock { opacity:.42; cursor:default; }
-  .chr .n { font-size:13px; color:#c6bd95; }
-  .chr .m { font-size:10px; color:#7f9a72; margin:2px 0 4px; }
-  .chr .d { font-size:10px; color:#8f8b99; line-height:1.55; }
-  .chr .u { font-size:10px; color:#b07a6a; margin-top:4px; }
-  .cardpick { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
-  .cp { width:152px; background:#191922; border:1px solid #33333d; border-radius:6px; padding:9px 8px;
-        cursor:pointer; text-align:center; }
-  .cp:hover:not(.dis) { border-color:#c6bd95; }
+  .chr .n { font-size:clamp(10px,.95vw,15px); color:var(--gold); }
+  .chr .m { font-size:clamp(8px,.72vw,11px); color:var(--green); margin:.15em 0 .3em; }
+  .chr .d { font-size:clamp(8px,.72vw,11px); color:var(--muted); line-height:1.55; }
+  .chr .u { font-size:clamp(8px,.72vw,11px); color:#b07a6a; margin-top:.3em; }
+  .cardpick { display:flex; gap:.7%; flex-wrap:wrap; justify-content:center; }
+  .cp { width:clamp(120px,11.5%,180px); background:#15110dee; border:1px solid var(--line);
+        padding:.65em .6em; cursor:pointer; text-align:center; }
+  .cp:hover:not(.dis) { border-color:var(--gold); background:#1e1710ee; }
   .cp.dis { opacity:.35; cursor:default; }
-  .cp .ic { font-size:22px; } .cp .n { font-size:12px; color:#c6bd95; margin:2px 0; }
-  .cp .e { font-size:10px; color:#8f8b99; line-height:1.45; }
-  .cp .x { font-size:10px; color:#7f9a72; margin-top:3px; }
+  .cp .ic { font-size:clamp(16px,1.7vw,26px); }
+  .cp .ic img { width:clamp(26px,2.6vw,44px); height:auto; margin:0 auto; }
+  .cp .n { font-size:clamp(9px,.85vw,13px); color:var(--gold); margin:.15em 0; }
+  .cp .e { font-size:clamp(8px,.7vw,11px); color:var(--muted); line-height:1.45; }
+  .cp .x { font-size:clamp(8px,.7vw,11px); color:var(--green); margin-top:.2em; }
 
-  .mapwrap { padding:12px; }
-  .floor { display:flex; gap:8px; justify-content:center; margin-bottom:7px; }
-  .mn { width:64px; padding:6px 4px; border-radius:6px; border:1px solid #2c2c36; background:#191922;
-        text-align:center; font-size:10px; color:#6b6b78; cursor:default; }
-  .mn .i { font-size:16px; display:block; }
-  .mn.can { border-color:#7f9a72; color:#a8c49a; cursor:pointer; }
-  .mn.can:hover { background:#1e2419; }
-  .mn.done { border-color:#3a3a45; opacity:.4; }
-  .mn.here { border-color:#c6bd95; color:#c6bd95; background:#24241c; }
+  .mapwrap { position:absolute; inset:0; overflow-y:auto; padding:6% 3% 3%;
+             background:#08070699; backdrop-filter:blur(3px); }
+  .floor { display:flex; gap:.6%; justify-content:center; margin-bottom:.55%; }
+  .mn { width:clamp(46px,4.4%,72px); padding:.4em .2em; border:1px solid var(--line);
+        background:#15110dee; text-align:center; font-size:clamp(7px,.68vw,11px);
+        color:var(--faint); cursor:default; }
+  .mn .i { font-size:clamp(12px,1.2vw,19px); display:block; }
+  .mn.can { border-color:var(--goldd); color:var(--gold); cursor:pointer; }
+  .mn.can:hover { background:#241a0d; border-color:var(--gold); }
+  .mn.done { opacity:.35; }
+  .mn.here { border-color:var(--gold); color:var(--gold); background:#241a0d; }
 
-  .side { width:340px; flex:none; display:flex; flex-direction:column; gap:9px; }
-  .panel { background:#16161a; border:1px solid #24242a; border-radius:6px; padding:10px; }
-  .panel h2 { font-size:11px; font-weight:400; color:#5c5a63; letter-spacing:.08em; margin-bottom:6px;
-              text-transform:uppercase; }
+  /* ── 하단 트레이 — 로그와 도감 ── */
+  .tray { width:min(100%,1500px); display:grid; gap:8px; grid-template-columns:1.15fr 1fr; }
+  .tray.hide .panels { display:none; }
+  .tray.hide { grid-template-columns:1fr; }
+  .log { height:190px; overflow-y:auto; padding:9px 12px; font-size:12px; line-height:1.62;
+         color:#8a7c66; border:1px solid var(--line); background:#0d0b08; }
+  .log .t{color:var(--faint);} .log .s{color:var(--gold);} .log .d{color:#b07a6a;}
+  .log .b{color:var(--blue);} .log .e{color:var(--purple);} .log .a{color:#c49a6a;}
+  .panels { display:grid; gap:8px; grid-template-columns:1fr 1fr; height:190px; }
+  .panel { background:#0d0b08; border:1px solid var(--line); padding:9px; overflow-y:auto; }
+  .panel h2 { font-size:10px; font-weight:400; color:var(--goldd); letter-spacing:.12em;
+              margin-bottom:5px; text-transform:uppercase; }
   .deck { display:flex; flex-wrap:wrap; gap:3px; }
-  .card { display:flex; align-items:center; gap:2px; background:#1d1d25; border:1px solid #33333d;
-          border-radius:3px; padding:1px 5px; font-size:11px; }
-  .card i { font-style:normal; font-size:13px; } .card b { font-weight:400; color:#8a8694; }
-  .note { font-size:11px; color:#56545e; line-height:1.6; margin-top:5px; }
+  .card { display:flex; align-items:center; gap:3px; background:#171209;
+          border:1px solid var(--line); padding:1px 5px; font-size:11px; color:var(--muted); }
+  .card img { width:15px; height:15px; }
+  .card b { font-weight:400; color:var(--gold); }
+  .note { font-size:11px; color:var(--faint); line-height:1.6; margin-top:5px; }
   table { border-collapse:collapse; width:100%; font-size:11px; }
-  td { padding:1px 0; color:#77737f; vertical-align:top; }
-  td.n { text-align:right; color:#a9a4b2; white-space:nowrap; }
+  td { padding:1px 0; color:var(--muted); vertical-align:top; }
+  td.n { text-align:right; color:var(--gold); white-space:nowrap; }
   .amprow td:first-child { color:#c49a6a; white-space:nowrap; padding-right:6px; }
+  .traybar { width:min(100%,1500px); display:flex; gap:8px; align-items:center;
+             font-size:11px; color:var(--faint); }
+  .traybar button { background:#15110d; border:1px solid var(--line); color:var(--muted);
+                    padding:4px 10px; font:inherit; font-size:11px; cursor:pointer; }
+  .traybar button:hover { border-color:var(--goldd); color:var(--gold); }
+  .traybar .sp { margin-left:auto; }
+
+  @media (max-width:820px) {
+    .tray { grid-template-columns:1fr; } .panels { grid-template-columns:1fr; height:auto; }
+  }
 </style>
 </head>
 <body>
 
-<div class="frame">
+<div class="game" id="game">
+  <!-- 극장 뎁스 레이어 — 합성 순서는 UI/theater/README.md 를 그대로 따른다.
+       네 레이어가 같은 1672x941 캔버스라 겹치기만 하면 정합된다. -->
+  <img class="lyr" src="../UI/theater/stage.png" alt="">
+  <div class="stagearea fightonly" id="stage"></div>
+  <img class="lyr" src="../UI/theater/curtain-valance.png" alt="">
+  <img class="lyr" src="../UI/theater/curtain-left-open.png" alt="">
+  <img class="lyr" src="../UI/theater/curtain-right-open.png" alt="">
+  <img class="lyr" src="../UI/theater/audience.png" alt="">
+  <img class="lyr" src="../UI/theater/director-back.png" alt="">
+  <img class="lyr" src="../UI/theater/director-front.png" alt="">
+  <!-- 감독은 작업대보다 앞이다 -->
+  <img class="director runonly" id="chrSprite" src="" alt="">
+
   <div class="topbar">
-    <span id="tAct">—</span>
-    <span>HP <b id="tHp">—</b></span>
-    <span>방어 <b id="tBlock">0</b></span>
-    <span>반사 <b id="tThorns">0</b></span>
-    <span>골드 <b id="tGold">0</b></span>
-    <span>코스트 <span class="cost" id="tCost"></span></span>
-    <span>환호 <b id="tCheer">0</b><span class="cheerbar"><i id="tCheerI"></i></span></span>
+    <span class="act" id="tAct">—</span>
+    <span class="runonly">🪙 <b id="tGold">0</b></span>
+    <span class="runonly">🛡 <b id="tBlock">0</b></span>
+    <span class="runonly">🪞 <b id="tThorns">0</b></span>
+    <span class="runonly">턴 <b id="tTurn">0</b></span>
     <span class="relics" id="tRelics"></span>
-    <span style="margin-left:auto">턴 <b id="tTurn">0</b></span>
+    <span class="cheerwrap runonly">👏 환호
+      <span class="cheerbar" id="tCheerBar"><i id="tCheerI"></i>
+        <u style="left:25%"></u><u style="left:50%"></u><u style="left:75%"></u></span>
+      <b id="tCheer">0</b>
+    </span>
   </div>
+
   <div class="flags" id="flags"></div>
+
+  <!-- HP · 코스트 — UI/hud 의 고정 프레임 위에 런타임 레이어만 얹는다 (UI/specs) -->
+  <div class="hpwrap runonly">
+    <img class="f" src="../UI/hud/hp/frame.png" alt="">
+    <img class="heart" src="../UI/hud/hp/heart.png" alt="">
+    <div class="hptrack"><i id="tHpFill"></i></div>
+    <div class="hpnum" id="tHp">—</div>
+  </div>
+  <div class="costwrap runonly">
+    <img class="f" src="../UI/hud/cost/frame.png" alt="">
+    <img class="mask" src="../UI/hud/cost/mask.png" alt="">
+    <div class="costnum" id="tCostNum">—</div>
+    <div class="sockets" id="tCost"></div>
+  </div>
+
   <div id="body"></div>
-  <div class="log" id="log"></div>
   <div id="overlay"></div>
 </div>
 
-<div class="side">
-  <div class="panel">
-    <h2>증폭 — 상태이상이 피해를 곱한다</h2>
-    <table id="ampTbl"><tbody></tbody></table>
-  </div>
-  <div class="panel">
-    <h2>관중</h2>
-    <table id="cheerTbl"><tbody></tbody></table>
-  </div>
-  <div class="panel">
-    <h2>내 릴</h2>
-    <div class="deck" id="deck"></div>
-    <p class="note" id="deckInfo">—</p>
-  </div>
-  <div class="panel">
-    <h2>보유 대본</h2>
-    <table id="scrTbl"><tbody></tbody></table>
-    <p class="note" id="scrInfo">—</p>
+<div class="traybar">
+  <button id="btnPanels">도감 접기</button>
+  <span class="sp" id="loadedNote"></span>
+</div>
+
+<div class="tray" id="tray">
+  <div class="log" id="log"></div>
+  <div class="panels">
+    <div class="panel">
+      <h2>증폭 — 상태이상이 피해를 곱한다</h2>
+      <table id="ampTbl"><tbody></tbody></table>
+    </div>
+    <div class="panel">
+      <h2>관중</h2>
+      <table id="cheerTbl"><tbody></tbody></table>
+    </div>
+    <div class="panel">
+      <h2>내 릴</h2>
+      <div class="deck" id="deck"></div>
+      <p class="note" id="deckInfo">—</p>
+    </div>
+    <div class="panel">
+      <h2>보유 대본</h2>
+      <table id="scrTbl"><tbody></tbody></table>
+      <p class="note" id="scrInfo">—</p>
+    </div>
   </div>
 </div>
 
@@ -184,6 +372,49 @@
 (function () {
   var T = window.Theater, Sim = window.Sim, el = function (i) { return document.getElementById(i); };
   var S = null, pend = null, tip = null;
+  var inFight = false;
+
+  // ── UI 자산 ───────────────────────────────────────────────
+  // 카드 id → UI/slots/symbols 파일명. 27종이 카드와 1:1 로 있다.
+  var SYM = {
+    knight:'knight', king:'king', jester:'jester', priest:'priest', dancer:'dancer',
+    acrobat:'acrobat', singer:'singer', dead:'undead',
+    piano:'piano', violin:'violin', drum:'drum', trumpet:'trumpet', rage:'rage-fire',
+    tragedy:'tragedy-blood', cold:'frost', fear:'fear-ghost', joy:'joy-star',
+    sword:'dagger', shield:'shield', rose:'rose', mirror:'mirror', chain:'chain',
+    mask:'mask', candle:'candlestick', curtain:'curtain', crown:'crown', gem:'wild-diamond'
+  };
+  // 캐릭터 키 → UI/character 파일명 (UI/character/README.md 의 8종 순서)
+  var CHR_ART = {
+    director:'director', mirror:'mirror-actor', maestro:'maestro', frenzy:'frenzied-director',
+    harlequin:'jester', fallen:'corrupted-director', darling:'audience-darling', closer:'final-act-actor'
+  };
+  // 슬롯 캔버스(1024x592) 안의 창·노브 좌표 — PNG 내용 경계 실측값
+  var WIN_L = 170 / 1024 * 100, WIN_W = 168.75 / 1024 * 100;
+  var KNOB_L = (240 - 40) / 1024 * 100, KNOB_SP = 180 / 1024 * 100;
+
+  function symUrl(id) { return SYM[id] ? '../UI/slots/symbols/' + SYM[id] + '.png' : null; }
+  function symMarkup(id) {
+    var u = symUrl(id), d = T.CARDS[id] || {};
+    return u ? '<div class="sym" style="background-image:url(' + u + ')"></div>'
+             : '<div class="emo">' + (d.icon || '·') + '</div>';
+  }
+  function scriptBase(c) {
+    var t = Math.min(3, Math.max(1, c || 1));
+    return '../UI/scripts/base/runtime/script-base-cast-cost' + t + '-story-384.png';
+  }
+  function reqMarkup(sc) {
+    if (sc.requiresFam) return '<em>' + (T.FAM_KO[sc.requiresFam] || '') + ' 계열</em>';
+    return (sc.requires || []).map(function (id) {
+      var u = symUrl(id);
+      return u ? '<span style="background-image:url(' + u + ')"></span>'
+               : '<em>' + ((T.CARDS[id] || {}).icon || '?') + '</em>';
+    }).join('');
+  }
+  function cardIcon(id) {
+    var u = symUrl(id);
+    return u ? '<img src="' + u + '" alt="">' : ((T.CARDS[id] || {}).icon || '·');
+  }
   var NI = { fight:'⚔️', elite:'💀', shop:'🏪', rest:'🕯️', forge:'⚒️', event:'❓', boss:'👹' };
   var NK = Sim.NK;
 
@@ -202,6 +433,7 @@
 
   // ── 타이틀 ────────────────────────────────────────────────
   function showTitle() {
+    inFight = false;
     S = null; render();
     var o = ov();
     o.innerHTML = '<h3>대역 — UNDERSTUDY</h3>'
@@ -270,6 +502,7 @@
 
   // ── 맵 ────────────────────────────────────────────────────
   function showMap() {
+    inFight = false;
     pend = null; tip = null;
     var b = el('body'); b.innerHTML = '<div class="mapwrap" id="mw"></div>';
     var w = el('mw');
@@ -356,7 +589,7 @@
 
   function cardBox(id, extra) {
     var d = T.CARDS[id];
-    return '<div class="ic">' + d.icon + '</div><div class="n">' + d.name + '</div>'
+    return '<div class="ic">' + cardIcon(id) + '</div><div class="n">' + d.name + '</div>'
       + '<div class="e">' + T.FAM_KO[d.fam] + ' · ' + T.cardText(d) + '</div>'
       + '<div class="x">릴에 ' + (S.deck[id] || 0) + '장' + (extra ? '<br>' + extra : '') + '</div>';
   }
@@ -600,13 +833,19 @@
 
   // ── 전투 화면 ─────────────────────────────────────────────
   function drawFight() {
+    inFight = true;
     var ctx = Sim.ctxOf(S, S.w);
     var b = el('body');
-    b.innerHTML = '<div class="stage" id="stage"></div>'
-      + '<div class="board"><div class="cap" id="bcap"></div><div class="reels" id="reels"></div></div>'
-      + '<div class="hand" id="hw"></div><div class="actions" id="acts"></div>';
+    b.innerHTML = '<div class="slotwrap" id="slotwrap"></div>'
+      + '<div class="banner" id="banner"></div>'
+      + '<div class="handwrap" id="hw"></div>'
+      + '<div class="acts" id="acts"></div>';
 
+    // ── 무대 위의 적 ─────────────────────────────────────────
+    // 적 전용 아트는 아직 없다 (DESIGN 80.7 — 아트 16장 미착수).
+    // 그때까지는 인형극 실루엣 판으로 세우고, 자리와 정보 구조는 레퍼런스대로 둔다.
     var st = el('stage');
+    st.innerHTML = '';
     S.foes.forEach(function (f, i) {
       var d = document.createElement('div');
       d.className = 'foe' + (pend && f.hp > 0 ? ' aim' : '') + (f.hp <= 0 ? ' dead' : '');
@@ -619,6 +858,8 @@
       if (f.burn) tags.push('🔥 화상 ' + f.burn);
       if (f.poison) tags.push('🩸 독 ' + f.poison + (f.poison >= T.AMP.poisonLock ? ' (잠김)' : ''));
       if (f.evadeSingle) tags.push('단일 ' + Math.round(f.evadeSingle * 100) + '% 회피');
+      if (f.dodgeAoe) tags.push('광역 ' + Math.round(f.dodgeAoe * 100) + '% 흘림');
+      if (f.hides) tags.push('👤 후열 — 앞을 먼저');
       if (f.doom) tags.push('🔔 ' + f.doom + '턴');
       if (f.dotImmune) tags.push('화상·독 면역');
       if (f.role === 'guard') tags.push('💡 본체를 지킨다');
@@ -627,74 +868,104 @@
       if (f.gimmick && T.GIMMICK_TEXT[f.gimmick]) tags.push(T.GIMMICK_TEXT[f.gimmick][0]
         + (f.gimT ? ' ' + f.gimT + '턴' : ''));
       if (f.seizeCd) tags.push('📜 압수 ' + (f.seizeT || f.seizeCd) + '턴');
-      d.innerHTML = '<div class="nm">' + f.name + '</div>'
-        + '<div class="it">' + (f.hp > 0 ? f.t + '턴 후 · 공격 ' + f.atk : '퇴장') + '</div>'
+
+      d.innerHTML = '<div class="nm">' + f.name + (f.boss ? ' 👑' : (f.elite ? ' 💀' : '')) + '</div>'
+        + '<div class="it">' + (f.hp > 0 ? '⏱ ' + f.t + ' · ⚔ ' + f.atk : '퇴장') + '</div>'
+        + '<div class="body"><div class="glyph">' + (f.boss ? '👑' : f.elite ? '💀' : '🎭') + '</div></div>'
+        + '<div class="hpb"><i style="width:' + Math.max(0, f.hp / f.maxHp * 100) + '%"></i></div>'
+        + '<div class="num">' + Math.max(0, Math.round(f.hp)) + ' / ' + f.maxHp + '</div>'
+        + (f.block ? '<div class="blb"><i style="width:' + Math.min(100, f.block / f.maxHp * 100) + '%"></i></div>'
+            + '<div class="num">방어 ' + Math.round(f.block) + '</div>' : '')
         + '<div class="amp">' + at.join(' · ') + '</div>'
-        + '<div class="bar hpb"><i style="width:' + Math.max(0, f.hp / f.maxHp * 100) + '%"></i></div>'
-        + '<div class="num">HP ' + Math.max(0, Math.round(f.hp)) + '/' + f.maxHp + '</div>'
-        + (f.block ? '<div class="bar blb"><i style="width:' + Math.min(100, f.block / f.maxHp * 100) + '%"></i></div><div class="num">방어 ' + Math.round(f.block) + '</div>' : '')
         + '<div class="tag">' + tags.join('<br>') + '</div>';
       d.onclick = function () { clickFoe(i); };
       st.appendChild(d);
     });
 
-    el('bcap').innerHTML = '<b style="color:#c6bd95;font-weight:400">무대</b> — 턴이 시작되면 자동으로 올라간다. '
-      + '이 4장이 상연할 수 있는 대본을 정한다. '
-      + (S.freeReroll > 0 ? '<b style="color:#c6bd95;font-weight:400">🔁 무료 ' + S.freeReroll + '회</b> · ' : '')
-      + '<b style="color:#a8c49a;font-weight:400">🔁</b> 릴 하나를 다시 굴린다 (코스트 1)';
-    var rw = el('reels');
-    for (var k = 0; k < 4; k++) {
-      (function (k) {
-        var strip = S.strips[k], pos = S.pos[k], n = strip.length;
-        var r = document.createElement('div'); r.className = 'reel';
-        [-1, 0, 1].forEach(function (o) {
-          var raw = strip[((pos + o) % n + n) % n];
-          var id = (o === 0) ? S.stage[k] : raw, dd = T.CARDS[id] || {};
-          var c = document.createElement('div');
-          c.className = 'cell' + (o === 0 ? ' pay' : '') + (id === 'void' ? ' void' : '');
-          c.innerHTML = (dd.icon || '·') + (o === 0 ? '<em>' + (dd.name || '') + '</em>' : '');
-          c.title = (dd.name || '') + ' — ' + T.cardText(dd);
-          r.appendChild(c);
-        });
-        var rb = document.createElement('button');
-        var free = S.freeReroll > 0;
-        rb.className = 'rr' + (free ? ' free' : ''); rb.textContent = free ? '🔁 무료' : '🔁 1';
-        rb.disabled = !free && S.cost < 1;
-        rb.onclick = function () { doReroll(k); };
-        r.appendChild(rb);
-        rw.appendChild(r);
-      })(k);
+    // ── 슬롯 ────────────────────────────────────────────────
+    // 하우징은 항상 4칸이다. 활성 칸만 릴이 돌고 나머지는 커튼 셔터로 닫는다 (DESIGN 59.1).
+    var N = Math.min(T.CFG.stageMax, S.slotMax || T.CFG.stageBase);
+    var sw = el('slotwrap');
+    var html = '<img class="sl" src="../UI/slots/slot-reel-repeat-strip.png" alt="" style="display:none">';
+    for (var k = 0; k < T.CFG.stageMax; k++) {
+      var live = k < N;
+      var id = live ? S.stage[k] : null;
+      var dd = (id && T.CARDS[id]) || {};
+      var left = WIN_L + WIN_W * k;
+      html += '<div class="win' + (live ? '' : ' shut') + (id === 'void' ? ' void' : '')
+        + '" style="left:' + left.toFixed(3) + '%"'
+        + (live ? ' title="' + (dd.name || '') + ' — ' + T.cardText(dd) + '"' : ' title="닫힌 칸 — 복원 목록에서 연다"')
+        + '><div class="belt"></div>'
+        + (live ? symMarkup(id) : '') + '</div>';
     }
+    // 하우징이 창 위를 덮는다. 네 번째 칸이 열렸을 때만 그 칸을 하우징 위에 다시 그린다
+    html += '<img class="sl" src="../UI/slots/slot-machine-housing.png" alt="">';
+    if (N >= 4) {
+      html += '<div class="win" style="left:' + (WIN_L + WIN_W * 3).toFixed(3) + '%;z-index:11">'
+        + '<div class="belt"></div>' + symMarkup(S.stage[3]) + '</div>';
+    }
+    html += '<img class="sl" src="../UI/slots/slot-reroll-button-1.png" alt="">'
+      + '<img class="sl" src="../UI/slots/slot-reroll-button-2.png" alt="">'
+      + '<img class="sl" src="../UI/slots/slot-reroll-button-3.png" alt="">';
+    sw.innerHTML = html;
 
+    var free = S.freeReroll > 0;
+    for (var k2 = 0; k2 < N; k2++) {
+      (function (k) {
+        var kb = document.createElement('button');
+        kb.className = 'knob' + (free ? ' free' : '');
+        // 노브 좌표도 버튼 PNG 의 실제 내용 경계에서 나왔다 (1024x592 기준 240/420/600)
+        kb.style.left = (KNOB_L + KNOB_SP * k).toFixed(3) + '%';
+        kb.disabled = !free && S.cost < 1;
+        kb.title = free ? '무료 재굴림 ' + S.freeReroll + '회 남음' : '재굴림 — 코스트 1';
+        kb.innerHTML = '<i></i>';
+        kb.onclick = function () { doReroll(k); };
+        sw.appendChild(kb);
+      })(k2);
+    }
+    var cap = document.createElement('div');
+    cap.className = 'slotcap';
+    cap.innerHTML = '슬롯 <b>' + N + ' / ' + T.CFG.stageMax + '</b>'
+      + (free ? ' · <b>🔁 무료 ' + S.freeReroll + '회</b>' : ' · 🔁 재굴림 코스트 1');
+    sw.appendChild(cap);
+
+    el('banner').textContent = pend
+      ? '표적을 고른다 — ' + pend.name
+      : '턴 ' + (S.turn || 1) + ' · 무대가 올랐다';
+
+    // ── 손패 ────────────────────────────────────────────────
     var hw = el('hw');
-    var hand = Sim.handOf(S);
-    var live = S.scripts.filter(function (s) { return T.canStage(s, S.stage, ctx.relax) && !S.sealed[s.id]; }).length;
-    hw.innerHTML = '<div class="cap"><b>상연</b> — 대본을 누르고 적을 누른다 · '
-      + '무대 조건을 채운 대본 ' + live + '/' + S.scripts.length
-      + (S.temp.length ? ' · 즉석 ' + S.temp.length : '') + '</div>';
+    var live2 = S.scripts.filter(function (s) {
+      return T.canStage(s, S.stage, ctx.relax) && !S.sealed[s.id]; }).length;
     var hr = document.createElement('div'); hr.className = 'hrow';
     var add = function (sc, sealed) {
       var can = !sealed && Sim.canPlay(S, sc), staged = T.canStage(sc, S.stage, ctx.relax);
+      var cc = Sim.costOf(S.ch, sc);
       var btn = document.createElement('button');
       btn.className = 'hc' + (can ? '' : ' dis') + (sc.temp ? ' temp' : '')
         + (sealed ? ' seal' : '') + (pend === sc ? ' pend' : '') + (tip === sc ? ' tip' : '');
-      var cc = Sim.costOf(S.ch, sc);
-      btn.innerHTML = '<div class="c"' + (cc > sc.cost ? ' style="color:#b07a6a" title="이 캐릭터는 다른 계열에 코스트를 더 낸다"' : '') + '>'
-        + cc + '</div>'
-        + '<div class="n">' + sc.name + (sc.temp ? ' <span style="color:#8b7aa8">즉석</span>' : '')
-        + (sealed ? ' <span style="color:#b07a6a">압수됨</span>' : '') + '</div>'
-        + '<div class="r">' + T.reqText(sc) + (staged ? ' ✓' : ' <span style="color:#7a5a5a">미충족</span>') + '</div>'
-        + '<div class="e">' + T.effText(sc.effect) + '</div>';
+      btn.title = sc.name + ' — ' + T.reqText(sc) + ' · ' + T.effText(sc.effect)
+        + (cc > sc.cost ? '\n이 캐릭터는 다른 계열에 코스트를 더 낸다' : '');
+      // 대본 베이스는 코스트별로 두께가 다르다 (UI/specs — 1·2·3)
+      btn.innerHTML = '<img class="base" src="' + scriptBase(cc) + '" alt="">'
+        + '<div class="cost">' + cc + '</div>'
+        + '<div class="ok ' + (staged ? 'yes">✓' : 'no">✕') + '</div>'
+        + '<div class="ttl">' + sc.name + '</div>'
+        + '<div class="req">' + reqMarkup(sc) + '</div>'
+        + '<div class="eff">' + T.effText(sc.effect) + '</div>';
       if (can) btn.onclick = function () { clickScript(sc); };
       hr.appendChild(btn);
     };
     S.temp.forEach(function (sc) { add(sc, false); });
     S.scripts.forEach(function (sc) { add(sc, !!S.sealed[sc.id]); });
     hw.appendChild(hr);
+    hw.title = '무대 조건을 채운 대본 ' + live2 + '/' + S.scripts.length
+      + (S.temp.length ? ' · 즉석 ' + S.temp.length : '');
 
+    // ── 턴 종료 · 힌트 ───────────────────────────────────────
     var ac = el('acts');
     var e = document.createElement('button');
-    e.className = 'go wide'; e.textContent = '턴 종료';
+    e.className = 'end'; e.innerHTML = 'END<b>TURN</b>';
     e.onclick = endTurn; ac.appendChild(e);
     var h = document.createElement('button');
     h.textContent = '💡 추천 수';
@@ -712,28 +983,64 @@
     el('cheerTbl').innerHTML = T.CHEER_TEXT.map(function (r) {
       return '<tr class="amprow"><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>';
     }).join('');
+
+    var game = el('game');
+    game.classList.toggle('run', !!S);
+    game.classList.toggle('fight', !!S && inFight);
+
     if (!S) {
-      ['tAct','tHp'].forEach(function (i) { el(i).textContent = '—'; });
+      el('tAct').textContent = '대역 — UNDERSTUDY';
+      el('tHp').textContent = '—'; el('tCostNum').textContent = '—';
       el('tCost').innerHTML = ''; el('tRelics').innerHTML = ''; el('log').innerHTML = '';
       el('deck').innerHTML = ''; el('deckInfo').textContent = '—'; el('flags').innerHTML = '';
       el('scrTbl').innerHTML = ''; el('scrInfo').textContent = '—'; el('body').innerHTML = '';
+      el('stage').innerHTML = '';
       return;
     }
+
     // 실린 규칙이 예상과 다르면 브라우저가 옛 스크립트를 붙들고 있는 것이다
     document.title = 'UNDERSTUDY — ' + T.CFG.floors + '층 · 캐릭터 '
       + Object.keys(T.CHARS).length + '종 · 공격 ×' + S.diff.atkMul;
-    el('tAct').textContent = '제' + S.act + '막 · ' + S.ch.name
+    el('loadedNote').textContent = '실린 규칙 — ' + T.CFG.floors + '층 · 캐릭터 '
+      + Object.keys(T.CHARS).length + '종 · 대본 ' + (T.SCRIPTS ? T.SCRIPTS.length : '?') + '종';
+
+    el('tAct').textContent = '제' + S.act + '막 · ' + (S.floor || 1) + '층 · ' + S.ch.name
       + ' · ' + S.diff.name + (S.asc.level ? ' 재연 ' + S.asc.level + '단' : '');
-    el('tHp').textContent = Math.max(0, Math.round(S.hp)) + '/' + S.maxHp;
+
+    var art = CHR_ART[S.chKey] || CHR_ART[S.ch.key];
+    if (!art) {
+      Object.keys(T.CHARS).forEach(function (k) { if (T.CHARS[k] === S.ch) art = CHR_ART[k]; });
+    }
+    // 개별 런타임 스프라이트는 attack·groggy 둘뿐이다 (UI/character/README).
+    // 평상시엔 attack 을 앉은 자세로 쓰고, HP 가 바닥나면 groggy 로 바꾼다.
+    var spr = el('chrSprite');
+    if (art) {
+      var low = S.hp <= S.maxHp * 0.25;
+      var want = '../UI/character/' + art + (low ? '-groggy' : '-attack') + '.png';
+      if (spr.getAttribute('src') !== want) spr.setAttribute('src', want);
+    }
+
+    el('tHp').textContent = Math.max(0, Math.round(S.hp)) + ' / ' + S.maxHp;
+    el('tHpFill').style.width = Math.max(0, Math.min(100, S.hp / S.maxHp * 100)) + '%';
     el('tBlock').textContent = Math.round(S.block || 0);
     el('tThorns').textContent = Math.round(S.thorns || 0);
     el('tGold').textContent = S.gold;
     el('tTurn').textContent = S.turn || 0;
-    el('tCheer').textContent = Math.round(S.cheer || 0);
-    el('tCheerI').style.width = Math.min(100, (S.cheer || 0) / S.asc.cheerMax * 100) + '%';
-    var cs = '';
-    for (var i = 0; i < Sim.maxCost(S); i++) cs += '<i class="' + (i < (S.cost || 0) ? 'on' : '') + '"></i>';
-    el('tCost').innerHTML = cs;
+
+    var cheer = Math.round(S.cheer || 0), cmax = S.asc.cheerMax;
+    el('tCheer').textContent = cheer + ' / ' + cmax;
+    el('tCheerI').style.width = Math.min(100, cheer / cmax * 100) + '%';
+    el('tCheerBar').classList.toggle('hot', cheer >= 40);
+
+    // 소켓은 항상 절대 최대치 10개를 배치한다 (UI/specs)
+    var mc = Sim.maxCost(S), cur = S.cost || 0, ss = '';
+    for (var i = 0; i < 10; i++) {
+      var kind = i < cur ? 'lit' : (i < mc ? 'empty' : 'locked');
+      ss += '<img src="../UI/hud/cost/socket-' + kind + '.png" alt="">';
+    }
+    el('tCost').innerHTML = ss;
+    el('tCostNum').innerHTML = cur + ' <s>/ ' + mc + '</s>';
+
     el('tRelics').innerHTML = (S.relics || []).map(function (k) {
       return '<span title="' + T.RELICS[k].name + ' — ' + T.RELICS[k].desc + '">' + T.RELICS[k].icon + '</span>';
     }).join('');
@@ -772,7 +1079,7 @@
     Object.keys(S.deck).sort().forEach(function (id) {
       var d = T.CARDS[id], n = document.createElement('span');
       n.className = 'card';
-      n.innerHTML = '<i>' + d.icon + '</i>' + d.name + ' <b>' + S.deck[id] + '</b>';
+      n.innerHTML = cardIcon(id) + d.name + ' <b>' + S.deck[id] + '</b>';
       host.appendChild(n);
     });
     var by = {};
@@ -786,13 +1093,19 @@
       var p = Math.round(Sim.stageProb(s, S.deck) * 100);
       return '<tr><td' + (ok ? ' style="color:#a8c49a"' : '') + '>' + s.name
         + (S.sealed && S.sealed[s.id] ? ' <span style="color:#b07a6a">압수</span>' : '')
-        + '<br><span style="color:#56545e">' + T.reqText(s) + ' · ' + T.effText(s.effect)
+        + '<br><span style="color:#6d6049">' + T.reqText(s) + ' · ' + T.effText(s.effect)
         + ' · 확률 ' + p + '%</span></td>'
         + '<td class="n">c' + s.cost + '</td></tr>';
     }).join('');
     el('scrInfo').textContent = '보유 ' + S.scripts.length + '/' + Sim.scriptCap(S)
       + ' · 최대 코스트 ' + Sim.maxCost(S);
   }
+
+  // 도감 접기
+  el('btnPanels').onclick = function () {
+    var t = el('tray'), hid = t.classList.toggle('hide');
+    this.textContent = hid ? '도감 펼치기' : '도감 접기';
+  };
 
   showTitle();
 })();
