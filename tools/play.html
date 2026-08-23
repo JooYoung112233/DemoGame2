@@ -124,9 +124,22 @@
             box-shadow:0 0 0 2px #00000055; transition:transform .07s, box-shadow .18s; }
   .knob:not(:disabled):hover i { box-shadow:0 0 10px 2px #d2a84899; }
   .knob:not(:disabled):active i { transform:translateY(3px); }
-  .knob.free i { box-shadow:0 0 8px 2px #d2a84866; }
+  .knob.lock i { box-shadow:0 0 0 2px var(--gold), 0 0 12px 3px #d2a848aa;
+                 background:#d2a8482e; }
   .knob:disabled i { opacity:.35; }
-  .slotcap { position:absolute; left:0; right:0; top:82%; text-align:center;
+  .lockmark { position:absolute; right:6%; top:5%; font-size:.9cqw; line-height:1;
+              text-shadow:0 1px 3px #000; pointer-events:none; }
+  .win.locked { box-shadow:inset 0 0 0 2px var(--gold); }
+  /* 재스핀 — 슬롯 오른쪽 모터 하우징 옆 */
+  .respin { position:absolute; left:50%; transform:translateX(-50%); top:86%;
+            background:#14100ae6; border:1px solid var(--line2); color:var(--gold);
+            padding:.25em 1em; font:inherit; font-size:.95cqw; letter-spacing:.04em;
+            cursor:pointer; white-space:nowrap; z-index:13; }
+  .respin b { font-weight:400; color:var(--text); }
+  .respin:hover:not(:disabled) { background:#2a1f10; border-color:var(--gold); }
+  .respin:disabled { opacity:.4; cursor:default; }
+  .respin.free { box-shadow:0 0 10px #d2a84855; }
+  .slotcap { position:absolute; left:0; right:0; top:100%; margin-top:.4cqw; text-align:center;
              font-size:clamp(7px,.7vw,11px); color:var(--muted); text-shadow:0 1px 3px #000; }
   .slotcap b { color:var(--gold); font-weight:400; }
 
@@ -633,8 +646,11 @@
     drawFight();
   }
 
-  function doReroll(k) {
-    if (Sim.doReroll(S, k)) { pend = null; tip = null; drawFight(); }
+  function toggleLock(k) {
+    if (Sim.toggleLock(S, k)) drawFight();          // 잠금은 무료다
+  }
+  function doRespin() {
+    if (Sim.doRespin(S)) { pend = null; tip = null; drawFight(); }
   }
 
   function showTip() {
@@ -965,7 +981,8 @@
         + '" style="left:' + left.toFixed(3) + '%"'
         + (live ? ' title="' + (dd.name || '') + ' — ' + T.cardText(dd) + '"' : ' title="닫힌 칸 — 복원 목록에서 연다"')
         + '><div class="belt"></div>'
-        + (live ? symMarkup(id) : '') + '</div>';
+        + (live ? symMarkup(id) : '')
+        + (live && (S.locked || [])[k] ? '<div class="lockmark">🔒</div>' : '') + '</div>';
     }
     // 하우징이 창 위를 덮는다. 네 번째 칸이 열렸을 때만 그 칸을 하우징 위에 다시 그린다
     html += '<img class="sl" src="../UI/slots/slot-machine-housing.png" alt="">';
@@ -978,24 +995,37 @@
       + '<img class="sl" src="../UI/slots/slot-reroll-button-3.png" alt="">';
     sw.innerHTML = html;
 
+    // 슬롯 밑 노브는 재굴림이 아니라 잠금이다. 잠근 칸은 재스핀에서 살아남는다.
     var free = S.freeReroll > 0;
+    var lk = S.locked || [];
     for (var k2 = 0; k2 < N; k2++) {
       (function (k) {
         var kb = document.createElement('button');
-        kb.className = 'knob' + (free ? ' free' : '');
-        // 노브 좌표도 버튼 PNG 의 실제 내용 경계에서 나왔다 (1024x592 기준 240/420/600)
+        kb.className = 'knob' + (lk[k] ? ' lock' : '');
+        // 노브 좌표는 버튼 PNG 의 실제 내용 경계에서 나왔다 (1024x592 기준 240/420/600)
         kb.style.left = (KNOB_L + KNOB_SP * k).toFixed(3) + '%';
-        kb.disabled = !free && S.cost < 1;
-        kb.title = free ? '무료 재굴림 ' + S.freeReroll + '회 남음' : '재굴림 — 코스트 1';
+        kb.title = (lk[k] ? '잠금 해제' : '이 칸을 잠근다') + ' — 무료';
         kb.innerHTML = '<i></i>';
-        kb.onclick = function () { doReroll(k); };
+        kb.onclick = function () { toggleLock(k); };
         sw.appendChild(kb);
       })(k2);
     }
+    var openN = 0;
+    for (var k3 = 0; k3 < N; k3++) if (!lk[k3]) openN++;
+
+    var sp = document.createElement('button');
+    sp.className = 'respin' + (free ? ' free' : '');
+    sp.disabled = openN === 0 || (!free && S.cost < 1);
+    sp.innerHTML = '🔁 재스핀 <b>' + openN + '칸</b>';
+    sp.title = openN === 0 ? '전부 잠겨 있다 — 돌릴 칸이 없다'
+      : (free ? '무료 재스핀 ' + S.freeReroll + '회 남음' : '재스핀 — 코스트 1');
+    sp.onclick = doRespin;
+    sw.appendChild(sp);
+
     var cap = document.createElement('div');
     cap.className = 'slotcap';
-    cap.innerHTML = '슬롯 <b>' + N + ' / ' + T.CFG.stageMax + '</b>'
-      + (free ? ' · <b>🔁 무료 ' + S.freeReroll + '회</b>' : ' · 🔁 재굴림 코스트 1');
+    cap.innerHTML = '슬롯 <b>' + N + ' / ' + T.CFG.stageMax + '</b> · 🔒 잠금은 무료'
+      + (free ? ' · <b>재스핀 무료 ' + S.freeReroll + '회</b>' : ' · 재스핀 코스트 1');
     sw.appendChild(cap);
 
     el('banner').textContent = pend

@@ -1733,18 +1733,31 @@
       // 계획 → 필요하면 재굴림 → 다시 계획
       var plan = planTurn(S, ctx);
       var rer = 0, free = (S.ch.freeReroll || 0) + (S.growth.reroll || 0) + (S.propSpin || 0);
+      var NSLOT = stageN(S);
       while (rer < 2 && (free > 0 || S.cost >= 2)) {
         if (S.rnd() > S.sk.useReroll) break;        // 재굴림을 쓸 줄 아는지가 숙련도다
-        var k = worstReel(S, ctx), isFree = free > 0;
-        var gain = rerollGain(S, ctx, k, planTurn(S, ctx, true).score, isFree);
-        if (gain <= (isFree ? 0.5 : 6)) break;     // 공짜면 조금만 나아도, 코스트를 내면 확실할 때만
+        var isFree = free > 0, now = planTurn(S, ctx, true).score;
+        // 칸마다 「이 칸을 바꾸면 나아지는가」를 재고, 나아지는 칸만 열어 둔 채 돌린다.
+        // 잠금이 무료이므로 사람이 하는 판단도 이 모양이다.
+        var openK = [], best = -1e9;
+        for (var k = 0; k < NSLOT; k++) {
+          var gk = rerollGain(S, ctx, k, now, isFree);
+          if (gk > 0) openK.push(k);
+          if (gk > best) best = gk;
+        }
+        if (!openK.length) break;
+        if (best <= (isFree ? 0.5 : 6)) break;     // 공짜면 조금만 나아도, 코스트를 내면 확실할 때만
         if (isFree) free--; else S.cost -= 1;
         S.stats.rerolls++;
-        var st = S.strips[k], ix = Math.floor(S.rnd() * st.length);
-        S.pos[k] = ix; S.stage[k] = st[ix];
+        S.stats.spinOpen = (S.stats.spinOpen || 0) + openK.length;
+        openK.forEach(function (k) {
+          var st = S.strips[k], ix = Math.floor(S.rnd() * st.length);
+          S.pos[k] = ix; S.stage[k] = st[ix];
+        });
         S.temp = instantScripts(S, ctx);
-        lg(S, 'e', '  🔁 릴 ' + (k + 1) + ' 재굴림 → ' + T.CARDS[S.stage[k]].name);
-        tr(S, 'reroll', '릴 ' + (k + 1) + ' 재굴림');
+        lg(S, 'e', '  🔁 재스핀 ' + openK.length + '칸 → '
+          + openK.map(function (k) { return T.CARDS[S.stage[k]].name; }).join(' · '));
+        tr(S, 'reroll', '재스핀 ' + openK.length + '칸');
         plan = planTurn(S, ctx); rer++;
       }
 
@@ -3191,6 +3204,7 @@
     S.turn++; S.stats.turns++;
     S.cost = maxCost(S); S.stats.costMax += S.cost;
     S.freeReroll = (S.ch.freeReroll || 0) + (S.growth.reroll || 0);
+    S.locked = [];                                   // 잠금은 그 턴만 유효하다
     S.tHits = 0; S.tPlays = 0; S.tBlock = 0; S.tHeal = 0; S.tSelf = 0;
     if (relicN(S, 'darkScript')) S.hp -= 2;
       if (S.bleed > 0) { var bk = Math.round(S.bleed); S.hp = Math.min(S.maxHp, S.hp + bk); S.bleed = 0;
@@ -3274,16 +3288,34 @@
     return ev;
   }
 
-  function doReroll(S, k) {
-    var free = S.freeReroll > 0;
-    if (!free && S.cost < 1) return false;
-    if (free) S.freeReroll--; else S.cost -= 1;
-    S.stats.rerolls++;
+  // 슬롯은 전체를 돌린다. 릴 하나만 다시 굴리는 규칙은 없었다 —
+  // 지키고 싶은 칸을 잠그고(무료) 나머지를 다시 돌린다(코스트 1). DESIGN 9 장.
+  function toggleLock(S, k) {
+    if (k >= stageN(S)) return false;
+    if (!S.locked) S.locked = [];
+    S.locked[k] = !S.locked[k];
+    return true;
+  }
+
+  function spinReel(S, k) {
     var st = S.strips[k], i = Math.floor(S.rnd() * st.length);
     S.pos[k] = i; S.stage[k] = st[i];
     if (S.censor && S.censor.turns > 0 && S.stage[k] === S.censor.id) S.stage[k] = 'void';
+  }
+
+  // 잠기지 않은 칸을 전부 다시 돌린다. 전부 잠갔으면 돌릴 것이 없다.
+  function doRespin(S) {
+    var free = S.freeReroll > 0, N = stageN(S), open = [];
+    for (var k = 0; k < N; k++) if (!(S.locked && S.locked[k])) open.push(k);
+    if (!open.length) return false;
+    if (!free && S.cost < 1) return false;
+    if (free) S.freeReroll--; else S.cost -= 1;
+    S.stats.rerolls++;
+    open.forEach(function (k) { spinReel(S, k); });
     S.temp = instantScripts(S, ctxOf(S, S.w));
-    lg(S, 'e', '  🔁 릴 ' + (k + 1) + ' 재굴림 → ' + T.CARDS[S.stage[k]].name + (free ? ' (무료)' : ' (코스트 1)'));
+    lg(S, 'e', '  🔁 재스핀 ' + open.length + '칸 → '
+      + open.map(function (k) { return T.CARDS[S.stage[k]].name; }).join(' · ')
+      + (free ? ' (무료)' : ' (코스트 1)'));
     return true;
   }
 
@@ -3310,7 +3342,8 @@
     needAt: needAt, epicNeedAt: epicNeedAt,
     // 사람 플레이용
     newRun: newRun, goTo: goTo, openFight: openFight, beginTurn: beginTurn,
-    playScript: playScript, canPlay: canPlay, doReroll: doReroll, finishTurn: finishTurn,
+    playScript: playScript, canPlay: canPlay, finishTurn: finishTurn,
+    toggleLock: toggleLock, doRespin: doRespin, stageN: stageN,
     suggest: suggest, handOf: handOf, applyEvent: applyEvent, doEvent: doEvent,
     takeRelic: takeRelic, reachable: reachable, maxCost: maxCost, scriptCap: scriptCap,
     costOf: costOf,
