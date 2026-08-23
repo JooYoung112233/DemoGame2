@@ -24,6 +24,14 @@
 | [보상](reward/README.md) | [preview](reward/preview.png) | — |
 | [공연 결과](run-result/README.md) | [승리](run-result/preview-victory-v2.png) | [승리 v1](run-result/preview-victory-v1.png), [패배](run-result/preview-defeat-v1.png) |
 
+## 슬롯 머신
+
+| 구성 | 대표 이미지 | 관련 리소스 |
+|---|---|---|
+| [슬롯 머신 조립본](slots/README.md) | [3릴 + 커튼](slots/slot-machine-3of4-assembled.png) | [하우징](slots/slot-machine-housing.png), [반복 릴](slots/slot-reel-repeat-strip.png), [재굴림 버튼](slots/slot-reroll-button-1.png) |
+| [심볼 27종](slots/symbols/) | [기사](slots/symbols/knight.png) | `symbols/` — CAST 8종 · MUSIC 9종 · PROP 9종 · WILD 1종 |
+| [원본 · 참고](slots/references/) | [레이어 릴 참고](slots/references/slot-layered-reels-preview-v1.png) | `references/` — 프레임, 심볼 시트, 릴 모션 원본 |
+
 ## 성장 · 관리
 
 | 화면 | 대표 프리뷰 | 추가 상태 |
