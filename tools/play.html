@@ -66,7 +66,7 @@
          gap:1.5%; cursor:default; }
   .foe.aim { cursor:crosshair; }
   /* 슬더슬처럼 대본을 끌어다 적 위에 놓는다 */
-  .hc { touch-action:none; }
+  .hc, .hc * { touch-action:none; -webkit-user-drag:none; user-select:none; -webkit-user-select:none; }
   .hc.dragging { opacity:.25; }
   #ghost { position:fixed; z-index:70; pointer-events:none; transform:translate(-50%,-60%) scale(.82);
     filter:drop-shadow(0 10px 22px #000c); opacity:.96; }
@@ -835,18 +835,41 @@
 
   function dragStart(ev, sc, card) {
     if (!Sim.canPlay(S, sc)) return;
+    if (drag) dragCleanup();          // 앞선 드래그가 끊긴 채 남아 있으면 먼저 치운다
     ev.preventDefault();
+    // 포인터를 카드에 묶는다. 이게 없으면 커서가 다른 요소 위로 갈 때 이벤트를 놓친다.
+    try { card.setPointerCapture(ev.pointerId); } catch (e) {}
     var g = card.cloneNode(true);
     g.id = 'ghost'; g.className = 'hc'; g.style.width = card.offsetWidth + 'px';
     g.style.height = card.offsetHeight + 'px';
     document.body.appendChild(g);
-    drag = { sc: sc, ghost: g, card: card, need: needsTarget(sc),
+    drag = { sc: sc, ghost: g, card: card, need: needsTarget(sc), pid: ev.pointerId,
              x0: ev.clientX, y0: ev.clientY, moved: false };
     card.classList.add('dragging');
     dragMove(ev);
-    window.addEventListener('pointermove', dragMove);
-    window.addEventListener('pointerup', dragEnd);
+    card.addEventListener('pointermove', dragMove);
+    card.addEventListener('pointerup', dragEnd);
+    card.addEventListener('pointercancel', dragCancel);
+    window.addEventListener('pointerup', dragEnd);      // 캡처가 안 걸린 경우의 보험
   }
+
+  // 화면에 남은 흔적만 지운다 — 발동 여부는 dragEnd 가 정한다
+  function dragCleanup() {
+    var g = document.getElementById('ghost');
+    if (g && g.parentNode) g.parentNode.removeChild(g);
+    var path = document.querySelector('#dragline path'); if (path) path.setAttribute('d', '');
+    document.querySelectorAll('#stage .foe').forEach(function (x) { x.classList.remove('over'); });
+    if (drag && drag.card) {
+      drag.card.classList.remove('dragging');
+      drag.card.removeEventListener('pointermove', dragMove);
+      drag.card.removeEventListener('pointerup', dragEnd);
+      drag.card.removeEventListener('pointercancel', dragCancel);
+      try { drag.card.releasePointerCapture(drag.pid); } catch (e) {}
+    }
+    window.removeEventListener('pointerup', dragEnd);
+    drag = null;
+  }
+  function dragCancel() { dragCleanup(); drawFight(); }
 
   function foeUnder(x, y) {
     var hit = null;
@@ -860,7 +883,7 @@
 
   function dragMove(ev) {
     if (!drag) return;
-    if (Math.abs(ev.clientX - drag.x0) + Math.abs(ev.clientY - drag.y0) > 6) drag.moved = true;
+    if (Math.abs(ev.clientX - drag.x0) + Math.abs(ev.clientY - drag.y0) > 12) drag.moved = true;
     drag.ghost.style.left = ev.clientX + 'px';
     drag.ghost.style.top = ev.clientY + 'px';
     var over = drag.need ? foeUnder(ev.clientX, ev.clientY) : null;
@@ -877,19 +900,16 @@
   }
 
   function dragEnd(ev) {
-    window.removeEventListener('pointermove', dragMove);
-    window.removeEventListener('pointerup', dragEnd);
     if (!drag) return;
-    var d = drag; drag = null;
-    if (d.ghost.parentNode) d.ghost.parentNode.removeChild(d.ghost);
-    d.card.classList.remove('dragging');
-    var path = document.querySelector('#dragline path'); if (path) path.setAttribute('d', '');
-    document.querySelectorAll('#stage .foe').forEach(function (x) { x.classList.remove('over'); });
-    if (!d.moved) return clickScript(d.sc);          // 그냥 누른 것이면 예전처럼 조준 모드
+    var d = drag;
+    var over = d.need ? foeUnder(ev.clientX, ev.clientY) : null;
+    var onCard = d.card.contains(document.elementFromPoint(ev.clientX, ev.clientY) || document.body);
+    dragCleanup();
+    // 카드 위에서 뗐으면 손이 떨린 것이지 취소가 아니다 — 예전처럼 조준 모드로 간다
+    if (!d.moved || onCard) return clickScript(d.sc);
     if (!d.need) return fire(d.sc, -1);              // 대상이 없는 대본은 어디에 놓아도 된다
-    var over = foeUnder(ev.clientX, ev.clientY);
-    if (over) fire(d.sc, over.i);
-    else drawFight();                                // 허공에 놓으면 취소
+    if (over) return fire(d.sc, over.i);
+    drawFight();                                    // 허공에 놓으면 취소
   }
 
   function clickScript(sc) {
@@ -1342,6 +1362,8 @@
         + '<div class="req">' + reqMarkup(sc, S.stage, ctx.relax) + '</div>'
         + '<div class="eff">' + T.effText(sc.effect) + '</div>';
       if (can) {
+        btn.draggable = false;
+        btn.ondragstart = function (ev) { ev.preventDefault(); return false; };
         btn.onpointerdown = function (ev) { if (ev.button === 0) dragStart(ev, sc, btn); };
         btn.onclick = function (ev) { ev.preventDefault(); };   // 실제 발동은 dragEnd 가 한다
       }
