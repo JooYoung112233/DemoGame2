@@ -883,6 +883,7 @@
                snap: [] }
     };
     // 대본 해금 — 써본 카드의 조합만 풀에 들어온다. opt.known 이 없으면 전부 열린 상태.
+    S.diffKey = opt.diffKey || 'normal';   // 무엇을 깼는지 판이 끝날 때 알아야 한다
     S.known = opt.known || null;
     S.useStages = !!opt.stages;
     S.perk = T.perkMods(opt.perks || []);   // 이력 — 재연을 넘기며 고른 퍽들
@@ -935,7 +936,8 @@
           sp._epic = {}; Object.keys(EPIC).forEach(function (k) { sp._epic[k] = epicProg(S, k); });
         }
         S.stats.snap.push({
-          f: nd.f, deck: Object.assign({}, S.deck), relics: S.relics.slice(),
+          f: nd.f, hp: S.hp, maxHp: S.maxHp, gold: S.gold,
+          deck: Object.assign({}, S.deck), relics: S.relics.slice(),
           scripts: S.scripts.map(function (s) { return s.id; }), stages: sp
         });
       }
@@ -1669,6 +1671,9 @@
 
     while (S.turn < 60) {
       S.turn++; S.stats.turns++;
+    S.block = Math.floor(S.block * T.CFG.blockKeep);   // 🛡 방어는 매 턴 휘발한다
+      // 🛡 방어는 매 턴 시작에 휘발한다 — 예고를 보고 그 턴에 올리는 것이 결정이 된다
+      S.block = Math.floor(S.block * T.CFG.blockKeep);
       S.cost = maxCost(S);
       S.stats.costMax += S.cost;
       S.tHits = 0; S.tPlays = 0; S.tBlock = 0; S.tHeal = 0; S.tSelf = 0;
@@ -2001,6 +2006,10 @@
       // 남는 것이 없어서(손거울이 그랬다) 방어를 쓰는 캐릭터에게만 안 통한다.
       if (S.propHalf) inc = Math.round(inc * 0.5);
       var ab = Math.min(S.block, inc); S.block -= ab; S.hp -= (inc - ab);
+      // HP 가 왜 안 깎이는지 가르려면 들어온 피해와 막은 양을 따로 세야 한다
+      S.stats.incTotal = (S.stats.incTotal || 0) + inc;
+      S.stats.blockedTotal = (S.stats.blockedTotal || 0) + ab;
+      S.stats.tookTotal = (S.stats.tookTotal || 0) + (inc - ab);
       // 크게 맞으면 관객이 등을 돌린다 — 이게 있어야 「환호 유지」가 덱이 된다
       if ((inc - ab) >= S.maxHp * T.CHEER.dropAt && S.cheer > 0) {
         S.cheer = 0; S.stats.cheerLost = (S.stats.cheerLost || 0) + 1;
@@ -2865,7 +2874,8 @@
   }
 
   function doRest(S) {
-    if (S.hp < S.maxHp * 0.72) { S.hp = Math.min(S.maxHp, S.hp + S.maxHp * 0.34); lg(S, 'e', '  🕯️ 회복'); }
+    if (S.hp < S.maxHp * T.CFG.restAt) { var h0 = S.hp; S.hp = Math.min(S.maxHp, S.hp + S.maxHp * T.CFG.restHeal);
+      S.stats.healTotal = (S.stats.healTotal || 0) + (S.hp - h0); lg(S, 'e', '  🕯️ 회복'); }
     else { S.maxHp += 8; S.hp += 8; lg(S, 'e', '  🕯️ 최대 HP +8'); }
   }
 

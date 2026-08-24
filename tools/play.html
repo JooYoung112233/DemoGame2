@@ -65,6 +65,61 @@
          flex-direction:column; align-items:center; justify-content:flex-end;
          gap:1.5%; cursor:default; }
   .foe.aim { cursor:crosshair; }
+  /* 슬더슬처럼 대본을 끌어다 적 위에 놓는다 */
+  .hc { touch-action:none; }
+  .hc.dragging { opacity:.25; }
+  #ghost { position:fixed; z-index:70; pointer-events:none; transform:translate(-50%,-60%) scale(.82);
+    filter:drop-shadow(0 10px 22px #000c); opacity:.96; }
+  .foe.over .body { border-color:var(--gold) !important;
+    box-shadow:inset 0 0 44px #d2a84855, 0 0 22px #d2a848aa !important; }
+  .foe.over::after { content:'⌖'; position:absolute; left:50%; top:34%; transform:translate(-50%,-50%);
+    font-size:clamp(26px,3vw,46px); color:var(--gold); text-shadow:0 0 12px #000; pointer-events:none; }
+  #dragline { position:fixed; inset:0; z-index:69; pointer-events:none; }
+
+  /* 뜨는 숫자 — 로그에만 있던 피해를 무대 위로 올린다 */
+  @keyframes flt {   0% { opacity:0; transform:translate(-50%,10px) scale(.7) }
+                    14% { opacity:1; transform:translate(-50%,-4px) scale(1.18) }
+                    26% { transform:translate(-50%,-8px) scale(1) }
+                   100% { opacity:0; transform:translate(-50%,-46px) scale(.95) } }
+  .flt { position:absolute; left:50%; top:34%; z-index:24; pointer-events:none;
+    font-weight:900; font-size:clamp(20px,2.4vw,38px); letter-spacing:-.03em; white-space:nowrap;
+    text-shadow:0 2px 0 #000, 0 0 14px #000c; animation:flt .95s cubic-bezier(.2,.9,.3,1) forwards; }
+  .flt.dmg  { color:#ff7a63; }
+  .flt.big  { color:#ffd166; font-size:clamp(26px,3.1vw,50px); }
+  .flt.heal { color:#8ede8e; }
+  .flt.blk  { color:#9fc4e0; font-size:clamp(15px,1.7vw,26px); }
+  .flt.dot  { color:#e08a4a; font-size:clamp(15px,1.7vw,26px); }
+
+  /* 맞는 쪽이 흔들려야 때린 것이 보인다 */
+  @keyframes hitk { 0%{transform:translateX(0)} 18%{transform:translateX(-8px)}
+                   38%{transform:translateX(7px)} 60%{transform:translateX(-4px)}
+                  100%{transform:translateX(0)} }
+  .foe.hit .body { animation:hitk .3s ease-out;
+    border-color:#ff7a63 !important; box-shadow:inset 0 0 44px #ff3b2a66, 0 0 18px #ff3b2a44 !important; }
+  .foe.hit .glyph { filter:brightness(2.2) saturate(.3); }
+
+  /* 퇴장 — 막 뒤로 쓰러진다 */
+  @keyframes gone { 0%{opacity:1;transform:translateY(0) rotate(0)}
+                  100%{opacity:.12;transform:translateY(14px) rotate(-7deg)} }
+  .foe.dead .body { animation:gone .55s ease-in forwards; }
+
+  /* 내가 맞으면 화면이 흔들리고 가장자리가 붉어진다 */
+  @keyframes shk { 0%{transform:translate(0,0)} 22%{transform:translate(-7px,4px)}
+                  48%{transform:translate(6px,-4px)} 74%{transform:translate(-4px,2px)}
+                 100%{transform:translate(0,0)} }
+  .shake { animation:shk .32s ease-out; }
+  #hurt { position:fixed; inset:0; pointer-events:none; z-index:60; opacity:0;
+    background:radial-gradient(ellipse at 50% 55%, #0000 42%, #b8202099 100%); }
+  @keyframes hurtk { 0%{opacity:0} 10%{opacity:1} 100%{opacity:0} }
+  #hurt.on { animation:hurtk .55s ease-out; }
+
+  /* 막이 내린다 — 전투가 끝날 때 한 번 */
+  #curtain { position:fixed; inset:0; pointer-events:none; z-index:58; opacity:0;
+    display:grid; place-items:center; background:#0b0708e0; }
+  #curtain b { font-size:clamp(24px,3.4vw,54px); font-weight:900; color:var(--gold);
+    letter-spacing:.22em; text-shadow:0 0 30px #000, 0 2px 0 #000; }
+  @keyframes curk { 0%{opacity:0} 18%{opacity:1} 62%{opacity:1} 100%{opacity:0} }
+  #curtain.on { animation:curk 1.1s ease-out; }
   .foe.dead { opacity:.2; filter:grayscale(1); }
   .foe .body { width:100%; flex:1 1 auto; min-height:0; position:relative;
                background:linear-gradient(180deg,#1a141088,#0d0a07dd);
@@ -77,15 +132,18 @@
                     -webkit-mask-composite:source-over; }
   .foe .glyph { position:absolute; inset:0; display:grid; place-items:center;
                 font-size:clamp(20px,3.2vw,54px); filter:grayscale(.45) brightness(.85); }
-  .foe .nm { font-size:clamp(8px,.78vw,12px); color:var(--gold); text-align:center;
+  .foe .nm { font-size:clamp(12px,1.05vw,17px); font-weight:800; color:var(--gold); text-align:center;
              text-shadow:0 1px 3px #000; line-height:1.25; }
-  .foe .hpb { width:100%; height:.55em; min-height:5px; border:1px solid #5a3a2a; background:#170f0c; }
+  .foe .hpb { width:100%; height:1.05em; min-height:11px; border:1px solid #7a4a34; background:#170f0c;
+    box-shadow:inset 0 1px 3px #000a; }
   .foe .hpb>i { display:block; height:100%; background:linear-gradient(180deg,#a8514a,#6d2f2a); }
   .foe .blb { width:100%; height:.4em; min-height:4px; border:1px solid #3a4a5a; background:#0f1317; }
   .foe .blb>i { display:block; height:100%; background:#5a6b7a; }
-  .foe .num { font-size:clamp(7px,.66vw,11px); color:var(--muted);
+  .foe .num { font-size:clamp(13px,1.15vw,19px); font-weight:800; color:#e8d5bd; letter-spacing:-.01em;
+    text-shadow:0 1px 2px #000;
               font-variant-numeric:tabular-nums; text-shadow:0 1px 2px #000; }
-  .foe .it { font-size:clamp(7px,.68vw,11px); color:#e0b48a; background:#170f0acc;
+  .foe .it { font-size:clamp(14px,1.25vw,20px); font-weight:800; color:#ffca8a; background:#2a1206ee;
+    border:1px solid #8a5a2a; border-radius:3px; padding:.15em .4em; text-shadow:0 1px 2px #000;
              border:1px solid var(--line2); padding:.1em .5em; white-space:nowrap;
              text-shadow:0 1px 2px #000; }
   .foe .tag { font-size:clamp(6px,.6vw,10px); color:var(--faint); text-align:center;
@@ -388,6 +446,9 @@
   </div>
 
   <div class="flags" id="flags"></div>
+  <svg id="dragline"><path fill="none" stroke="#d2a848" stroke-width="3" stroke-dasharray="7 6" opacity=".85"></path></svg>
+  <div id="hurt"></div>
+  <div id="curtain"><b></b></div>
 
   <!-- HP · 코스트 — UI/hud 의 고정 프레임 위에 런타임 레이어만 얹는다 (UI/specs) -->
   <div class="hpwrap runonly">
@@ -536,6 +597,26 @@
     try { localStorage.setItem('tlt_unlock', JSON.stringify(UNLOCKED)); } catch (e) {}
   }
 
+  // 무엇을 깼는가 — 난이도와 재연은 깬 만큼만 열린다 (69장).
+  // 지금까지는 첫 화면에서 어려움도 재연 8단도 바로 고를 수 있었다.
+  //   { story:1, normal:1, hard:1, asc:N }   asc 는 넘긴 최고 재연 단수
+  var CLEAR = { asc: 0 };
+  try { CLEAR = Object.assign(CLEAR, JSON.parse(localStorage.getItem('tlt_clear') || '{}')); } catch (e) {}
+  function saveClear() { try { localStorage.setItem('tlt_clear', JSON.stringify(CLEAR)); } catch (e) {} }
+  // 3막을 넘긴 그 순간에 기록한다
+  function noteClear(diffKey, ascLv) {
+    CLEAR[diffKey] = 1;
+    if (diffKey === 'hard' && ascLv >= CLEAR.asc) CLEAR.asc = ascLv + 1;   // 다음 단이 열린다
+    saveClear();
+  }
+  function diffOpen(k) {
+    if (k === 'story' || k === 'normal') return true;
+    if (k === 'hard') return !!CLEAR.normal;      // 보통을 넘겨야 어려움이 열린다
+    return false;
+  }
+  // 재연은 어려움을 넘긴 뒤부터. 그다음은 한 단씩.
+  function ascMax() { return CLEAR.hard ? Math.min(T.ASCENSION.length, CLEAR.asc) : 0; }
+
   // ── 타이틀 ────────────────────────────────────────────────
   function showTitle() {
     inFight = false;
@@ -564,15 +645,18 @@
   function pickDiff(ck) {
     var o = ov();
     o.innerHTML = '<h3>' + T.CHARS[ck].name + '</h3>'
-      + '<div class="sub">이야기를 보러 왔는지, 로그라이크를 하러 왔는지 고른다.</div>';
+      + '<div class="sub">이 판에서 무엇을 원하는지 고른다.'
+      + (CLEAR.normal ? '' : '<br><span style="color:#56545e">3막을 넘기면 다음 자리가 열린다.</span>') + '</div>';
     var d = document.createElement('div'); d.className = 'chars';
+    var GATE = { hard: '보통에서 3막을 넘긴다' };
     Object.keys(T.DIFFICULTY).forEach(function (k) {
-      var f = T.DIFFICULTY[k], n = document.createElement('div');
-      n.className = 'chr'; n.style.width = '210px';
-      n.innerHTML = '<div class="n">' + f.note + '</div>'
-        + '<div class="m">' + f.name + ' · 적 HP ×' + f.hpMul + ' · 공격 ×' + f.atkMul + '</div>'
-        + '<div class="d">' + f.sub + '</div>';
-      n.onclick = function () { k === 'hard' ? pickAsc(ck) : startRun(ck, k, 0); };
+      var f = T.DIFFICULTY[k], open = diffOpen(k), n = document.createElement('div');
+      n.className = 'chr' + (open ? '' : ' lock'); n.style.width = '210px';
+      n.innerHTML = '<div class="n">' + (open ? '' : '🔒 ') + f.name + (CLEAR[k] ? ' ✓' : '') + '</div>'
+        + '<div class="m">' + f.note + '</div>'
+        + '<div class="d">' + f.sub + '<br><span style="color:#56545e">적 HP ×' + f.hpMul + ' · 공격 ×' + f.atkMul + '</span></div>'
+        + (open ? '' : '<div class="u">해금 — ' + (GATE[k] || '') + '</div>');
+      if (open) n.onclick = function () { k === 'hard' ? pickAsc(ck) : startRun(ck, k, 0); };
       d.appendChild(n);
     });
     o.appendChild(d);
@@ -585,15 +669,26 @@
     o.innerHTML = '<h3>저주받은 대본</h3>'
       + '<div class="sub">재연은 수치를 올리지 않는다. 규칙을 하나씩 더한다.</div>';
     var d = document.createElement('div'); d.className = 'cardpick';
+    // 재연은 한 단씩 열린다 — 그 단으로 3막을 넘겨야 다음 단이 나온다 (69장)
+    var top = ascMax();
     [0].concat(T.ASCENSION.map(function (a) { return a.n; })).forEach(function (lv) {
+      if (lv > top) return;
       var a = lv ? T.ASCENSION[lv - 1] : null, n = document.createElement('div');
       n.className = 'cp'; n.style.width = '186px';
-      n.innerHTML = '<div class="n">' + (lv ? lv + '단 — ' + a.name : '재연 없음') + '</div>'
+      n.innerHTML = '<div class="n">' + (lv ? a.icon + ' ' + lv + '단 — ' + a.name : '재연 없음') + '</div>'
         + '<div class="e">' + (lv ? a.desc : '어려움 그대로') + '</div>'
         + (lv > 1 ? '<div class="x">' + (lv - 1) + '단까지 전부 포함</div>' : '');
       n.onclick = function () { startRun(ck, 'hard', lv); };
       d.appendChild(n);
     });
+    if (top < T.ASCENSION.length) {
+      var more = document.createElement('div'); more.className = 'sub';
+      more.style.marginTop = '10px';
+      more.innerHTML = top === 0
+        ? '어려움에서 3막을 넘기면 <b>재연 1단</b>이 열린다.'
+        : '재연 ' + top + '단으로 3막을 넘기면 <b>' + (top + 1) + '단</b>이 열린다.';
+      d.appendChild(more);
+    }
     o.appendChild(d);
     var b = document.createElement('button'); b.textContent = '뒤로';
     b.onclick = function () { pickDiff(ck); }; o.appendChild(b);
@@ -615,9 +710,14 @@
     var w = el('mw');
     // 좌 → 우 수평, 중앙 정렬 (DESIGN 17). 층이 열이고 갈래가 세로다.
     // 한 화면에 한 막만 건다 — 36층을 한 줄에 밀면 레일을 넘쳐 양끝이 잘린다.
+    // 창을 「지금 막」이 아니라 「다음에 갈 층」으로 잡는다.
+    // S.act 는 13층에 들어가야 2가 되는데 12층 보스를 깬 시점에는 아직 1이다.
+    // 그래서 화면이 1~12층만 그리고 13층 노드가 렌더링되지 않아 클릭할 칸이 없었다.
     var per = Math.max(1, Math.round(T.CFG.floors / 3));
-    var lo = Math.min((S.act - 1) * per, Math.max(0, S.map.length - per));
+    var nf = S.at ? S.at.f + 1 : 0;
+    var lo = Math.min(Math.floor(nf / per) * per, Math.max(0, S.map.length - per));
     var hi = Math.min(S.map.length, lo + per);
+    var dact = Math.min(3, Math.floor(lo / per) + 1);
     S.map.slice(lo, hi).forEach(function (row, ri) {
       var fi = lo + ri;
       var fl = document.createElement('div'); fl.className = 'floor';
@@ -633,7 +733,7 @@
       });
       w.appendChild(fl);
     });
-    el('mh').innerHTML = '제' + S.act + '막 — ' + (lo + 1) + '~' + hi + '층'
+    el('mh').innerHTML = '제' + dact + '막 — ' + (lo + 1) + '~' + hi + '층'
       + ' <span>다음 무대를 고른다</span>';
     render();
   }
@@ -655,11 +755,141 @@
     drawFight();
   }
 
+  // ── 연출 — 무슨 일이 일어났는지 무대 위에서 보여준다 ────────
+  //
+  // 피해는 지금까지 로그 패널의 글자로만 나갔다. 때린 것도 맞은 것도 화면에서
+  // 아무 일이 없으니 「막 눌러도 되는」 게임처럼 보인다.
+  //
+  // drawFight 는 매번 innerHTML 을 새로 쓴다 — 그래서 뜨는 숫자를 DOM 에 직접
+  // 꽂으면 다음 렌더에 지워진다. 큐에 쌓아두고 렌더 끝에서 함께 그린다.
+  var fx = { foe: {}, me: 0, meKind: '' };
+
+  function snap() {
+    return { me: S.hp, blk: S.block || 0, foes: S.foes.map(function (f) { return f.hp; }) };
+  }
+  // 스냅과 지금을 비교해 변화량을 큐에 넣는다
+  function diffFx(b) {
+    if (!b) return;
+    S.foes.forEach(function (f, i) {
+      var d = Math.round((b.foes[i] == null ? f.hp : b.foes[i]) - f.hp);
+      if (d > 0) fx.foe[i] = (fx.foe[i] || 0) + d;
+    });
+    var md = Math.round(b.me - S.hp);
+    if (md > 0) { fx.me += md; fx.meKind = 'dmg'; }
+    else if (md < 0) { fx.me += md; fx.meKind = 'heal'; }
+  }
+  // 큐를 무대에 그린다. drawFight 끝에서 호출한다.
+  function flushFx() {
+    var st = el('stage');
+    Object.keys(fx.foe).forEach(function (i) {
+      var d = fx.foe[i], host = st.children[i];
+      if (!host || !d) return;
+      host.classList.add('hit');
+      var n = document.createElement('div');
+      n.className = 'flt dmg' + (d >= 30 ? ' big' : '');
+      n.textContent = '-' + d;
+      host.appendChild(n);
+      setTimeout(function () { if (n.parentNode) n.parentNode.removeChild(n); }, 1000);
+    });
+    if (fx.me) {
+      var g = el('game');
+      if (fx.me > 0) {
+        g.classList.remove('shake'); void g.offsetWidth; g.classList.add('shake');
+        var h = el('hurt'); h.classList.remove('on'); void h.offsetWidth; h.classList.add('on');
+      }
+      var t = el('tHp');
+      if (t && t.parentNode) {
+        var m = document.createElement('div');
+        m.className = 'flt ' + (fx.me > 0 ? 'dmg' : 'heal');
+        m.textContent = (fx.me > 0 ? '-' : '+') + Math.abs(fx.me);
+        m.style.top = '-10%';
+        t.parentNode.style.position = 'relative';
+        t.parentNode.appendChild(m);
+        setTimeout(function () { if (m.parentNode) m.parentNode.removeChild(m); }, 1000);
+      }
+    }
+    fx = { foe: {}, me: 0, meKind: '' };
+  }
+  // 막이 내린다 — 전투가 끝날 때 한 번
+  function curtainCall(txt) {
+    var c = el('curtain');
+    c.firstChild.textContent = txt;
+    c.classList.remove('on'); void c.offsetWidth; c.classList.add('on');
+  }
+
   function endTurn() {
+    var b = snap();
     var r = Sim.finishTurn(S);
-    if (r === 'won') return afterWin();
+    diffFx(b);
+    if (r === 'won') { curtainCall('막이 내린다'); return setTimeout(afterWin, 620); }
     if (r === 'dead') return endRun(false);
     nextTurn();
+  }
+
+  // ── 드래그 앤 드롭 — 대본을 끌어다 적 위에 놓는다 ─────────
+  //
+  // 클릭으로 고르고 다시 적을 클릭하는 방식은 남긴다. 둘 다 되는 편이 낫다.
+  var drag = null;   // { sc, ghost, needTarget, x0, y0 }
+
+  function needsTarget(sc) { return T.scriptEffect(sc, S.ch).dmg > 0; }
+
+  function dragStart(ev, sc, card) {
+    if (!Sim.canPlay(S, sc)) return;
+    ev.preventDefault();
+    var g = card.cloneNode(true);
+    g.id = 'ghost'; g.className = 'hc'; g.style.width = card.offsetWidth + 'px';
+    g.style.height = card.offsetHeight + 'px';
+    document.body.appendChild(g);
+    drag = { sc: sc, ghost: g, card: card, need: needsTarget(sc),
+             x0: ev.clientX, y0: ev.clientY, moved: false };
+    card.classList.add('dragging');
+    dragMove(ev);
+    window.addEventListener('pointermove', dragMove);
+    window.addEventListener('pointerup', dragEnd);
+  }
+
+  function foeUnder(x, y) {
+    var hit = null;
+    document.querySelectorAll('#stage .foe').forEach(function (d, i) {
+      if (S.foes[i] && S.foes[i].hp <= 0) return;
+      var r = d.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) hit = { el: d, i: i };
+    });
+    return hit;
+  }
+
+  function dragMove(ev) {
+    if (!drag) return;
+    if (Math.abs(ev.clientX - drag.x0) + Math.abs(ev.clientY - drag.y0) > 6) drag.moved = true;
+    drag.ghost.style.left = ev.clientX + 'px';
+    drag.ghost.style.top = ev.clientY + 'px';
+    var over = drag.need ? foeUnder(ev.clientX, ev.clientY) : null;
+    document.querySelectorAll('#stage .foe').forEach(function (d) { d.classList.remove('over'); });
+    if (over) over.el.classList.add('over');
+    // 카드에서 대상까지 실을 그어준다 — 어디로 가는지 보이게
+    var path = document.querySelector('#dragline path');
+    if (!path) return;
+    if (!drag.need) { path.setAttribute('d', ''); return; }
+    var r = drag.card.getBoundingClientRect();
+    var sx = r.left + r.width / 2, sy = r.top;
+    var mx = (sx + ev.clientX) / 2, my = Math.min(sy, ev.clientY) - 60;
+    path.setAttribute('d', 'M' + sx + ',' + sy + ' Q' + mx + ',' + my + ' ' + ev.clientX + ',' + ev.clientY);
+  }
+
+  function dragEnd(ev) {
+    window.removeEventListener('pointermove', dragMove);
+    window.removeEventListener('pointerup', dragEnd);
+    if (!drag) return;
+    var d = drag; drag = null;
+    if (d.ghost.parentNode) d.ghost.parentNode.removeChild(d.ghost);
+    d.card.classList.remove('dragging');
+    var path = document.querySelector('#dragline path'); if (path) path.setAttribute('d', '');
+    document.querySelectorAll('#stage .foe').forEach(function (x) { x.classList.remove('over'); });
+    if (!d.moved) return clickScript(d.sc);          // 그냥 누른 것이면 예전처럼 조준 모드
+    if (!d.need) return fire(d.sc, -1);              // 대상이 없는 대본은 어디에 놓아도 된다
+    var over = foeUnder(ev.clientX, ev.clientY);
+    if (over) fire(d.sc, over.i);
+    else drawFight();                                // 허공에 놓으면 취소
   }
 
   function clickScript(sc) {
@@ -674,9 +904,11 @@
   }
   // 해금 조건 관찰은 sim.js 가 한다 — 규칙을 두 곳에 두지 않는다
   function fire(sc, tgt) {
+    var b = snap();
     Sim.playScript(S, sc, tgt);
+    diffFx(b);
     if (S.over === 'dead') return endRun(false);
-    if (S.over === 'won') return afterWin();
+    if (S.over === 'won') { drawFight(); curtainCall('막이 내린다'); return setTimeout(afterWin, 620); }
     drawFight();
   }
 
@@ -935,6 +1167,14 @@
   function endRun(won) {
     S.over = won ? 'won' : 'dead';
     Object.keys(S.feat).forEach(unlock);
+    // 다음 자리는 여기서 열린다 — 3막을 넘긴 그 판이 열쇠다
+    var opened = null;
+    if (won) {
+      var before = { hard: diffOpen('hard'), asc: ascMax() };
+      noteClear(S.diffKey, S.asc.level || 0);
+      if (!before.hard && diffOpen('hard')) opened = '어려움';
+      else if (ascMax() > before.asc) opened = '재연 ' + ascMax() + '단';
+    }
     var o = ov();
     var newly = Object.keys(S.feat).filter(function (k) { return T.CHARS[k]; })
       .map(function (k) { return T.CHARS[k].name; });
@@ -942,6 +1182,7 @@
       + '<div class="sub">' + (won ? 'HP ' + Math.round(S.hp) + '/' + S.maxHp
         : (S.at ? (S.at.f + 1) + '층 · ' + (S.killedBy || (S.foes && S.foes[0] ? S.foes[0].name : '')) + ' 에게 무너졌다' : ''))
       + (newly.length ? '<br><span style="color:#a8c49a">해금 — ' + newly.join(' · ') + '</span>' : '')
+      + (opened ? '<br><span style="color:#d2a848">🔓 ' + opened + ' 이 열렸다</span>' : '')
       + '</div>';
     var b = document.createElement('button'); b.className = 'go'; b.textContent = '처음으로';
     b.onclick = showTitle; o.appendChild(b); render();
@@ -951,6 +1192,15 @@
   function clearOv() { el('overlay').innerHTML = ''; }
 
   // ── 전투 화면 ─────────────────────────────────────────────
+  // 다음 행동을 사람 말로 — 아이콘과 숫자만으로는 무엇이 오는지 모른다
+  var INTENT_ICON = { atk: '⚔', def: '🛡', buff: '💪', heal: '💚', absorb: '🌀' };
+  function intentLine(f) {
+    var info = T.intentInfo(f, f.next);
+    var ic = INTENT_ICON[info.kind] || '⚔';
+    var when = f.t > 0 ? ' <span style="opacity:.65">' + f.t + '턴 뒤</span>' : '';
+    return ic + ' ' + info.ko + (info.n ? ' ' + info.n : '') + when;
+  }
+
   function drawFight() {
     inFight = true;
     var ctx = Sim.ctxOf(S, S.w);
@@ -989,7 +1239,7 @@
       if (f.seizeCd) tags.push('📜 압수 ' + (f.seizeT || f.seizeCd) + '턴');
 
       d.innerHTML = '<div class="nm">' + f.name + (f.boss ? ' 👑' : (f.elite ? ' 💀' : '')) + '</div>'
-        + '<div class="it">' + (f.hp > 0 ? '⏱ ' + f.t + ' · ⚔ ' + f.atk : '퇴장') + '</div>'
+        + '<div class="it">' + (f.hp > 0 ? intentLine(f) : '퇴장') + '</div>'
         + '<div class="body"><div class="glyph">' + (f.boss ? '👑' : f.elite ? '💀' : '🎭') + '</div></div>'
         + '<div class="hpb"><i style="width:' + Math.max(0, f.hp / f.maxHp * 100) + '%"></i></div>'
         + '<div class="num">' + Math.max(0, Math.round(f.hp)) + ' / ' + f.maxHp + '</div>'
@@ -1091,7 +1341,10 @@
         + '<div class="ttl">' + sc.name + '</div>'
         + '<div class="req">' + reqMarkup(sc, S.stage, ctx.relax) + '</div>'
         + '<div class="eff">' + T.effText(sc.effect) + '</div>';
-      if (can) btn.onclick = function () { clickScript(sc); };
+      if (can) {
+        btn.onpointerdown = function (ev) { if (ev.button === 0) dragStart(ev, sc, btn); };
+        btn.onclick = function (ev) { ev.preventDefault(); };   // 실제 발동은 dragEnd 가 한다
+      }
       else btn.disabled = true;        // 못 누르는 것은 포커스도 먹지 않아야 한다
       hr.appendChild(btn);
     };
@@ -1112,6 +1365,7 @@
     h.onclick = showTip; ac.appendChild(h);
 
     render();
+    flushFx();          // 이번 행동으로 생긴 숫자·흔들림을 무대에 올린다
   }
 
   // ── 공통 렌더 ─────────────────────────────────────────────

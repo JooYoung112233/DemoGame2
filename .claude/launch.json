@@ -3,9 +3,12 @@
   "configurations": [
     {
       "name": "demo",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8123"],
-      "port": 8123
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/serve.js"
+      ],
+      "port": 8123,
+      "url": "http://localhost:8123"
     }
   ]
 }
