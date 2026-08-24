@@ -442,12 +442,28 @@
   // ── 코스트 ────────────────────────────────────────────────
   // 캐릭터가 코스트를 바꿀 수 있으니 한 곳에서만 계산한다.
   // 「악장」은 악상이 아닌 대본에 +1 을 낸다 — 전문화의 대가다.
+  // 배역 피로 — 그 칸을 이번 턴에 몇 번 썼는가. 턴마다 풀린다 (82장).
+  // 같은 배역을 또 부리면 그만큼 값이 오른다. 칸이 비지 않으니 슬롯은 그대로다.
+  function tiredAdd(S, sc) {
+    if (!S || !S.tired || sc.curtain || !S.stage) return 0;
+    var used = T.slotsFor(sc, S.stage, relicN(S, 'stand_in'));
+    var n = 0;
+    var step = Math.max(1, T.CFG.tireStep || 1);
+    for (var i = 0; i < used.length; i++) n += Math.floor((S.tired[used[i]] || 0) / step);
+    return n;
+  }
+  function tireSlots(S, sc) {
+    if (!S || !S.tired || sc.curtain || !S.stage) return;
+    var used = T.slotsFor(sc, S.stage, relicN(S, 'stand_in'));
+    for (var i = 0; i < used.length; i++) S.tired[used[i]] = (S.tired[used[i]] || 0) + 1;
+  }
+
   function costOf(ch, sc, S) {
     if (S && stageOn(S, 'king')) {
       var rq = sc.requires || [];
-      if (rq.indexOf('king') >= 0 || rq.indexOf('crown') >= 0) return Math.max(1, costOf0(ch, sc) - 1);
+      if (rq.indexOf('king') >= 0 || rq.indexOf('crown') >= 0) return Math.max(1, costOf0(ch, sc) - 1) + tiredAdd(S, sc);
     }
-    return costOf0(ch, sc);
+    return costOf0(ch, sc) + tiredAdd(S, sc);
   }
   function costOf0(ch, sc) {
     var c = sc.cost;
@@ -489,7 +505,7 @@
       }
     }
 
-    C.cost -= costOf(ctx.ch, sc);
+    C.cost -= costOf(ctx.ch, sc, ctx.S);
     if (sc.tier === 'three' && ctx.encore) C.cost += 1;
     if (sc.curtain && ctx.encoreCall) C.cost += 1;
 
@@ -791,7 +807,7 @@
       var next = [];
       beam.forEach(function (nd) {
         hand.forEach(function (sc, hi) {
-          if (costOf(ctx.ch, sc) > nd.C.cost) return;
+          if (costOf(ctx.ch, sc, ctx.S) > nd.C.cost) return;
           if (sc.temp && nd.seq.filter(function (a) { return a.hi === hi; }).length) return;
           if (!sc.curtain && !T.canStage(sc, S.stage, ctx.relax)) return;
           var eff = T.scriptEffect(sc, ctx.ch);
@@ -1377,7 +1393,7 @@
         var hand = handOf(S), bestGain = 0, bestAt = -1, bestId = null;
         hand.forEach(function (sc) {
           if (sc.curtain || T.canStage(sc, S.stage, ctx.relax)) return;
-          if (costOf(ctx.ch, sc) > S.cost) return;
+          if (costOf(ctx.ch, sc, S) > S.cost) return;
           for (var i = 0; i < S.stage.length; i++) {
             var keep = S.stage[i], req = sc.requiresFam ? [] : (sc.requires || []);
             var cand = sc.requiresFam
@@ -1476,7 +1492,7 @@
       // 올릴 수 있는 대본이 예산보다 많을 때. 「낼 수 없는 한 장이 있나」로 봤더니
       // 턴 시작 코스트가 4~5 라 거의 걸리지 않았다 — 판당 0.00 회였다.
       var able = handOf(S).filter(function (sc) { return T.canStage(sc, S.stage, ctx.relax); });
-      var sum = able.reduce(function (a, sc) { return a + costOf(ctx.ch, sc); }, 0);
+      var sum = able.reduce(function (a, sc) { return a + costOf(ctx.ch, sc, S); }, 0);
       if (able.length >= 2 && sum > S.cost) { S.cost += 2; use = true; }
     } else if (p.kind === 'half') {
       // 예고를 보고 건다. 적은 1턴에 움직이지 않으므로 2턴부터가 의미 있다.
@@ -1672,8 +1688,10 @@
     while (S.turn < 60) {
       S.turn++; S.stats.turns++;
     S.block = Math.floor(S.block * T.CFG.blockKeep);   // 🛡 방어는 매 턴 휘발한다
+    S.tired = [0, 0, 0, 0];
       // 🛡 방어는 매 턴 시작에 휘발한다 — 예고를 보고 그 턴에 올리는 것이 결정이 된다
       S.block = Math.floor(S.block * T.CFG.blockKeep);
+      S.tired = [0, 0, 0, 0];   // 🎭 배역 피로는 턴마다 풀린다
       S.cost = maxCost(S);
       S.stats.costMax += S.cost;
       S.tHits = 0; S.tPlays = 0; S.tBlock = 0; S.tHeal = 0; S.tSelf = 0;
@@ -1769,7 +1787,7 @@
       var ampTurn = 0;
       for (var i = 0; i < plan.seq.length; i++) {
         var a = plan.seq[i];
-        if (costOf(S.ch, a.sc) > S.cost) continue;
+        if (costOf(S.ch, a.sc, S) > S.cost) continue;
         if (!a.sc.curtain && !T.canStage(a.sc, S.stage, ctx.relax)) continue;
         if (S.sealed[a.sc.id]) continue;
         var aliveBefore = S.foes.filter(function (f) { return f.hp > 0; }).length;
@@ -1806,6 +1824,7 @@
         var _e = T.scriptEffect(a.sc, S.ch);
         S.stats.scrDmg = (S.stats.scrDmg || 0) + (_e.dmg || 0) + (_e.aoe || 0);
         S.stats.thornAdd = (S.stats.thornAdd || 0) + (_e.thorns || 0) * (S.ch.thornsMul || 1);
+        tireSlots(S, a.sc);
         S.stats.plays++;
         S.stats.byTier[a.sc.tier] = (S.stats.byTier[a.sc.tier] || 0) + 1;
         if (a.sc.tier === 'three') S.stats.tierThree = (S.stats.tierThree || 0) + 1;
@@ -1833,7 +1852,7 @@
   }
 
   function spent(plan, S) {
-    var c = 0; plan.seq.forEach(function (a) { c += costOf(S.ch, a.sc); });
+    var c = 0; plan.seq.forEach(function (a) { c += costOf(S.ch, a.sc, S); });
     return c;
   }
 
@@ -2140,6 +2159,11 @@
   }
 
   function winFight(S) {
+    // 전투 길이를 종류별로 남긴다 — 평균만 보면 보스가 짧은 것을 못 본다
+    var _k = (S.at && S.at.type) || "fight";
+    S.stats.ftTurns = S.stats.ftTurns || {}; S.stats.ftN = S.stats.ftN || {};
+    S.stats.ftTurns[_k] = (S.stats.ftTurns[_k] || 0) + (S.turn || 0);
+    S.stats.ftN[_k] = (S.stats.ftN[_k] || 0) + 1;
     var G = T.CFG.gold;
     var g = G.fightBase + Math.floor(S.rnd() * G.fightRand) + (S.at.type === 'elite' ? G.elite : 0);
     if (relicN(S, 'hungrySeat')) g *= 2;           // 어둠 유물 — 골드 2배
@@ -3257,7 +3281,7 @@
   function canPlay(S, sc) {
     var ctx = ctxOf(S, S.w);
     if (sc.curtain) return true;              // 커튼콜은 무대 조건도 코스트도 없다
-    return !S.sealed[sc.id] && costOf(S.ch, sc) <= S.cost && T.canStage(sc, S.stage, ctx.relax);
+    return !S.sealed[sc.id] && costOf(S.ch, sc, S) <= S.cost && T.canStage(sc, S.stage, ctx.relax);
   }
 
   // 대본 한 장을 상연한다 — 봇과 사람이 같은 함수를 쓴다
@@ -3286,6 +3310,7 @@
         S.usedF = C.usedF || S.usedF;
     if (C.ovation) S.stats.ovations = (S.stats.ovations || 0) + 1;
     if (C.ampHit) S.ampTurn = 1;
+    tireSlots(S, sc);
     S.stats.plays++;
     S.stats.byTier[sc.tier] = (S.stats.byTier[sc.tier] || 0) + 1;
     S.stats.byScript[sc.name] = (S.stats.byScript[sc.name] || 0) + 1;

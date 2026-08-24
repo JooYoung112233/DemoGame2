@@ -182,18 +182,20 @@
   //   ['one', 카드] 또는 ['two', 카드A, 카드B]
   // pool — 이 캐릭터의 보상·상점에 우선 등장하는 배역. 빌드가 캐릭터 고유 원리로 자라게 한다.
   // win — 이 캐릭터의 승리 조건. 봇 정책과 보상 선택이 이걸 향해 간다.
+  // 최대 코스트 — 배역 피로(82장)가 예산을 먹으므로 전원 +1 했다.
+  // 피로 없이 이 값이면 그냥 강해지는 것이니 둘은 같이 움직여야 한다.
   var CHARS = {
     // 처음에는 두 명만 열려 있다. 나머지는 플레이 방식으로 해금한다 —
     // 골드로 사는 계승이 아니라, 그 캐릭터의 승리 조건을 한 번 해내면 열린다.
     // 곱셈이 없는 캐릭터는 3막을 못 넘는다 — 측정에서 연출가만 1% 였다.
     // 「같은 배역을 겹쳐 세운다」가 연출가의 곱셈이다. 릴 집중과 직접 이어진다.
-    director: { name: '연출가', maxCost: 4, freeReroll: 1, pairBonus: 0.7, win: 'burst', start: true,
+    director: { name: '연출가', maxCost: 5, freeReroll: 1, pairBonus: 0.7, win: 'burst', start: true,
       note: '최대 코스트 4 · 턴마다 재굴림 1회 무료 · 무대에 같은 배역이 2장이면 그 대본 피해 +70%',
       deck: { knight: 4, sword: 3, shield: 3, rose: 3, rage: 3, gem: 2 },
       pool: ['knight', 'king', 'sword', 'shield', 'trumpet', 'gem'],
       openers: [['one', 'knight'], ['one', 'shield'], ['two', 'knight', 'shield']] },
     // 광역 전문은 단일 보스에서 죽는다 — 적이 하나면 광역이 그 하나에 몰린다
-    frenzy: { name: '광란의 감독', maxCost: 4, aoeFams: ['cast'], famDmgMul: { cast: 0.55 }, soloAoeMul: 2.2,
+    frenzy: { name: '광란의 감독', maxCost: 5, aoeFams: ['cast'], famDmgMul: { cast: 0.55 }, soloAoeMul: 2.2,
       note: '최대 코스트 4 · 배역 대본이 광역이 된다 (피해 55%) · 적이 하나면 광역 피해 2.2배', win: 'sweep',
       // 배역이 광역이 되는 캐릭터인데 소품(칼)이 섞이면 조합이 배역 순수가 안 된다 — 배역으로 채웠다
       deck: { knight: 5, king: 3, jester: 3, rage: 4, candle: 3 },
@@ -201,7 +203,7 @@
       unlock: '한 전투를 광역 대본만으로 끝낸다',
       openers: [['one', 'knight'], ['one', 'rage'], ['two', 'king', 'rage']] },
     // 3막 적 다섯 중 셋이 방어력이 높다. 반사가 방어력에 깎이면 이 캐릭터만 원천 봉인된다.
-    mirror: { name: '거울의 배우', maxCost: 4, thornsMul: 1.35, overflowMul: 1.2, thornsIgnoreDef: true, start: true,
+    mirror: { name: '거울의 배우', maxCost: 5, thornsMul: 1.35, overflowMul: 1.2, thornsIgnoreDef: true, start: true,
       note: '반사 상한 1.35배 · 초과 방어 전환 1.2배 · 반사가 방어력을 무시한다', win: 'reflect',
       deck: { mirror: 5, shield: 5, mask: 3, rose: 3, priest: 2 },
       pool: ['mirror', 'shield', 'mask', 'curtain', 'rose', 'priest'],
@@ -210,7 +212,7 @@
     // 계열 밖 코스트 +1 을 먼저 붙여 봤지만 덱이 이미 전부 악상이라 대가가 되지 않았다 (52%).
     // 그래서 템포 우위를 걷어내고 대신 진짜 상태이상 엔진을 줬다 —
     // 악상 대본의 화상·독·둔화가 각각 +1. 전문가는 깊이로 이긴다.
-    maestro: { name: '악장', maxCost: 5, mainFam: 'score', offFamCost: 1,
+    maestro: { name: '악장', maxCost: 6, mainFam: 'score', offFamCost: 1,
       famStatusPlus: { score: 1 }, win: 'status',
       note: '최대 코스트 5 · 악상 대본의 화상·독·둔화 +1 · 악상이 아닌 대본은 코스트 +1',
       deck: { piano: 4, violin: 4, drum: 3, trumpet: 3, joy: 4 },
@@ -225,7 +227,7 @@
     // 21전투짜리 판에서는 자해가 누적 위험이 되어 봇이 아예 안 썼다 —
     // 코스트 사용률이 50% 로 혼자 압도적으로 낮았다 (다른 캐릭터 67~71%).
     // 태운 피가 다음 턴에 절반 돌아오면 계속 태울 수 있다. 위험은 그 한 턴에 남는다.
-    fallen: { name: '타락한 감독', maxCost: 5, selfToDmg: 2.2, hpDelta: 20,
+    fallen: { name: '타락한 감독', maxCost: 6, selfToDmg: 2.2, hpDelta: 20,
       selfFloor: true, selfRefund: 0.5, bleedBack: 0.5,
       note: '최대 코스트 5 · 최대 HP +20 · 자해한 만큼 피해 +2.2배 · 자해로는 쓰러지지 않는다'
           + ' · 태운 피의 절반이 다음 턴에 돌아온다 (적을 퇴장시키면 즉시)', win: 'burst',
@@ -236,7 +238,7 @@
     // 다타 감쇠(×0.6) · 보석 상한 · 증폭 하향을 연달아 맞아 곱셈이 세 번 깎였다 (17%).
     // 상태이상에 얹혀 있던 정체성을 독립시켰다 — 다타가 방어력을 벗긴다.
     // 여러 번 찔러 틈을 만드는 그림이고, 철갑 인형처럼 방어력으로 버티는 적의 답이 된다.
-    harlequin: { name: '어릿광대', maxCost: 4, handBonus: 2, hitsShred: 1, hitsDotFull: true, hitSpill: true,
+    harlequin: { name: '어릿광대', maxCost: 5, handBonus: 2, hitsShred: 1, hitsDotFull: true, hitSpill: true,
       note: '대본 보유 +2 · 다타 대본은 타격 수만큼 방어력을 영구히 깎는다'
           + ' · 다타의 화상·독이 감쇠 없이 타격 수만큼 들어간다'
           + ' · 적이 퇴장하면 남은 타격이 다음 적에게 넘어간다', win: 'hits',
@@ -249,7 +251,7 @@
     // 「매 턴 다른 것을 해야 하는」 유일한 캐릭터다.
     // 전투가 4~5턴이라 환호 100 은 닿지 않았다 — 환호 빌드가 환호 보상을 못 받았다.
     // 무대에 오르면 이미 팬이 있고(30), 박수를 받는 기준도 낮다(80).
-    darling: { name: '관객의 총아', maxCost: 4, win: 'cheer',
+    darling: { name: '관객의 총아', maxCost: 5, win: 'cheer',
       cheerDmgPer: 0.13, cheerDmgCap: 0.9, ovationBonus: 1, repeatMul: 2, cheerW: 2.6,
       cheerStart: 28, cheerNeed: 55, freshBonus: 9,
       note: '환호 28로 시작 · 환호 10당 피해 +13% (최대 +90%) · 박수 기준 55 · 기립 박수 코스트 +3'
@@ -264,7 +266,7 @@
     // 커튼콜 전용 — 같은 대본으로 계속 막을 닫는다.
     // 환호는 「다양하게」를 요구하고 커튼콜은 「반복」을 요구한다. 두 축이 정면으로 충돌하고,
     // 그래서 어느 쪽 덱으로 갈지가 선택이 된다.
-    closer: { name: '종막의 배우', maxCost: 4, win: 'encore',
+    closer: { name: '종막의 배우', maxCost: 5, win: 'encore',
       curtainSlots: 2, chainPer: 0.4, chainKeep: 0.5,
       note: '커튼콜 2칸 · 연속 1회마다 +40% (최대 +120%)'
           + ' · 연속이 끊겨도 절반은 남는다',
@@ -290,8 +292,10 @@
   }
 
   // openers 정의를 실제 대본 객체로 만든다
+  // 시작 대본 수 — 손패가 크면 릴이 관문 노릇을 못 한다. 재보려고 손잡이로 뺀다.
+  var OPENER_N = 3;
   function makeOpeners(ch) {
-    return (ch.openers || []).map(function (o) {
+    return (ch.openers || []).slice(0, OPENER_N).map(function (o) {
       if (o[0] === 'one') {
         var s = S1[o[1]];
         return s ? { tier: 'one', name: s[0], effect: s[1], cost: COST.one, uses: [o[1]] } : null;
@@ -921,7 +925,11 @@
     // 방어만 올리면 영구히 안 맞는다. 공격력을 45% 올려도 보스 앞 HP 가 6pp 밖에
     // 안 내려간 이유다. 그리고 의도를 한 턴 미리 공개하는 설계(48장)가 무의미해진다:
     // 「다음 턴에 맞는다」를 보고 그 턴에 방어를 올리는 것이 결정이 되려면 방어는 휘발해야 한다.
-    blockKeep: 0,        // 매 턴 시작에 남기는 비율 (1 = 전부 유지 · 0 = 전부 소멸)   // 전투가 6개 → 13개로 늘어 소모전이 누적된다
+    blockKeep: 0,
+    // 🎭 배역 피로 — 이 횟수마다 코스트 +1. 1 이면 두 번째부터 바로 비싸진다.
+    // 1 이면 두 번째 상연부터 바로 비싸져서 클리어가 11% 로 무너졌다. 2 는 「두 번은 편하게,
+    // 세 번째부터 값을 치른다」다 — 반복을 금지하지 않고 값을 매긴다.
+    tireStep: 2,        // 매 턴 시작에 남기는 비율 (1 = 전부 유지 · 0 = 전부 소멸)   // 전투가 6개 → 13개로 늘어 소모전이 누적된다
     // 막이 길어지면 관객이 야유한다 — 답이 없는 조합으로 버티는 교착을 끝낸다.
     // 이게 없으면 「죽지도 못하고 60턴」이 전체의 7% 였다. 12턴이면 루즈해지기 전에 조인다.
     // 10턴 — 초보의 전투는 길다. 야유가 그걸 실제로 물어야 앞쪽 층이 위협이 된다.
@@ -1150,6 +1158,29 @@
   // 보석은 어떤 배역으로도 대신한다. relaxed 는 요구 하나를 면제한다(「대역 배우」 유물).
   // 보석은 대본마다 배역 하나만 대신한다. 무제한이면 보석 덱이 모든 대본을 상연해
   // 「무대를 읽는다」가 사라진다 — 어릿광대가 97% 를 찍은 원인이었다.
+  // 이 대본이 무대의 어느 칸을 쓰는가 — canStage 의 짝. 피로를 매기려면 칸을 알아야 한다.
+  function slotsFor(sc, stage, relaxed) {
+    var used = [], taken = {}, wildAt = -1;
+    for (var i = 0; i < stage.length; i++) if (isWild(stage[i]) && wildAt < 0) wildAt = i;
+    var wild = wildAt >= 0 ? 1 : 0;
+    if (sc.requiresFam) {
+      for (var j = 0; j < stage.length && used.length < 3; j++) {
+        if (isWild(stage[j])) continue;
+        if ((CARDS[stage[j]] || {}).fam === sc.requiresFam) used.push(j);
+      }
+      if (used.length < 3 && wild) used.push(wildAt);
+      return used;
+    }
+    (sc.requires || []).forEach(function (id) {
+      for (var k = 0; k < stage.length; k++) {
+        if (taken[k] || isWild(stage[k])) continue;
+        if (stage[k] === id) { taken[k] = 1; used.push(k); return; }
+      }
+      if (wild && !taken[wildAt]) { taken[wildAt] = 1; used.push(wildAt); wild = 0; }
+    });
+    return used;
+  }
+
   function canStage(sc, stage, relaxed) {
     var pool = stage.slice(), wild = 0;
     pool = pool.filter(function (id) { if (isWild(id)) { wild++; return false; } return true; });
@@ -1247,8 +1278,19 @@
              selfDmg: 0, thorns: 0, burn: 0, poison: 0, pierce: 0 };
   }
 
+  // ── 종별 보상 곡선 (82장) ─────────────────────────────
+  // 1종은 3칸 중 한 칸만 맞으면 서고(43~53%), 2종은 두 칸이 맞아야 한다(그 절반 이하).
+  // 그런데 코스트당 값어치가 1종 9.0 · 2종 10.0 으로 11% 차이뿐이었다 —
+  // 확률을 절반으로 깎으면서 11% 더 받을 사람은 없다. 그래서 모두 1종을 반복했고,
+  // 릴이 무엇을 뽑든 상관이 없었다. 릴을 볼 이유는 「맞추면 확실히 크다」에서 나온다.
+  // 계수만으로는 1종 상연이 23% → 19% 로 4pp 움직였을 뿐이고 최다 대본 비중은 그대로였다.
+  // 배역 피로(82장)가 반복을 직접 막으므로 여기서 또 누르면 손잡이가 겹친다. 1 로 되돌린다.
+  var TIER_MUL = { one: 1, two: 1, three: 1, fam: 1 };
+  function tierMulSet(o) { Object.keys(o).forEach(function (k) { TIER_MUL[k] = o[k]; }); }
+
   function scriptEffect(sc, ch) {
     var e = sc.effect || {}, r = blank(), mul = 1, hits = e.hits || 1;
+    mul *= (TIER_MUL[sc.tier] || 1);
     ch = ch || {};
     // 계열 대본이든, 재료가 한 계열로 모인 대본이든 같게 취급한다.
     // sc.famOf 를 보고 있었는데 그 값은 어디에서도 설정되지 않았다.
@@ -1498,10 +1540,16 @@
     restored: restored, shardsFor: shardsFor, nextRestore: nextRestore,
     ARCHIVE_MUL: ARCHIVE_MUL, VAULT_BASE: VAULT_BASE,
     EVENTS: EVENTS,
-    makeOpeners: makeOpeners, scriptOptions: scriptOptions,
+    makeOpeners: makeOpeners,
+    costShift: function (d) { Object.keys(CHARS).forEach(function (k) {
+      if (CHARS[k]._c0 == null) CHARS[k]._c0 = CHARS[k].maxCost;
+      CHARS[k].maxCost = Math.max(1, CHARS[k]._c0 + d); }); },
+    openerN: function () { return OPENER_N; },
+    openerSet: function (n) { OPENER_N = n; }, scriptOptions: scriptOptions,
     SCRIPTS: SCRIPTS, SCRIPT_BY_ID: SCRIPT_BY_ID, allScripts: allScripts,
-    canStage: canStage, reqText: reqText, RELICS: RELICS,
+    canStage: canStage, slotsFor: slotsFor, reqText: reqText, RELICS: RELICS,
     AMP: AMP, AMP_TEXT: AMP_TEXT, applySlow: applySlow, ampMul: ampMul, tickDots: tickDots, scriptEffect: scriptEffect, scriptFam: scriptFam,
+    tierMulSet: tierMulSet, tierMul: function () { return TIER_MUL; },
     effText: effText, cardText: cardText, blank: blank, isWild: isWild,
     buildStrip: buildStrip, makeEnemy: makeEnemy, pickIntent: pickIntent,
     damageEnemy: damageEnemy, rng32: rng32, intentInfo: intentInfo
